@@ -25,13 +25,23 @@ function createHttpError(message, statusCode = 400) {
 }
 
 function parseAllowedOrigins(extraOrigins = []) {
+  const derivedOrigins = [
+    process.env.PUBLIC_APP_URL,
+    process.env.RENDER_EXTERNAL_URL
+  ]
+    .map((origin) => origin?.trim())
+    .filter(Boolean);
   const configuredOrigins = (process.env.ALLOWED_ORIGINS || "")
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
 
   if (configuredOrigins.length) {
-    return new Set([...configuredOrigins, ...extraOrigins]);
+    return new Set([...configuredOrigins, ...derivedOrigins, ...extraOrigins]);
+  }
+
+  if (derivedOrigins.length) {
+    return new Set([...derivedOrigins, ...extraOrigins]);
   }
 
   return new Set(
