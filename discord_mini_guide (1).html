@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Discord Mini Guide</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --color-background-primary: #ffffff;
+    --color-background-secondary: #f4f4f2;
+    --color-background-tertiary: #eeecea;
+    --color-text-primary: #1a1a18;
+    --color-text-secondary: #4a4a47;
+    --color-text-tertiary: #8a8a85;
+    --color-border-tertiary: rgba(0,0,0,0.1);
+    --color-border-secondary: rgba(0,0,0,0.18);
+    --font-sans: system-ui, -apple-system, sans-serif;
+    --font-mono: "Menlo", "Consolas", monospace;
+    --border-radius-md: 8px;
+    --border-radius-lg: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --color-background-primary: #1e1e1c;
+      --color-background-secondary: #2a2a28;
+      --color-background-tertiary: #333330;
+      --color-text-primary: #e8e8e4;
+      --color-text-secondary: #a8a8a2;
+      --color-text-tertiary: #6a6a65;
+      --color-border-tertiary: rgba(255,255,255,0.08);
+      --color-border-secondary: rgba(255,255,255,0.15);
+    }
+  }
+  body {
+    font-family: var(--font-sans);
+    background: var(--color-background-primary);
+    color: var(--color-text-primary);
+    padding: 24px 16px;
+    min-height: 100vh;
+  }
+  h1 {
+    font-size: 20px;
+    font-weight: 500;
+    margin-bottom: 4px;
+    color: var(--color-text-primary);
+  }
+  .subtitle {
+    font-size: 13px;
+    color: var(--color-text-tertiary);
+    margin-bottom: 20px;
+  }
+  .container { max-width: 820px; margin: 0 auto; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+  .tab { padding: 7px 14px; border-radius: 20px; border: 1px solid var(--color-border-tertiary); background: var(--color-background-secondary); color: var(--color-text-secondary); font-size: 12px; cursor: pointer; transition: all .15s; font-family: var(--font-sans); }
+  .tab.active { background: #5865F2; border-color: #5865F2; color: #fff; }
+  .tab:hover:not(.active) { border-color: var(--color-border-secondary); color: var(--color-text-primary); }
+  .section { display: none; }
+  .section.active { display: block; }
+  .card { background: var(--color-background-secondary); border: 1px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 14px 16px; margin-bottom: 10px; }
+  .card-title { font-size: 14px; font-weight: 500; color: var(--color-text-primary); margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+  .badge { font-size: 10px; font-weight: 500; padding: 2px 7px; border-radius: 10px; background: #5865F2; color: #fff; }
+  .badge.g { background: #2ea043; }
+  .badge.o { background: #e67e22; }
+  .card p, .card li { font-size: 13px; color: var(--color-text-secondary); line-height: 1.6; }
+  .card ul { padding-left: 16px; margin-top: 4px; }
+  .card li { margin-bottom: 2px; }
+  .sub { font-size: 11px; color: var(--color-text-tertiary); margin-top: 6px; font-style: italic; }
+  .code { font-family: var(--font-mono); font-size: 11px; background: var(--color-background-tertiary); border: 1px solid var(--color-border-tertiary); border-radius: var(--border-radius-md); padding: 8px 12px; margin-top: 8px; color: var(--color-text-secondary); line-height: 1.7; white-space: pre-wrap; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .section-title { font-size: 13px; font-weight: 500; color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: .06em; margin: 16px 0 8px; }
+  code { font-family: var(--font-mono); font-size: 11px; background: var(--color-background-tertiary); padding: 1px 4px; border-radius: 4px; }
+  @media (max-width: 560px) { .grid2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🎮 Discord Mini Guide</h1>
+  <p class="subtitle">Guía completa de funciones para construir tu propio mini Discord</p>
+
+  <div class="tabs">
+    <div class="tab active" onclick="show('mensajes', this)">💬 Mensajes</div>
+    <div class="tab" onclick="show('servidores', this)">🏠 Servidores</div>
+    <div class="tab" onclick="show('canales', this)">📢 Canales</div>
+    <div class="tab" onclick="show('usuarios', this)">👤 Usuarios</div>
+    <div class="tab" onclick="show('grupos', this)">👥 DM / Grupos</div>
+    <div class="tab" onclick="show('archivos', this)">📎 Archivos</div>
+    <div class="tab" onclick="show('roles', this)">🎭 Roles & Permisos</div>
+    <div class="tab" onclick="show('ui', this)">🎨 UI & Temas</div>
+    <div class="tab" onclick="show('realtime', this)">⚡ Tiempo real</div>
+  </div>
+
+  <!-- MENSAJES -->
+  <div id="mensajes" class="section active">
+    <div class="card">
+      <div class="card-title">Enviar mensaje <span class="badge">POST</span></div>
+      <p>El flujo básico: usuario escribe → presiona Enter → mensaje va al servidor → server lo guarda en DB → server lo emite por WebSocket a todos en el canal.</p>
+      <div class="code">// Estructura de un mensaje
+{
+  id: "snowflake-uuid",
+  content: "Hola mundo",
+  author_id: "user123",
+  channel_id: "canal456",
+  guild_id: "servidor789",
+  timestamp: "2026-03-29T10:00:00Z",
+  edited_at: null,
+  attachments: [],
+  embeds: [],
+  reactions: {},
+  reply_to: null   // id del mensaje al que responde
+}</div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Responder un mensaje</div>
+        <ul>
+          <li>Guardar <code>reply_to: message_id</code> en el mensaje</li>
+          <li>Al renderizar, buscar el mensaje original por ID</li>
+          <li>Mostrar preview del mensaje citado encima</li>
+          <li>Clic en la cita → hacer scroll hasta el original</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-title">Editar mensaje <span class="badge o">PATCH</span></div>
+        <ul>
+          <li>Solo el autor puede editar</li>
+          <li>Guardar <code>edited_at</code> con el timestamp</li>
+          <li>Mostrar texto "(editado)" junto al mensaje</li>
+          <li>Emitir evento <code>MESSAGE_UPDATE</code> por WS</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-title">Eliminar mensaje <span class="badge" style="background:#e74c3c">DELETE</span></div>
+        <ul>
+          <li>Autor o alguien con permiso puede borrar</li>
+          <li>Soft-delete o hard-delete según tu diseño</li>
+          <li>Emitir <code>MESSAGE_DELETE</code> por WebSocket</li>
+          <li>Todos los clientes eliminan el mensaje del DOM</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-title">Reacciones 👍</div>
+        <ul>
+          <li>Tabla: <code>message_id, user_id, emoji</code></li>
+          <li>Toggle: si ya existe → eliminar, si no → insertar</li>
+          <li>Mostrar contador agrupado por emoji</li>
+          <li>Emitir <code>REACTION_ADD / REMOVE</code> por WS</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Carga de mensajes (scroll infinito) <span class="badge g">Clave</span></div>
+      <p>Discord carga mensajes en "chunks" por cursor, no por página. Cuando llegas arriba, pide los anteriores.</p>
+      <div class="code">// Query con cursor
+GET /messages?channel_id=X&before=message_id&limit=50
+
+// Al montar el canal:
+1. Cargar los últimos 50 mensajes (ORDER BY timestamp DESC LIMIT 50)
+2. Renderizar en orden cronológico (invertir el array)
+3. Scroll automático al fondo
+4. Cuando el usuario scrollea hacia arriba y llega al primer mensaje:
+   → Pedir 50 mensajes BEFORE del más antiguo cargado
+   → Agregar al principio del listado (sin mover scroll)</div>
+      <p class="sub">Tip: usa IntersectionObserver en el primer mensaje para detectar cuándo cargar más.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">Indicador "escribiendo..." <span class="badge">WS</span></div>
+      <div class="code">// Cliente emite cuando escribe
+emit("TYPING_START", { channel_id, user_id })
+
+// Servidor hace broadcast al canal
+// Cliente muestra "Juan está escribiendo..."
+// Si pasan 5s sin nuevo evento → desaparecer el indicador
+// Si envía mensaje → desaparecer inmediatamente</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Menciones @usuario</div>
+      <ul>
+        <li>Parsear el contenido buscando patrones <code>@nombre</code> o <code>&lt;@user_id&gt;</code></li>
+        <li>Resaltar la mención en el texto (fondo morado)</li>
+        <li>Crear notificación para el usuario mencionado</li>
+        <li>Marcar el mensaje como "te menciona" en el UI</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- SERVIDORES -->
+  <div id="servidores" class="section">
+    <div class="card">
+      <div class="card-title">Estructura de un servidor (guild)</div>
+      <div class="code">{
+  id: "snowflake",
+  name: "Mi Servidor",
+  icon: "url-o-hash-del-icono",
+  owner_id: "user_id",
+  banner: null,
+  description: "...",
+  member_count: 150,
+  channels: [],   // ordenados por position
+  roles: [],      // ordenados por hierarchy
+  created_at: "..."
+}</div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Crear servidor</div>
+        <ul>
+          <li>Nombre + icono opcional</li>
+          <li>Crear rol <code>@everyone</code> automáticamente</li>
+          <li>Crear canal <code>#general</code> por defecto</li>
+          <li>El creador es owner (permiso total)</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-title">Editar servidor</div>
+        <ul>
+          <li>Cambiar nombre del servidor</li>
+          <li>Cambiar icono (subir imagen → guardar URL)</li>
+          <li>Cambiar banner, descripción</li>
+          <li>Transferir ownership a otro miembro</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-title">Invitaciones</div>
+        <ul>
+          <li>Generar código único (6-8 chars aleatorios)</li>
+          <li>Guardar: <code>code, guild_id, creator, uses, max_uses, expires_at</code></li>
+          <li>Al usar la invitación → agregar al servidor</li>
+          <li>Soporte para invitaciones de un solo uso</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-title">Miembros</div>
+        <ul>
+          <li>Tabla intermedia <code>guild_members: guild_id, user_id, roles[], nickname, joined_at</code></li>
+          <li>Expulsar (kick): remover de la tabla</li>
+          <li>Banear: guardar en tabla <code>bans</code>, bloquear re-entrada</li>
+          <li>Lista de miembros con estado online/offline</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Cambiar icono del servidor <span class="badge g">Upload</span></div>
+      <div class="code">// Frontend
+1. Input file → previsualizar con FileReader
+2. Comprimir imagen si es muy grande (canvas.toBlob)
+3. Subir con FormData a /guilds/:id/icon
+4. Backend guarda en S3/storage → devuelve URL
+5. Actualizar icon_url en DB
+6. Emitir GUILD_UPDATE por WebSocket para que todos lo vean</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Sidebar izquierdo — lista de servidores</div>
+      <ul>
+        <li>Iconos circulares apilados verticalmente</li>
+        <li>Si no hay icono: mostrar las iniciales del nombre</li>
+        <li>Indicador de notificaciones (punto rojo con número)</li>
+        <li>Tooltip con el nombre al hacer hover</li>
+        <li>Botón "+" para crear o unirse a un servidor</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- CANALES -->
+  <div id="canales" class="section">
+    <div class="card">
+      <div class="card-title">Tipos de canales</div>
+      <div class="grid2" style="margin-top:8px">
+        <div><strong style="font-size:13px"># Texto</strong><p>Mensajes, archivos, hilos. El más común.</p></div>
+        <div><strong style="font-size:13px">🔊 Voz</strong><p>Audio en tiempo real (WebRTC).</p></div>
+        <div><strong style="font-size:13px">📢 Anuncios</strong><p>Solo admins pueden enviar mensajes.</p></div>
+        <div><strong style="font-size:13px">📁 Categoría</strong><p>Contenedor visual para agrupar canales.</p></div>
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Crear canal</div>
+        <ul>
+          <li>Nombre, tipo, posición</li>
+          <li>Opcional: categoría padre</li>
+          <li>Permisos de roles para ese canal</li>
+          <li>Emitir <code>CHANNEL_CREATE</code></li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-title">Reordenar canales</div>
+        <ul>
+          <li>Drag & drop en el sidebar</li>
+          <li>Cada canal tiene campo <code>position</code></li>
+          <li>Al soltar → actualizar posiciones en batch</li>
+          <li>Emitir <code>CHANNEL_UPDATE</code> a todos</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Permisos por canal (overwrites)</div>
+      <p>Cada canal puede tener permisos que sobreescriben los del rol. Se guarda como una tabla con allow/deny bit flags.</p>
+      <div class="code">{
+  channel_id: "...",
+  target_id: "role_id o user_id",
+  type: "role" | "member",
+  allow: 0x0000000400,   // bits de permisos permitidos
+  deny:  0x0000000800    // bits de permisos denegados
+}</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Estado "último mensaje leído" (unread)</div>
+      <p>Tabla <code>read_states</code> con <code>user_id, channel_id, last_read_message_id</code>. Si hay mensajes más nuevos → mostrar punto de no leído. Al abrir el canal → actualizar el last_read.</p>
+    </div>
+  </div>
+
+  <!-- USUARIOS -->
+  <div id="usuarios" class="section">
+    <div class="card">
+      <div class="card-title">Perfil de usuario</div>
+      <div class="code">{
+  id: "snowflake",
+  username: "juan_dev",
+  discriminator: "0001",
+  email: "juan@email.com",
+  avatar: "url-del-avatar",
+  banner: null,
+  bio: "Soy developer 👋",
+  status: "online" | "idle" | "dnd" | "invisible" | "offline",
+  custom_status: "Codificando 🚀",
+  created_at: "..."
+}</div>
+    </div>
+    <div class="section-title">Estados de presencia</div>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">🟢 Online (visible)</div>
+        <p>El usuario está activo. Aparece en la lista de miembros online. Se emite <code>PRESENCE_UPDATE</code> al conectarse.</p>
+      </div>
+      <div class="card">
+        <div class="card-title">🌙 Ausente (idle)</div>
+        <p>Sin actividad por N minutos. Se puede set manual o automáticamente al detectar inactividad del mouse/teclado.</p>
+      </div>
+      <div class="card">
+        <div class="card-title">⛔ No molestar (DND)</div>
+        <p>Visible pero no recibe notificaciones. El usuario lo activa manualmente.</p>
+      </div>
+      <div class="card">
+        <div class="card-title">⚫ Invisible</div>
+        <p>Aparece como offline para todos, pero puede leer y escribir normalmente. La DB guarda <code>status: "invisible"</code>; a otros se les muestra como offline.</p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Cambiar avatar <span class="badge g">Upload</span></div>
+      <div class="code">// Flujo igual que icono del servidor:
+1. Seleccionar imagen → preview circular
+2. Crop opcional (cuadrado → circle con CSS)
+3. Upload → backend guarda en storage → URL en DB
+4. Emitir USER_UPDATE por WebSocket
+5. Todos los mensajes del usuario actualizan el avatar en tiempo real
+   (o usar URL dinámica tipo /avatars/:user_id)</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Nickname por servidor</div>
+      <p>Un usuario puede tener distintos apodos en cada servidor. Se guarda en la tabla <code>guild_members</code> como campo <code>nickname</code>. Al mostrar mensajes: mostrar nickname si existe, si no, mostrar username global.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">Configuración de usuario</div>
+      <ul>
+        <li>Cambiar email, username, contraseña</li>
+        <li>Tema: claro / oscuro / sincronizar con sistema</li>
+        <li>Notificaciones: sonido, mentions, mensajes directos</li>
+        <li>Privacidad: quién puede enviarte DM, ver tu perfil</li>
+        <li>Sesiones activas y cerrar sesión en otros dispositivos</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- DM / GRUPOS -->
+  <div id="grupos" class="section">
+    <div class="card">
+      <div class="card-title">DM directo (1 a 1)</div>
+      <p>Un canal especial entre 2 usuarios, sin servidor. En la DB es un canal de tipo DM con los dos participantes.</p>
+      <div class="code">// Abrir DM
+POST /users/@me/channels
+{ recipient_id: "user_id" }
+
+// Si ya existe ese DM → devolver el existente
+// Si no → crear canal tipo DM y devolver</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Grupo de DM (hasta 10 personas)</div>
+      <ul>
+        <li>Canal tipo <code>GROUP_DM</code> con múltiples participantes</li>
+        <li>Tiene nombre e icono propios (editables por cualquier miembro)</li>
+        <li>Cualquier miembro puede agregar personas o salir</li>
+        <li>El que crea es "dueño" del grupo y puede cambiar nombre/icono</li>
+        <li>No tiene roles, no tiene permisos complejos</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title">Lista de conversaciones (inbox)</div>
+      <ul>
+        <li>Mostrar DMs y grupos en el sidebar izquierdo</li>
+        <li>Ordenar por mensaje más reciente primero</li>
+        <li>Preview del último mensaje</li>
+        <li>Badge rojo con cantidad de mensajes no leídos</li>
+        <li>Clic en "X" → ocultar de la lista (el historial se preserva)</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ARCHIVOS -->
+  <div id="archivos" class="section">
+    <div class="card">
+      <div class="card-title">Subir archivos / imágenes</div>
+      <div class="code">// Frontend:
+1. Drag & drop o clic en el ícono de adjuntar
+2. Mostrar preview si es imagen (FileReader.readAsDataURL)
+3. Subir con multipart/form-data
+4. Mostrar barra de progreso (XHR onprogress o fetch + ReadableStream)
+
+// Backend:
+1. Recibir archivo
+2. Validar tipo y tamaño (ej: max 8MB)
+3. Guardar en S3 / Cloudflare R2 / local
+4. Guardar metadata en DB (url, nombre, tamaño, tipo, mensaje_id)
+5. Devolver URL del archivo</div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Imágenes</div>
+        <ul>
+          <li>Mostrar thumbnail inline en el chat</li>
+          <li>Clic → modal lightbox para ver grande</li>
+          <li>Guardar width/height para reservar espacio (no saltar layout)</li>
+          <li>Lazy loading con IntersectionObserver</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-title">Videos y otros archivos</div>
+        <ul>
+          <li>Videos: player HTML5 integrado en el mensaje</li>
+          <li>Audio: player con barra de progreso</li>
+          <li>PDF / ZIP: ícono con nombre, tamaño y botón descargar</li>
+          <li>Código: syntax highlight si es .js, .py, etc.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Embeds (preview de links)</div>
+      <p>Cuando alguien pega una URL, el backend hace un scraping para obtener og:title, og:description, og:image y los muestra como tarjeta dentro del mensaje. El usuario puede cerrar el embed.</p>
+    </div>
+  </div>
+
+  <!-- ROLES -->
+  <div id="roles" class="section">
+    <div class="card">
+      <div class="card-title">Estructura de un rol</div>
+      <div class="code">{
+  id: "snowflake",
+  guild_id: "...",
+  name: "Moderador",
+  color: "#e74c3c",    // color del nombre en chat
+  hoist: true,          // mostrar separado en la lista de miembros
+  position: 3,          // jerarquía (más alto = más poder)
+  permissions: bigint,  // bitmask de permisos
+  mentionable: true
+}</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Sistema de permisos con bitmask</div>
+      <div class="code">// Permisos básicos que necesitas implementar:
+SEND_MESSAGES       = 1 << 11   // 0x800
+READ_MESSAGES       = 1 << 10
+MANAGE_MESSAGES     = 1 << 13   // borrar mensajes de otros
+KICK_MEMBERS        = 1 << 1
+BAN_MEMBERS         = 1 << 2
+MANAGE_CHANNELS     = 1 << 4
+MANAGE_GUILD        = 1 << 5
+MANAGE_ROLES        = 1 << 28
+ADMINISTRATOR       = 1 << 3    // bypass todo
+
+// Verificar si tiene permiso:
+const hasPermission = (userPerms, perm) => (userPerms & perm) === perm;</div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Asignar roles</div>
+        <ul>
+          <li>Solo quien tenga <code>MANAGE_ROLES</code></li>
+          <li>Solo puede asignar roles de menor jerarquía</li>
+          <li>Guardar en <code>guild_members.roles[]</code></li>
+          <li>Emitir <code>MEMBER_ROLE_UPDATE</code> por WS</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-title">Calcular permisos finales</div>
+        <ul>
+          <li>Obtener todos los roles del usuario</li>
+          <li>Hacer OR de todos los permisos</li>
+          <li>Aplicar channel overwrites (allow/deny)</li>
+          <li>Si tiene ADMINISTRATOR → permisos totales</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- UI & TEMAS -->
+  <div id="ui" class="section">
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Tema oscuro / claro</div>
+        <ul>
+          <li>Guardar preferencia en localStorage o en la DB del usuario</li>
+          <li>Usar CSS variables para todos los colores</li>
+          <li>Clase <code>.theme-dark</code> o <code>.theme-light</code> en el root</li>
+          <li>Toggle instantáneo sin recargar la página</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-title">Diseño Discord (3 columnas)</div>
+        <ul>
+          <li><strong>Col 1:</strong> lista de servidores (72px)</li>
+          <li><strong>Col 2:</strong> canales/DMs del servidor (240px)</li>
+          <li><strong>Col 3:</strong> área de mensajes + lista de miembros</li>
+          <li>Layout con CSS Grid o Flexbox</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Área de mensajes — layout interno</div>
+      <div class="code">┌────────────────────────────────────────┐
+│ Header: nombre del canal + descripción  │  (fijo arriba)
+├────────────────────────────────────────┤
+│                                         │
+│   Lista de mensajes (scroll)            │  (flex-grow, overflow-y: scroll)
+│                                         │
+├────────────────────────────────────────┤
+│ Input de texto + botones adjuntar/emoji │  (fijo abajo)
+└────────────────────────────────────────┘</div>
+      <p class="sub">Truco: usa flexbox column con el área de mensajes en flex:1 y min-height:0 para que el scroll funcione correctamente.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">Agrupación de mensajes</div>
+      <p>Si el mismo usuario envía mensajes consecutivos en menos de 5 minutos, se agrupan: solo se muestra el avatar y nombre en el primer mensaje, los siguientes solo muestran el texto.</p>
+      <div class="code">// Al renderizar mensajes, comparar con el anterior:
+const isGrouped = prev &&
+  prev.author_id === msg.author_id &&
+  (msg.timestamp - prev.timestamp) &lt; 5 * 60 * 1000;</div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Markdown básico</div>
+        <ul>
+          <li><code>**negrita**</code> → negrita</li>
+          <li><code>*cursiva*</code> → cursiva</li>
+          <li><code>~~tachado~~</code></li>
+          <li><code>`código inline`</code></li>
+          <li><code>```bloque de código```</code></li>
+          <li><code>||spoiler||</code></li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-title">Emojis</div>
+        <ul>
+          <li>Emojis Unicode nativos ✅</li>
+          <li>Picker: grid filtrable por categoría</li>
+          <li>Emojis personalizados del servidor: <code>:nombre:</code> → imagen</li>
+          <li>Guardar emojis custom en tabla con <code>guild_id, nombre, url</code></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- REAL-TIME -->
+  <div id="realtime" class="section">
+    <div class="card">
+      <div class="card-title">WebSocket — eventos principales <span class="badge">WS</span></div>
+      <div class="code">// Eventos del SERVIDOR → cliente:
+MESSAGE_CREATE      // nuevo mensaje
+MESSAGE_UPDATE      // mensaje editado
+MESSAGE_DELETE      // mensaje eliminado
+REACTION_ADD        // reacción añadida
+REACTION_REMOVE     // reacción quitada
+TYPING_START        // alguien está escribiendo
+PRESENCE_UPDATE     // cambio de estado (online/offline)
+CHANNEL_CREATE      // nuevo canal creado
+CHANNEL_UPDATE      // canal editado
+CHANNEL_DELETE      // canal eliminado
+GUILD_MEMBER_ADD    // alguien entró al servidor
+GUILD_MEMBER_REMOVE // alguien salió / fue kickeado
+GUILD_UPDATE        // servidor editado (nombre, icono...)
+
+// Eventos del CLIENTE → servidor:
+IDENTIFY            // autenticación inicial
+HEARTBEAT           // "sigo vivo" cada ~45s
+TYPING_START        // el usuario está escribiendo
+PRESENCE_UPDATE     // cambiar tu estado</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Ciclo de vida de la conexión WS</div>
+      <div class="code">1. Cliente abre WebSocket
+2. Servidor envía HELLO (con heartbeat_interval)
+3. Cliente envía IDENTIFY (con token)
+4. Servidor envía READY (con info del usuario, servidores, etc.)
+5. Cliente empieza a escuchar eventos
+6. Cliente envía HEARTBEAT cada N ms
+7. Servidor responde HEARTBEAT_ACK
+// Si no llega ACK → reconectar</div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Rooms por canal</div>
+        <p>Cada canal es una "sala" en Socket.io o similar. Al cambiar de canal, el cliente hace join a la nueva sala. Así los mensajes solo llegan a quien está suscrito a ese canal.</p>
+      </div>
+      <div class="card">
+        <div class="card-title">Online/Offline</div>
+        <p>Al conectar WS → status: online. Al desconectar → status: offline. Emitir PRESENCE_UPDATE en ambos casos para que todos los miembros del servidor actualicen su lista.</p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Stack recomendado para empezar</div>
+      <div class="code">Frontend:   React + Vite (o Next.js)
+Backend:    Node.js + Express
+WebSocket:  Socket.io (más fácil) o ws puro
+DB:         PostgreSQL (relacional, ideal para permisos)
+Auth:       JWT tokens (access + refresh)
+Storage:    Cloudflare R2 / Supabase Storage / local
+Deploy:     Railway / Render / Fly.io</div>
+    </div>
+  </div>
+
+</div><!-- end container -->
+
+<script>
+function show(id, el) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  el.classList.add('active');
+}
+</script>
+</body>
+</html>

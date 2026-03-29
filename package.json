@@ -1,0 +1,36 @@
+{
+  "name": "discord-ifros-mini",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "concurrently -k \"npm:dev:server\" \"npm:dev:web\" \"npm:dev:electron\"",
+    "dev:server": "node --watch server/index.js",
+    "dev:web": "vite",
+    "dev:electron": "wait-on tcp:3030 tcp:5173 && electron .",
+    "build": "vite build",
+    "setup:supabase": "node scripts/bootstrap-supabase.js",
+    "start": "node server/index.js",
+    "start:desktop": "electron ."
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.4",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "marked": "^15.0.7",
+    "pg": "^8.13.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "electron": "^35.1.5",
+    "vite": "^6.2.6",
+    "wait-on": "^8.0.3"
+  }
+}
