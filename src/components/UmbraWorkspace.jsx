@@ -13,7 +13,73 @@ import {
 } from "../utils.js";
 import { Avatar } from "./Avatar.jsx";
 import { Dialog } from "./Dialog.jsx";
+import { FriendsHome } from "./FriendsHome.jsx";
+import { SettingsModal } from "./SettingsModal.jsx";
+import { UserProfileCard } from "./UserProfileCard.jsx";
 import { UmbraLogo } from "./UmbraLogo.jsx";
+
+const COMPOSER_SHORTCUTS = [
+  {
+    id: "upload",
+    label: "Subir un archivo",
+    description: "UI lista. El upload real ira cuando conectemos Storage."
+  },
+  {
+    id: "thread",
+    label: "Crear hilo",
+    description: "Hilos y vistas anidadas quedan para la siguiente capa del chat."
+  },
+  {
+    id: "poll",
+    label: "Crear encuesta",
+    description: "Las encuestas todavia no estan en backend."
+  },
+  {
+    id: "apps",
+    label: "Usar aplicaciones",
+    description: "Reserva visual para slash commands e integraciones."
+  }
+];
+
+const PICKER_CONTENT = {
+  gif: {
+    title: "GIFs",
+    subtitle: "Atajos ligeros para insertar energia rapida en el composer.",
+    items: ["Loop", "Wave", "Glow", "Pulse", "Orbit", "Drift"]
+  },
+  sticker: {
+    title: "Stickers",
+    subtitle: "Panel visual inspirado en Discord con respuestas rapidas.",
+    items: ["Wave", "Nova", "Blink", "Pulse", "Ghost", "Echo"]
+  },
+  emoji: {
+    title: "Emojis",
+    subtitle: "Reacciones rapidas listas para insertar en un mensaje.",
+    items: ["😀", "🔥", "❤️", "⚡", "🎯", "✨", "🚀", "👀", "👏", "🌙", "🫶", "🖤"]
+  }
+};
+
+function isVisibleStatus(status) {
+  return status && status !== "offline" && status !== "invisible";
+}
+
+function buildMemberGroups(members = []) {
+  const online = members.filter((member) => isVisibleStatus(member.status));
+  const offline = members.filter((member) => !isVisibleStatus(member.status));
+
+  return [
+    {
+      id: "online",
+      label: `En linea - ${online.length}`,
+      members: online
+    },
+    {
+      id: "offline",
+      label: `Sin conexion - ${offline.length}`,
+      members: offline
+    }
+  ].filter((group) => group.members.length > 0);
+}
 
 function renderHeaderCopy(activeChannel, kind) {
   if (kind === "guild") {
@@ -29,6 +95,19 @@ function renderHeaderCopy(activeChannel, kind) {
     title: activeChannel?.display_name || "Mensajes directos",
     description: activeChannel?.topic || "Abre conversaciones 1 a 1 o grupos pequenos."
   };
+}
+
+function getDmSummary(dm, currentUserId) {
+  if (!dm) {
+    return "Sin mensajes todavia";
+  }
+
+  if (dm.type === "group_dm") {
+    return `${dm.participants?.length || 0} miembros`;
+  }
+
+  const other = dm.participants?.find((participant) => participant.id !== currentUserId);
+  return other?.custom_status || dm.last_message_preview || "Sin mensajes todavia";
 }
 
 export function UmbraWorkspace({ accessToken, onSignOut }) {
@@ -48,9 +127,16 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
   const [typingEvents, setTypingEvents] = useState([]);
   const [theme, setTheme] = useState("dark");
   const [appError, setAppError] = useState("");
+  const [uiNotice, setUiNotice] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [composerMenuOpen, setComposerMenuOpen] = useState(false);
+  const [composerPicker, setComposerPicker] = useState(null);
+  const [reactionPickerFor, setReactionPickerFor] = useState(null);
+  const [profileCard, setProfileCard] = useState(null);
   const [booting, setBooting] = useState(true);
 
   const listRef = useRef(null);
+  const composerRef = useRef(null);
   const lastTypingAtRef = useRef(0);
   const activeSelectionRef = useRef(activeSelection);
   const loadBootstrapRef = useRef(null);
@@ -63,6 +149,10 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
   const activeChannel = activeLookup?.channel || null;
   const activeGuild = activeLookup?.guild || null;
   const headerCopy = renderHeaderCopy(activeChannel, activeSelection.kind);
+  const currentUserLabel =
+    workspace?.current_user?.display_name || workspace?.current_user?.username || "Umbra user";
+  const directUnreadCount =
+    workspace?.dms?.reduce((count, dm) => count + (dm.unread_count || 0), 0) || 0;
   const typingUsers = typingEvents.filter(
     (item) =>
       item.channelId === activeSelection.channelId &&
@@ -172,6 +262,10 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
     setComposer("");
     setReplyTarget(null);
     setEditingMessage(null);
+    setComposerMenuOpen(false);
+    setComposerPicker(null);
+    setReactionPickerFor(null);
+    setProfileCard(null);
     setTypingEvents([]);
 
     if (activeSelection.channelId) {
@@ -334,6 +428,18 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
     return () => window.clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    if (!uiNotice) {
+      return undefined;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setUiNotice("");
+    }, 3200);
+
+    return () => window.clearTimeout(timeout);
+  }, [uiNotice]);
+
   async function handleSubmitMessage(event) {
     event.preventDefault();
     if (!composer.trim() || !activeSelection.channelId) {
@@ -477,6 +583,139 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
     }
   }
 
+  function showUiNotice(message) {
+    setUiNotice(message);
+  }
+
+  function appendToComposer(token) {
+    setComposer((previous) => {
+      const prefix = previous && !previous.endsWith(" ") ? `${previous} ` : previous;
+      return `${prefix}${token}`;
+    });
+
+    requestAnimationFrame(() => {
+      composerRef.current?.focus();
+    });
+  }
+
+  function handleComposerShortcut(shortcut) {
+    setComposerMenuOpen(false);
+    showUiNotice(shortcut.description);
+  }
+
+  function handlePickerInsert(value) {
+    appendToComposer(value);
+    setComposerPicker(null);
+  }
+
+  function buildProfileCardData(targetUser, displayNameOverride = null) {
+    if (!workspace || !targetUser?.id) {
+      return null;
+    }
+
+    const fallbackProfile =
+      workspace.available_users.find((item) => item.id === targetUser.id) ||
+      (workspace.current_user.id === targetUser.id ? workspace.current_user : null);
+
+    const activeGuildMember =
+      activeGuild?.members.find((member) => member.id === targetUser.id) || null;
+    const activeParticipant =
+      activeChannel?.participants?.find((participant) => participant.id === targetUser.id) || null;
+    const sharedGuilds = workspace.guilds.filter((guild) =>
+      guild.members.some((member) => member.id === targetUser.id)
+    );
+    const sharedDms = workspace.dms.filter((dm) =>
+      dm.participants.some((participant) => participant.id === targetUser.id)
+    );
+
+    return {
+      id: targetUser.id,
+      authProvider:
+        targetUser.auth_provider || fallbackProfile?.auth_provider || null,
+      avatarHue:
+        targetUser.avatar_hue || activeGuildMember?.avatar_hue || fallbackProfile?.avatar_hue || 210,
+      bio: targetUser.bio || activeGuildMember?.bio || fallbackProfile?.bio || "",
+      customStatus:
+        targetUser.custom_status ||
+        activeGuildMember?.custom_status ||
+        activeParticipant?.custom_status ||
+        fallbackProfile?.custom_status ||
+        "",
+      discriminator:
+        targetUser.discriminator || fallbackProfile?.discriminator || null,
+      displayName:
+        displayNameOverride ||
+        targetUser.display_name ||
+        activeGuildMember?.display_name ||
+        targetUser.username ||
+        fallbackProfile?.username ||
+        "Umbra user",
+      isCurrentUser: workspace.current_user.id === targetUser.id,
+      primaryTag: activeGuildMember ? activeGuild?.name || "Miembro" : sharedGuilds[0]?.name || null,
+      roleColor: targetUser.role_color || activeGuildMember?.role_color || null,
+      sharedDmCount: sharedDms.length,
+      sharedGuildCount: sharedGuilds.length,
+      status:
+        targetUser.status ||
+        activeGuildMember?.status ||
+        activeParticipant?.status ||
+        fallbackProfile?.status ||
+        "offline",
+      username:
+        targetUser.username || fallbackProfile?.username || targetUser.display_name || "umbra_user"
+    };
+  }
+
+  function openProfileCard(event, targetUser, displayNameOverride = null) {
+    const resolved = buildProfileCardData(targetUser, displayNameOverride);
+    if (!resolved) {
+      return;
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    setProfileCard({
+      anchorRect: {
+        bottom: rect.bottom,
+        left: rect.left,
+        right: rect.right,
+        top: rect.top
+      },
+      profile: resolved
+    });
+  }
+
+  async function handleOpenDmFromCard(profile) {
+    if (!profile?.id) {
+      return;
+    }
+
+    if (profile.isCurrentUser) {
+      setSettingsOpen(true);
+      setProfileCard(null);
+      return;
+    }
+
+    try {
+      const payload = await api.createDm({
+        recipientId: profile.id
+      });
+
+      setProfileCard(null);
+      setActiveSelection({
+        channelId: payload.channel.id,
+        guildId: null,
+        kind: "dm"
+      });
+      await loadBootstrap({
+        channelId: payload.channel.id,
+        guildId: null,
+        kind: "dm"
+      });
+    } catch (error) {
+      setAppError(error.message);
+    }
+  }
+
   if (booting) {
     return <div className="boot-screen">Despertando Umbra...</div>;
   }
@@ -489,6 +728,23 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
     activeSelection.kind === "guild"
       ? activeGuild?.members || []
       : activeChannel?.participants || [];
+  const memberGroups = buildMemberGroups(memberList);
+  const friendUsers = (workspace.available_users || [])
+    .filter((user) => user.id !== workspace.current_user.id)
+    .sort((a, b) => {
+      const aStatus = isVisibleStatus(a.status) ? 0 : 1;
+      const bStatus = isVisibleStatus(b.status) ? 0 : 1;
+      if (aStatus !== bStatus) {
+        return aStatus - bStatus;
+      }
+
+      return String(a.username || "").localeCompare(String(b.username || ""), "es");
+    });
+  const activeNowUsers = friendUsers.filter((user) => isVisibleStatus(user.status)).slice(0, 3);
+  const headerSearchPlaceholder =
+    activeSelection.kind === "guild"
+      ? `Buscar en #${activeChannel?.name || "general"}`
+      : `Buscar en ${activeChannel?.display_name || "este chat"}`;
 
   return (
     <div className={`app-shell theme-${theme}`}>
@@ -498,19 +754,18 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
           <span>UMBRA</span>
         </div>
         <button
-          className={`server-pill ${activeSelection.kind === "dm" ? "active" : ""}`}
-          onClick={() => {
-            if (workspace.dms[0]) {
-              setActiveSelection({
-                channelId: workspace.dms[0].id,
-                guildId: null,
-                kind: "dm"
-              });
-            }
-          }}
+          className={`server-pill ${activeSelection.kind === "dm" || activeSelection.kind === "home" ? "active" : ""}`}
+          onClick={() =>
+            setActiveSelection({
+              channelId: null,
+              guildId: null,
+              kind: "home"
+            })
+          }
           type="button"
         >
           <span>DM</span>
+          {directUnreadCount ? <i>{directUnreadCount}</i> : null}
         </button>
         <div className="server-stack">
           {workspace.guilds.map((guild) => (
@@ -548,7 +803,7 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
 
       <aside className="navigator-panel">
         <div className="navigator-top">
-          <div>
+          <div className="navigator-title-block">
             <p className="eyebrow">{workspace.mode === "supabase" ? "Umbra Cloud" : "Modo demo"}</p>
             <h2>{activeGuild ? activeGuild.name : "Mensajes directos"}</h2>
             <p className="subcopy">
@@ -558,7 +813,7 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
             </p>
           </div>
           <button
-            className="ghost-button"
+            className="ghost-button navigator-create-button"
             onClick={() =>
               setDialog({
                 type: activeGuild ? "channel" : "dm",
@@ -571,8 +826,37 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
           </button>
         </div>
 
+        <div className="navigator-search">
+          <input
+            aria-label="Buscar en el panel lateral"
+            placeholder={
+              activeGuild
+                ? `Buscar en ${activeGuild.name}`
+                : activeSelection.kind === "home"
+                  ? "Buscar o iniciar una conversacion"
+                  : "Buscar mensajes directos"
+            }
+            type="text"
+          />
+        </div>
+
         {activeGuild ? (
           <div className="channel-list">
+            <div className="panel-section-label">
+              <span>Canales de texto</span>
+              <button
+                className="ghost-button icon-only"
+                onClick={() =>
+                  setDialog({
+                    type: "channel",
+                    currentUserId: workspace.current_user.id
+                  })
+                }
+                type="button"
+              >
+                +
+              </button>
+            </div>
             {activeGuild.channels.map((channel) => (
               <button
                 className={`channel-row ${activeSelection.channelId === channel.id ? "active" : ""}`}
@@ -586,78 +870,175 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
                 }
                 type="button"
               >
-                <span className="channel-label"># {channel.name}</span>
+                <span className="channel-label">
+                  <small>#</small>
+                  {channel.name}
+                </span>
                 {channel.unread_count ? <b>Nuevo</b> : null}
               </button>
             ))}
           </div>
         ) : (
-          <div className="dm-list">
-            {workspace.dms.map((dm) => {
-              const other = dm.participants.find(
-                (participant) => participant.id !== workspace.current_user.id
-              );
+          <>
+            <div className="direct-home-nav">
+              <button
+                className={`direct-home-link ${activeSelection.kind === "home" ? "active" : ""}`}
+                onClick={() =>
+                  setActiveSelection({
+                    channelId: null,
+                    guildId: null,
+                    kind: "home"
+                  })
+                }
+                type="button"
+              >
+                Amigos
+              </button>
+              <button
+                className="direct-home-link"
+                onClick={() => showUiNotice("Solicitudes de mensajes llegaran cuando conectemos social graph real.")}
+                type="button"
+              >
+                Solicitudes de mensajes
+              </button>
+              <button
+                className="direct-home-link"
+                onClick={() => showUiNotice("Nitro y perks quedan fuera del MVP funcional de Umbra.")}
+                type="button"
+              >
+                Nitro
+              </button>
+              <button
+                className="direct-home-link"
+                onClick={() => showUiNotice("Misiones y tienda son placeholders visuales por ahora.")}
+                type="button"
+              >
+                Misiones
+              </button>
+            </div>
 
-              return (
+            <div className="dm-list">
+              <div className="panel-section-label">
+                <span>Mensajes directos</span>
                 <button
-                  className={`dm-row ${activeSelection.channelId === dm.id ? "active" : ""}`}
-                  key={dm.id}
+                  className="ghost-button icon-only"
                   onClick={() =>
-                    setActiveSelection({
-                      channelId: dm.id,
-                      guildId: null,
-                      kind: "dm"
+                    setDialog({
+                      type: "dm",
+                      currentUserId: workspace.current_user.id
                     })
                   }
                   type="button"
                 >
-                  <Avatar
-                    hue={other?.avatar_hue || 210}
-                    label={dm.display_name}
-                    size={38}
-                    status={dm.type === "dm" ? other?.status : null}
-                  />
-                  <div className="dm-copy">
-                    <strong>{dm.display_name}</strong>
-                    <span>{dm.last_message_preview || "Sin mensajes todavia"}</span>
-                  </div>
-                  {dm.unread_count ? <i>{dm.unread_count}</i> : null}
+                  +
                 </button>
-              );
-            })}
-          </div>
+              </div>
+              {workspace.dms.map((dm) => {
+                const other = dm.participants.find(
+                  (participant) => participant.id !== workspace.current_user.id
+                );
+
+                return (
+                  <button
+                    className={`dm-row ${activeSelection.channelId === dm.id ? "active" : ""}`}
+                    key={dm.id}
+                    onClick={() =>
+                      setActiveSelection({
+                        channelId: dm.id,
+                        guildId: null,
+                        kind: "dm"
+                      })
+                    }
+                    type="button"
+                  >
+                    <Avatar
+                      hue={other?.avatar_hue || 210}
+                      label={dm.display_name}
+                      size={38}
+                      status={dm.type === "dm" ? other?.status : null}
+                    />
+                    <div className="dm-copy">
+                      <strong>{dm.display_name}</strong>
+                      <span>{getDmSummary(dm, workspace.current_user.id)}</span>
+                    </div>
+                    {dm.unread_count ? <i>{dm.unread_count}</i> : null}
+                  </button>
+                );
+              })}
+            </div>
+          </>
         )}
 
         <div className="navigator-footer">
-          <div className="profile-card">
+          <button
+            className="profile-card profile-card-button"
+            onClick={() => setSettingsOpen(true)}
+            type="button"
+          >
             <Avatar
               hue={workspace.current_user.avatar_hue}
               label={workspace.current_user.username}
               status={workspace.current_user.status}
             />
             <div className="profile-meta">
-              <strong>{workspace.current_user.username}</strong>
+              <strong>{currentUserLabel}</strong>
               <span>{workspace.current_user.email || "Sin email visible"}</span>
             </div>
+          </button>
+
+          <div className="footer-status-row">
+            <label className="select-group">
+              <span>Estado</span>
+              <select
+                onChange={(event) => handleStatusChange(event.target.value)}
+                value={workspace.current_user.status}
+              >
+                {STATUS_OPTIONS.map((status) => (
+                  <option key={status.value} value={status.value}>
+                    {status.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              className="ghost-button icon-only"
+              onClick={() => setSettingsOpen(true)}
+              type="button"
+            >
+              Ajustes
+            </button>
           </div>
 
-          <label className="select-group">
-            <span>Estado</span>
-            <select onChange={(event) => handleStatusChange(event.target.value)} value={workspace.current_user.status}>
-              {STATUS_OPTIONS.map((status) => (
-                <option key={status.value} value={status.value}>
-                  {status.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <div className="footer-actions">
-            <button className="ghost-button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} type="button">
+          <div className="footer-actions compact">
+            <button
+              className="ghost-button"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              type="button"
+            >
               {theme === "dark" ? "Tema claro" : "Tema oscuro"}
             </button>
             <button className="ghost-button" onClick={() => loadBootstrap(activeSelection)} type="button">
               Refrescar
+            </button>
+          </div>
+
+          <div className="footer-actions">
+            <button
+              className="ghost-button icon-only"
+              onClick={() => showUiNotice("Controles de micro llegan junto al stack de voz.")}
+              type="button"
+            >
+              Mic
+            </button>
+            <button
+              className="ghost-button icon-only"
+              onClick={() => showUiNotice("Audio y salida de voz se conectan en la capa de llamadas.")}
+              type="button"
+            >
+              Audio
+            </button>
+            <button className="ghost-button icon-only" onClick={() => setSettingsOpen(true)} type="button">
+              Cfg
             </button>
             <button className="ghost-button danger" onClick={onSignOut} type="button">
               Cerrar sesion
@@ -667,15 +1048,47 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
       </aside>
 
       <main className="chat-stage">
+        {activeSelection.kind === "home" ? (
+          <>
+            {appError ? <div className="error-banner">{appError}</div> : null}
+            <FriendsHome
+              onOpenDm={handleOpenDmFromCard}
+              onOpenProfileCard={openProfileCard}
+              onShowNotice={showUiNotice}
+              users={friendUsers}
+            />
+          </>
+        ) : (
+          <>
         <header className="chat-header">
-          <div>
+          <div className="chat-title-block">
             <p className="eyebrow">{headerCopy.eyebrow}</p>
-            <h1>{headerCopy.title}</h1>
+            <div className="chat-title-line">
+              <h1>{headerCopy.title}</h1>
+              <span className="chat-topic-pill">
+                {activeSelection.kind === "guild" ? "Texto" : "Directo"}
+              </span>
+            </div>
             <p className="subcopy">{headerCopy.description}</p>
           </div>
-          <div className="chat-header-mark">
-            <UmbraLogo alt="Umbra" size={20} />
-            <span>Umbra</span>
+
+          <div className="chat-header-tools">
+            <button className="ghost-button icon-only" type="button">
+              Hilos
+            </button>
+            <button className="ghost-button icon-only" type="button">
+              Inbox
+            </button>
+            <button className="ghost-button icon-only" type="button">
+              Ayuda
+            </button>
+            <label className="chat-search">
+              <input placeholder={headerSearchPlaceholder} type="text" />
+            </label>
+            <div className="chat-header-mark">
+              <UmbraLogo alt="Umbra" size={20} />
+              <span>Umbra</span>
+            </div>
           </div>
         </header>
 
@@ -692,12 +1105,27 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
                 key={message.id}
               >
                 {!grouped ? (
-                  <Avatar
-                    hue={message.author?.avatar_hue}
-                    label={message.display_name}
-                    size={44}
-                    status={message.author?.status}
-                  />
+                  <button
+                    className="message-avatar-trigger"
+                    onClick={(event) =>
+                      openProfileCard(
+                        event,
+                        {
+                          ...message.author,
+                          bio: workspace.available_users.find((item) => item.id === message.author?.id)?.bio
+                        },
+                        message.display_name
+                      )
+                    }
+                    type="button"
+                  >
+                    <Avatar
+                      hue={message.author?.avatar_hue}
+                      label={message.display_name}
+                      size={44}
+                      status={message.author?.status}
+                    />
+                  </button>
                 ) : (
                   <div className="message-gutter" />
                 )}
@@ -705,7 +1133,22 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
                 <div className="message-main">
                   {!grouped ? (
                     <div className="message-headline">
-                      <strong>{message.display_name}</strong>
+                      <button
+                        className="message-author-trigger"
+                        onClick={(event) =>
+                          openProfileCard(
+                            event,
+                            {
+                              ...message.author,
+                              bio: workspace.available_users.find((item) => item.id === message.author?.id)?.bio
+                            },
+                            message.display_name
+                          )
+                        }
+                        type="button"
+                      >
+                        {message.display_name}
+                      </button>
                       <span>{relativeTime(message.created_at)}</span>
                       {message.edited_at ? <em>(editado)</em> : null}
                     </div>
@@ -748,6 +1191,17 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
                         Editar
                       </button>
                     ) : null}
+                    <button
+                      className={`ghost-button small ${reactionPickerFor === message.id ? "active" : ""}`}
+                      onClick={() =>
+                        setReactionPickerFor((previous) =>
+                          previous === message.id ? null : message.id
+                        )
+                      }
+                      type="button"
+                    >
+                      Reaccionar
+                    </button>
                     {message.can_delete ? (
                       <button className="ghost-button small danger" onClick={() => handleDeleteMessage(message)} type="button">
                         Eliminar
@@ -767,17 +1221,36 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
                         <b>{reaction.count}</b>
                       </button>
                     ))}
-                    {REACTION_OPTIONS.map((emoji) => (
-                      <button
-                        className="reaction-chip add"
-                        key={`${message.id}-add-${emoji}`}
-                        onClick={() => handleReaction(message.id, emoji)}
-                        type="button"
-                      >
-                        {emoji}
-                      </button>
-                    ))}
+                    <button
+                      className="reaction-chip add"
+                      onClick={() =>
+                        setReactionPickerFor((previous) =>
+                          previous === message.id ? null : message.id
+                        )
+                      }
+                      type="button"
+                    >
+                      +
+                    </button>
                   </div>
+
+                  {reactionPickerFor === message.id ? (
+                    <div className="reaction-picker-inline">
+                      {REACTION_OPTIONS.map((emoji) => (
+                        <button
+                          className="reaction-chip"
+                          key={`${message.id}-picker-${emoji}`}
+                          onClick={() => {
+                            handleReaction(message.id, emoji);
+                            setReactionPickerFor(null);
+                          }}
+                          type="button"
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               </article>
             );
@@ -823,67 +1296,248 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
             </div>
           ) : null}
 
-          <form className="composer" onSubmit={handleSubmitMessage}>
-            <textarea
-              onChange={(event) => handleComposerChange(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  handleSubmitMessage(event);
+          {uiNotice ? <div className="composer-banner subtle">{uiNotice}</div> : null}
+
+          <div className="composer-frame">
+            <div className="composer-side">
+              <button
+                className={`composer-icon-button ${composerMenuOpen ? "active" : ""}`}
+                onClick={() => setComposerMenuOpen((previous) => !previous)}
+                type="button"
+              >
+                +
+              </button>
+
+              {composerMenuOpen ? (
+                <div className="floating-surface shortcut-menu">
+                  {COMPOSER_SHORTCUTS.map((shortcut) => (
+                    <button
+                      className="shortcut-item"
+                      key={shortcut.id}
+                      onClick={() => handleComposerShortcut(shortcut)}
+                      type="button"
+                    >
+                      <strong>{shortcut.label}</strong>
+                      <span>{shortcut.description}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+
+            <form className="composer" onSubmit={handleSubmitMessage}>
+              <textarea
+                onChange={(event) => handleComposerChange(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    handleSubmitMessage(event);
+                  }
+                }}
+                placeholder={
+                  activeSelection.kind === "guild"
+                    ? `Mensaje #${activeChannel?.name || "general"}`
+                    : `Mensaje para ${activeChannel?.display_name || "este DM"}`
                 }
-              }}
-              placeholder={
-                activeSelection.kind === "guild"
-                  ? `Enviar mensaje en #${activeChannel?.name || "general"}`
-                  : `Hablar con ${activeChannel?.display_name || "este DM"}`
-              }
-              rows={3}
-              value={composer}
-            />
-            <button className="primary-button" type="submit">
-              {editingMessage ? "Guardar cambio" : "Enviar"}
-            </button>
-          </form>
+                ref={composerRef}
+                rows={2}
+                value={composer}
+              />
+
+              <div className="composer-actions">
+                <button
+                  className={`composer-action-chip ${composerPicker === "gif" ? "active" : ""}`}
+                  onClick={() =>
+                    setComposerPicker((previous) => (previous === "gif" ? null : "gif"))
+                  }
+                  type="button"
+                >
+                  GIF
+                </button>
+                <button
+                  className={`composer-action-chip ${composerPicker === "sticker" ? "active" : ""}`}
+                  onClick={() =>
+                    setComposerPicker((previous) => (previous === "sticker" ? null : "sticker"))
+                  }
+                  type="button"
+                >
+                  Stickers
+                </button>
+                <button
+                  className={`composer-action-chip ${composerPicker === "emoji" ? "active" : ""}`}
+                  onClick={() =>
+                    setComposerPicker((previous) => (previous === "emoji" ? null : "emoji"))
+                  }
+                  type="button"
+                >
+                  Emoji
+                </button>
+                <button className="primary-button send-button" type="submit">
+                  {editingMessage ? "Guardar" : "Enviar"}
+                </button>
+              </div>
+            </form>
+
+            {composerPicker ? (
+              <div className="floating-surface picker-panel">
+                <div className="picker-panel-header">
+                  <div>
+                    <strong>{PICKER_CONTENT[composerPicker].title}</strong>
+                    <span>{PICKER_CONTENT[composerPicker].subtitle}</span>
+                  </div>
+                  <button
+                    className="ghost-button icon-only"
+                    onClick={() => setComposerPicker(null)}
+                    type="button"
+                  >
+                    x
+                  </button>
+                </div>
+
+                <div className={`picker-grid ${composerPicker}`}>
+                  {PICKER_CONTENT[composerPicker].items.map((item) => (
+                    <button
+                      className="picker-card"
+                      key={item}
+                      onClick={() =>
+                        handlePickerInsert(
+                          composerPicker === "emoji" ? item : `:${String(item).toLowerCase()}:`
+                        )
+                      }
+                      type="button"
+                    >
+                      <strong>{item}</strong>
+                      {composerPicker === "emoji" ? null : (
+                        <span>{composerPicker === "gif" ? "Inserta un tag rapido" : "Sticker rapido"}</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
         </footer>
+          </>
+        )}
       </main>
 
       <aside className="members-panel">
-        <div className="members-header">
-          <p className="eyebrow">{activeSelection.kind === "guild" ? "Miembros" : "Participantes"}</p>
-          <h3>
-            {activeSelection.kind === "guild"
-              ? `${memberList.length} personas`
-              : `${memberList.length} en el chat`}
-          </h3>
-        </div>
-
-        <div className="member-list">
-          {memberList.map((member) => (
-            <div className="member-row" key={member.id}>
-              <Avatar
-                hue={member.avatar_hue}
-                label={member.display_name || member.username}
-                size={38}
-                status={member.status}
-              />
-              <div className="member-copy">
-                <strong style={member.role_color ? { color: member.role_color } : undefined}>
-                  {member.display_name || member.username}
-                </strong>
-                <span>{member.custom_status || member.status}</span>
-              </div>
+        {activeSelection.kind === "home" ? (
+          <>
+            <div className="members-header">
+              <p className="eyebrow">Activo ahora</p>
+              <h3>{activeNowUsers.length ? "Usuarios conectados" : "Sin actividad"}</h3>
             </div>
-          ))}
-        </div>
 
-        <div className="guide-note">
-          <h4>Umbra desktop + cloud</h4>
-          <p>
-            Auth real, Google, OTP, mensajes en tiempo real, DMs, reacciones y un
-            tono visual mas oscuro para despliegue y empaquetado.
-          </p>
-        </div>
+            <div className="activity-panel">
+              {activeNowUsers.map((user) => (
+                <button
+                  className="activity-card"
+                  key={user.id}
+                  onClick={(event) => openProfileCard(event, user)}
+                  type="button"
+                >
+                  <div className="activity-card-header">
+                    <Avatar
+                      hue={user.avatar_hue}
+                      label={user.username}
+                      size={42}
+                      status={user.status}
+                    />
+                    <div className="activity-card-copy">
+                      <strong>{user.username}</strong>
+                      <span>{user.custom_status || "Online"}</span>
+                    </div>
+                  </div>
+                  <div className="activity-card-body">
+                    <p>{user.bio || "Sin bio visible."}</p>
+                  </div>
+                </button>
+              ))}
+
+              {!activeNowUsers.length ? (
+                <div className="guide-note">
+                  <h4>Sin actividad destacada</h4>
+                  <p>Cuando tus usuarios esten online, aqui aparecera su presencia reciente.</p>
+                </div>
+              ) : null}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="members-header">
+              <p className="eyebrow">{activeSelection.kind === "guild" ? "Miembros" : "Participantes"}</p>
+              <h3>
+                {activeSelection.kind === "guild"
+                  ? `${memberList.length} personas`
+                  : `${memberList.length} en el chat`}
+              </h3>
+            </div>
+
+            <div className="member-list">
+              {memberGroups.map((group) => (
+                <section className="member-group" key={group.id}>
+                  <p className="member-group-label">{group.label}</p>
+                  {group.members.map((member) => (
+                    <button
+                      className="member-row member-row-button"
+                      key={member.id}
+                      onClick={(event) => openProfileCard(event, member)}
+                      type="button"
+                    >
+                      <Avatar
+                        hue={member.avatar_hue}
+                        label={member.display_name || member.username}
+                        size={38}
+                        status={member.status}
+                      />
+                      <div className="member-copy">
+                        <strong style={member.role_color ? { color: member.role_color } : undefined}>
+                          {member.display_name || member.username}
+                        </strong>
+                        <span>{member.custom_status || member.status}</span>
+                      </div>
+                    </button>
+                  ))}
+                </section>
+              ))}
+            </div>
+
+            <div className="guide-note">
+              <h4>Umbra desktop + cloud</h4>
+              <p>
+                Shell mas cercana a Discord, composer mas rico, menus laterales y una
+                base lista para seguir conectando features reales.
+              </p>
+            </div>
+          </>
+        )}
       </aside>
+
+      {settingsOpen ? (
+        <SettingsModal
+          dmCount={workspace.dms.length}
+          guildCount={workspace.guilds.length}
+          onClose={() => setSettingsOpen(false)}
+          onShowNotice={showUiNotice}
+          onSignOut={onSignOut}
+          onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
+          theme={theme}
+          user={workspace.current_user}
+        />
+      ) : null}
+
+      {profileCard ? (
+        <UserProfileCard
+          card={profileCard}
+          onClose={() => setProfileCard(null)}
+          onOpenDm={handleOpenDmFromCard}
+          onOpenSelfProfile={() => {
+            setProfileCard(null);
+            setSettingsOpen(true);
+          }}
+        />
+      ) : null}
 
       {dialog ? (
         <Dialog
