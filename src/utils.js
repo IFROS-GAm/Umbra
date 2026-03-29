@@ -1,4 +1,9 @@
-export const REACTION_OPTIONS = ["🔥", "👍", "✨", "🚀"];
+export const REACTION_OPTIONS = [
+  "\uD83D\uDD25",
+  "\uD83D\uDC4D",
+  "\u2728",
+  "\uD83D\uDE80"
+];
 
 export const STATUS_OPTIONS = [
   { value: "online", label: "Online" },
@@ -48,6 +53,7 @@ export function formatMessageHtml(text = "") {
   inlineCodes.forEach((block, index) => {
     html = html.replace(`%%INLINECODE_${index}%%`, block);
   });
+
   codeBlocks.forEach((block, index) => {
     html = html.replace(`%%CODEBLOCK_${index}%%`, block);
   });
@@ -124,7 +130,9 @@ export function resolveSelection(session, previousSelection) {
     }
   }
 
-  const defaultGuild = session.guilds.find((guild) => guild.id === session.defaults.guild_id);
+  const defaultGuild = session.guilds.find(
+    (guild) => guild.id === session.defaults.guild_id
+  );
   const defaultChannel =
     defaultGuild?.channels.find((channel) => channel.id === session.defaults.channel_id) ||
     defaultGuild?.channels[0];

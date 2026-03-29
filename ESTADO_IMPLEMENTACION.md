@@ -1,78 +1,64 @@
-# Estado de implementación
+# Estado de implementacion
 
 ## Estado actual
 
-- El proyecto ya quedó conectado a tu Supabase real.
-- Se creó la configuración local en `.env`.
-- El esquema remoto se aplicó con [`supabase/schema.sql`](/c:/Users/User/Desktop/Discord-IFROS/supabase/schema.sql).
-- Los datos iniciales quedaron sembrados en Supabase con el script [`scripts/bootstrap-supabase.js`](/c:/Users/User/Desktop/Discord-IFROS/scripts/bootstrap-supabase.js).
-- El backend ya arranca en modo `supabase`, no en demo, cuando detecta esas variables.
+Umbra quedo actualizada sobre tu proyecto local con:
 
-## Qué quedó terminado
+- auth real con Supabase
+- backend endurecido para deploy
+- rebrand visual a Umbra
+- build desktop instalable con Electron
+- schema y seed remotos aplicados otra vez en Supabase
 
-- Mini Discord full-stack con frontend React + Vite.
-- Shell de Electron en [`electron/main.cjs`](/c:/Users/User/Desktop/Discord-IFROS/electron/main.cjs).
-- Backend Express + Socket.IO en [`server/index.js`](/c:/Users/User/Desktop/Discord-IFROS/server/index.js).
-- Store demo persistente como fallback en [`server/store/demo-store.js`](/c:/Users/User/Desktop/Discord-IFROS/server/store/demo-store.js).
-- Store real para Supabase en [`server/store/supabase-store.js`](/c:/Users/User/Desktop/Discord-IFROS/server/store/supabase-store.js).
-- UI inspirada en las referencias del workspace.
-- Funcionalidades operativas:
-  - servidores y canales
-  - DMs y grupo DM sembrados
-  - envío de mensajes
-  - replies
-  - edición y borrado
-  - reacciones
-  - typing indicator
-  - presencia y cambio de estado
-  - lectura por canal
-  - scroll con carga incremental hacia arriba
-  - tema claro/oscuro
-  - selector de perfil para probar distintos usuarios
+## Terminado
 
-## Qué sigue pendiente si quieres continuar después
+- frontend React + Vite en [`src/`](/c:/Users/User/Desktop/Discord-IFROS/src)
+- backend Express + Socket.IO en [`server/`](/c:/Users/User/Desktop/Discord-IFROS/server)
+- auth email/password en [`src/App.jsx`](/c:/Users/User/Desktop/Discord-IFROS/src/App.jsx)
+- OTP por codigo en [`src/components/AuthScreen.jsx`](/c:/Users/User/Desktop/Discord-IFROS/src/components/AuthScreen.jsx)
+- soporte preparado para Google OAuth
+- validacion de `Bearer token` en rutas y sockets
+- CORS configurable con `ALLOWED_ORIGINS`
+- rate limiting y hardening basico
+- Electron empaquetable en [`electron/`](/c:/Users/User/Desktop/Discord-IFROS/electron)
+- instalador generado en `release/Umbra Setup 0.2.0.exe`
+- unpacked app generado en `release/win-unpacked`
+- schema actualizado en [`supabase/schema.sql`](/c:/Users/User/Desktop/Discord-IFROS/supabase/schema.sql)
+- seed Umbra actualizado en [`server/seed-data.js`](/c:/Users/User/Desktop/Discord-IFROS/server/seed-data.js)
 
-- Login real desde cliente con Supabase Auth.
-- OAuth de GitHub para autenticación de usuarios finales.
-- Subida de archivos a Supabase Storage.
-- Invitaciones, baneos, kicks y gestión avanzada de roles.
-- Overwrites reales por canal desde UI.
-- Voz con WebRTC.
-- Empaquetado instalable de Electron.
+## Verificado
 
-## Qué hice ahora con tus claves
-
-- Tomé `SUPABASE_URL`, key secreta y credenciales DB desde `Links.md`.
-- Creé [`.env.example`](/c:/Users/User/Desktop/Discord-IFROS/.env.example) más completa y el `.env` local.
-- Añadí `pg` para poder ejecutar DDL remoto.
-- Añadí `npm run setup:supabase`.
-- Ejecuté el bootstrap remoto y dejé tablas + seed en línea.
-
-## Cómo validé que ya usa Supabase real
-
+- `npm install`
+- `npm run build`
 - `npm run setup:supabase`
-- arranque de [`server/index.js`](/c:/Users/User/Desktop/Discord-IFROS/server/index.js) con respuesta `mode: "supabase"` en `/api/health`
-- verificación de `/api/bootstrap`
-- smoke test real contra Supabase:
-  - crear mensaje
-  - editar mensaje
-  - reaccionar
-  - borrar mensaje
+- smoke test real contra Supabase Auth + backend
+- `npm run pack:desktop`
+- `npm run build:desktop`
 
-## Cómo correrlo ahora
+## Riesgo residual
 
-1. `npm install`
-2. `npm run dev`
-3. Web:
-   - abre `http://localhost:5173`
-4. Desktop:
-   - el mismo `npm run dev` abre Electron cuando detecta backend + frontend
+- El instalador se genero bien, pero la apertura visual del `.exe` empaquetado no se pudo inspeccionar de punta a punta desde este entorno de shell.
+- Si al abrir `release/Umbra Setup 0.2.0.exe` notas un problema, el primer punto a revisar es si quieres modo local con `.env` externo o modo cliente apuntando a backend remoto.
 
-## Archivos clave
+## Pendiente por acceso externo
 
-- Frontend principal: [`src/App.jsx`](/c:/Users/User/Desktop/Discord-IFROS/src/App.jsx)
-- Estilos: [`src/styles.css`](/c:/Users/User/Desktop/Discord-IFROS/src/styles.css)
-- API cliente: [`src/api.js`](/c:/Users/User/Desktop/Discord-IFROS/src/api.js)
-- Backend: [`server/index.js`](/c:/Users/User/Desktop/Discord-IFROS/server/index.js)
-- Script de bootstrap remoto: [`scripts/bootstrap-supabase.js`](/c:/Users/User/Desktop/Discord-IFROS/scripts/bootstrap-supabase.js)
-- Esquema SQL: [`supabase/schema.sql`](/c:/Users/User/Desktop/Discord-IFROS/supabase/schema.sql)
+- crear repo GitHub remoto `Umbra`
+- hacer push de los commits locales
+- activar Google provider en Supabase con credenciales reales de Google
+- agregar icono `.ico` personalizado para Windows
+
+## Archivos mas importantes
+
+- [`server/start-server.js`](/c:/Users/User/Desktop/Discord-IFROS/server/start-server.js)
+- [`server/store/supabase-store.js`](/c:/Users/User/Desktop/Discord-IFROS/server/store/supabase-store.js)
+- [`src/App.jsx`](/c:/Users/User/Desktop/Discord-IFROS/src/App.jsx)
+- [`src/components/UmbraWorkspace.jsx`](/c:/Users/User/Desktop/Discord-IFROS/src/components/UmbraWorkspace.jsx)
+- [`electron/main.cjs`](/c:/Users/User/Desktop/Discord-IFROS/electron/main.cjs)
+- [`UMBRA_IMPLEMENTACION.md`](/c:/Users/User/Desktop/Discord-IFROS/UMBRA_IMPLEMENTACION.md)
+
+## Siguiente paso recomendado
+
+1. Crear el repo remoto `Umbra` en GitHub.
+2. Hacer `git push`.
+3. Activar Google OAuth en Supabase.
+4. Definir el dominio final del deploy web.

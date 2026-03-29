@@ -1,5 +1,7 @@
 const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 
+let getAccessToken = () => null;
+
 function buildUrl(path) {
   if (!API_BASE) {
     return path;
@@ -8,13 +10,27 @@ function buildUrl(path) {
   return `${API_BASE}${path}`;
 }
 
+export function configureApiAuth(tokenGetter) {
+  getAccessToken = tokenGetter || (() => null);
+}
+
 async function request(path, options = {}) {
+  const token = getAccessToken();
+  const headers = {
+    ...(options.headers || {})
+  };
+
+  if (!(options.body instanceof FormData)) {
+    headers["Content-Type"] = headers["Content-Type"] || "application/json";
+  }
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
   const response = await fetch(buildUrl(path), {
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {})
-    },
-    ...options
+    ...options,
+    headers
   });
 
   const contentType = response.headers.get("content-type") || "";
@@ -23,106 +39,95 @@ async function request(path, options = {}) {
     : await response.text();
 
   if (!response.ok) {
-    throw new Error(payload?.error || "La solicitud falló.");
+    throw new Error(payload?.error || "La solicitud fallo.");
   }
 
   return payload;
 }
 
 export const api = {
-  bootstrap(userId) {
-    const search = userId ? `?userId=${encodeURIComponent(userId)}` : "";
-    return request(`/api/bootstrap${search}`);
+  bootstrap() {
+    return request("/api/bootstrap");
   },
-  fetchMessages({ before, channelId, limit = 30, userId }) {
+  fetchMessages({ before, channelId, limit = 30 }) {
     const params = new URLSearchParams({
-      limit: String(limit),
-      userId
+      limit: String(limit)
     });
+
     if (before) {
       params.set("before", before);
     }
 
     return request(`/api/channels/${channelId}/messages?${params.toString()}`);
   },
-  createMessage({ authorId, channelId, content, replyTo }) {
+  createMessage({ channelId, content, replyTo }) {
     return request(`/api/channels/${channelId}/messages`, {
       method: "POST",
       body: JSON.stringify({
-        authorId,
         content,
         replyTo
       })
     });
   },
-  updateMessage({ content, messageId, userId }) {
+  updateMessage({ content, messageId }) {
     return request(`/api/messages/${messageId}`, {
       method: "PATCH",
       body: JSON.stringify({
-        content,
-        userId
+        content
       })
     });
   },
-  deleteMessage({ messageId, userId }) {
-    return request(
-      `/api/messages/${messageId}?userId=${encodeURIComponent(userId)}`,
-      {
-        method: "DELETE"
-      }
-    );
+  deleteMessage({ messageId }) {
+    return request(`/api/messages/${messageId}`, {
+      method: "DELETE"
+    });
   },
-  toggleReaction({ emoji, messageId, userId }) {
+  toggleReaction({ emoji, messageId }) {
     return request(`/api/messages/${messageId}/reactions`, {
       method: "POST",
       body: JSON.stringify({
-        emoji,
-        userId
+        emoji
       })
     });
   },
-  createGuild({ description, name, ownerId }) {
+  createGuild({ description, name }) {
     return request("/api/guilds", {
       method: "POST",
       body: JSON.stringify({
         description,
-        name,
-        ownerId
+        name
       })
     });
   },
-  createChannel({ createdBy, guildId, name, topic }) {
+  createChannel({ guildId, name, topic }) {
     return request(`/api/guilds/${guildId}/channels`, {
       method: "POST",
       body: JSON.stringify({
-        createdBy,
         name,
         topic
       })
     });
   },
-  createDm({ ownerId, recipientId }) {
+  createDm({ recipientId }) {
     return request("/api/dms", {
       method: "POST",
       body: JSON.stringify({
-        ownerId,
         recipientId
       })
     });
   },
-  updateStatus({ status, userId }) {
-    return request(`/api/users/${userId}/status`, {
+  updateStatus({ status }) {
+    return request("/api/users/me/status", {
       method: "PATCH",
       body: JSON.stringify({
         status
       })
     });
   },
-  markRead({ channelId, lastReadMessageId, userId }) {
+  markRead({ channelId, lastReadMessageId }) {
     return request(`/api/channels/${channelId}/read`, {
       method: "POST",
       body: JSON.stringify({
-        userId,
         lastReadMessageId
       })
     });

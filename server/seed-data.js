@@ -21,9 +21,9 @@ export function createSeedData() {
       username: "Ana",
       discriminator: "1001",
       avatar_hue: 244,
-      bio: "Construyendo el hub de IFROS.",
+      bio: "Afinando el nucleo de Umbra.",
       status: "online",
-      custom_status: "Afinando el roadmap",
+      custom_status: "Cerrando el roadmap",
       theme: "dark",
       created_at: isoMinutesAgo(4000),
       updated_at: isoMinutesAgo(15)
@@ -33,9 +33,9 @@ export function createSeedData() {
       username: "Bruno",
       discriminator: "2048",
       avatar_hue: 18,
-      bio: "Diseño, motion y sistemas visuales.",
+      bio: "Diseno, motion y sistema visual.",
       status: "idle",
-      custom_status: "Revisando feedback",
+      custom_status: "Revisando la shell desktop",
       theme: "dark",
       created_at: isoMinutesAgo(3900),
       updated_at: isoMinutesAgo(25)
@@ -45,10 +45,10 @@ export function createSeedData() {
       username: "Carla",
       discriminator: "4512",
       avatar_hue: 142,
-      bio: "Soporte y comunidad.",
+      bio: "Soporte, comunidad y QA.",
       status: "dnd",
-      custom_status: "Atendiendo incidencias",
-      theme: "light",
+      custom_status: "Mirando incidencias",
+      theme: "dark",
       created_at: isoMinutesAgo(3700),
       updated_at: isoMinutesAgo(10)
     },
@@ -57,7 +57,7 @@ export function createSeedData() {
       username: "Diego",
       discriminator: "8791",
       avatar_hue: 328,
-      bio: "Frontend y documentación.",
+      bio: "Frontend, docs y deploy.",
       status: "offline",
       custom_status: "",
       theme: "dark",
@@ -69,20 +69,22 @@ export function createSeedData() {
   const guilds = [
     {
       id: DEMO_IDS.guilds.ifros,
-      name: "IFROS Hub",
-      description: "Servidor base del mini Discord para coordinar producto, soporte y feedback.",
-      icon_text: "IF",
-      banner_color: "#5865F2",
+      name: "Umbra Core",
+      description: "Servidor base para producto, soporte y operaciones de Umbra.",
+      icon_text: "UC",
+      banner_color: "#7F74FF",
+      is_default: true,
       owner_id: DEMO_IDS.users.ana,
       created_at: isoMinutesAgo(2400),
       updated_at: isoMinutesAgo(20)
     },
     {
       id: DEMO_IDS.guilds.design,
-      name: "Design Lab",
-      description: "Referencias visuales, motion y experimentos del equipo creativo.",
-      icon_text: "DL",
-      banner_color: "#F97316",
+      name: "Noctis Lab",
+      description: "Exploraciones visuales, motion y pruebas de interfaz.",
+      icon_text: "NL",
+      banner_color: "#FF9F67",
+      is_default: true,
       owner_id: DEMO_IDS.users.bruno,
       created_at: isoMinutesAgo(2200),
       updated_at: isoMinutesAgo(35)
@@ -112,8 +114,8 @@ export function createSeedData() {
     {
       id: DEMO_IDS.roles.ifrosMod,
       guild_id: DEMO_IDS.guilds.ifros,
-      name: "Moderación",
-      color: "#60A5FA",
+      name: "Shadows",
+      color: "#7F74FF",
       position: 2,
       permissions: modPerms,
       hoist: true,
@@ -135,7 +137,7 @@ export function createSeedData() {
       id: DEMO_IDS.roles.designAdmin,
       guild_id: DEMO_IDS.guilds.design,
       name: "Lead Visual",
-      color: "#F97316",
+      color: "#FF9F67",
       position: 2,
       permissions: adminPerms,
       hoist: true,
@@ -163,7 +165,7 @@ export function createSeedData() {
       guild_id: DEMO_IDS.guilds.ifros,
       user_id: DEMO_IDS.users.carla,
       role_ids: [DEMO_IDS.roles.ifrosEveryone],
-      nickname: "Carla Support",
+      nickname: "Carla",
       joined_at: isoMinutesAgo(1990)
     },
     {
@@ -202,7 +204,7 @@ export function createSeedData() {
       guild_id: DEMO_IDS.guilds.ifros,
       type: CHANNEL_TYPES.TEXT,
       name: "general",
-      topic: "Punto de encuentro del equipo.",
+      topic: "Pulso principal de Umbra.",
       position: 0,
       parent_id: null,
       created_by: DEMO_IDS.users.ana,
@@ -217,8 +219,8 @@ export function createSeedData() {
       id: DEMO_IDS.channels.ifrosRoadmap,
       guild_id: DEMO_IDS.guilds.ifros,
       type: CHANNEL_TYPES.TEXT,
-      name: "roadmap",
-      topic: "Plan de entregas y decisiones de producto.",
+      name: "ops",
+      topic: "Deploy, auth y seguridad.",
       position: 1,
       parent_id: null,
       created_by: DEMO_IDS.users.ana,
@@ -233,8 +235,8 @@ export function createSeedData() {
       id: DEMO_IDS.channels.ifrosSupport,
       guild_id: DEMO_IDS.guilds.ifros,
       type: CHANNEL_TYPES.TEXT,
-      name: "soporte",
-      topic: "Ayuda, bugs y dudas rápidas.",
+      name: "support",
+      topic: "Ayuda, bugs y validacion rapida.",
       position: 2,
       parent_id: null,
       created_by: DEMO_IDS.users.carla,
@@ -265,7 +267,7 @@ export function createSeedData() {
       id: DEMO_IDS.channels.designResources,
       guild_id: DEMO_IDS.guilds.design,
       type: CHANNEL_TYPES.TEXT,
-      name: "recursos",
+      name: "resources",
       topic: "Fuentes, referencias y snippets.",
       position: 1,
       parent_id: null,
@@ -282,7 +284,7 @@ export function createSeedData() {
       guild_id: null,
       type: CHANNEL_TYPES.DM,
       name: "",
-      topic: "DM directo",
+      topic: "Conversacion directa",
       position: 0,
       parent_id: null,
       created_by: DEMO_IDS.users.ana,
@@ -297,8 +299,8 @@ export function createSeedData() {
       id: DEMO_IDS.channels.dmGroup,
       guild_id: null,
       type: CHANNEL_TYPES.GROUP_DM,
-      name: "Squad Sync",
-      topic: "Mini grupo para resolver pendientes rápidos.",
+      name: "Night Shift",
+      topic: "Grupo rapido para cierres finales.",
       position: 1,
       parent_id: null,
       created_by: DEMO_IDS.users.ana,
@@ -317,7 +319,7 @@ export function createSeedData() {
       channel_id: DEMO_IDS.channels.ifrosGeneral,
       guild_id: DEMO_IDS.guilds.ifros,
       author_id: DEMO_IDS.users.ana,
-      content: "Bienvenidos al mini Discord de IFROS. Arranquemos por **general** para coordinar el día.",
+      content: "Bienvenidos a Umbra. Este es el canal donde se siente el pulso del producto.",
       reply_to: null,
       attachments: [],
       mention_user_ids: [],
@@ -330,7 +332,7 @@ export function createSeedData() {
       channel_id: DEMO_IDS.channels.ifrosGeneral,
       guild_id: DEMO_IDS.guilds.ifros,
       author_id: DEMO_IDS.users.bruno,
-      content: "Dejo aquí una referencia para el layout de 3 columnas. @Ana luego lo vemos con calma.",
+      content: "Deje un mockup mas oscuro para el shell. @Ana lo revisamos apenas cierres auth.",
       reply_to: null,
       attachments: [],
       mention_user_ids: [DEMO_IDS.users.ana],
@@ -343,7 +345,7 @@ export function createSeedData() {
       channel_id: DEMO_IDS.channels.ifrosGeneral,
       guild_id: DEMO_IDS.guilds.ifros,
       author_id: DEMO_IDS.users.carla,
-      content: "Anotado. También necesitamos un indicador de `typing` y el flujo de mensajes editados.",
+      content: "Necesitamos validar OTP, confirmacion por correo y el flujo de presencia.",
       reply_to: "50000000-0000-4000-8000-000000000002",
       attachments: [],
       mention_user_ids: [],
@@ -356,7 +358,7 @@ export function createSeedData() {
       channel_id: DEMO_IDS.channels.ifrosRoadmap,
       guild_id: DEMO_IDS.guilds.ifros,
       author_id: DEMO_IDS.users.ana,
-      content: "Roadmap del sprint:\n- chat en tiempo real\n- replies\n- reacciones\n- sidebar de servidores",
+      content: "Checklist de salida:\n- auth real\n- CORS restringido\n- rate limiting\n- build desktop",
       reply_to: null,
       attachments: [],
       mention_user_ids: [],
@@ -366,23 +368,10 @@ export function createSeedData() {
     },
     {
       id: "50000000-0000-4000-8000-000000000005",
-      channel_id: DEMO_IDS.channels.ifrosRoadmap,
-      guild_id: DEMO_IDS.guilds.ifros,
-      author_id: DEMO_IDS.users.diego,
-      content: "Me encargo del pulido visual. Quiero algo más expresivo que un clon gris genérico.",
-      reply_to: "50000000-0000-4000-8000-000000000004",
-      attachments: [],
-      mention_user_ids: [],
-      edited_at: isoMinutesAgo(120),
-      deleted_at: null,
-      created_at: isoMinutesAgo(128)
-    },
-    {
-      id: "50000000-0000-4000-8000-000000000006",
       channel_id: DEMO_IDS.channels.ifrosSupport,
       guild_id: DEMO_IDS.guilds.ifros,
       author_id: DEMO_IDS.users.carla,
-      content: "Si encuentran bugs, respondan este mensaje con el detalle y el canal afectado.",
+      content: "Si algo falla, responde este mensaje con el canal afectado y el paso para reproducir.",
       reply_to: null,
       attachments: [],
       mention_user_ids: [],
@@ -391,11 +380,11 @@ export function createSeedData() {
       created_at: isoMinutesAgo(105)
     },
     {
-      id: "50000000-0000-4000-8000-000000000007",
+      id: "50000000-0000-4000-8000-000000000006",
       channel_id: DEMO_IDS.channels.designShowcase,
       guild_id: DEMO_IDS.guilds.design,
       author_id: DEMO_IDS.users.bruno,
-      content: "Estoy mezclando la vibra del mockup clásico con una paleta más cálida y tipografía **Space Grotesk**.",
+      content: "La mezcla final usa Space Grotesk, paneles de vidrio y una base mucho mas oscura.",
       reply_to: null,
       attachments: [],
       mention_user_ids: [],
@@ -404,11 +393,11 @@ export function createSeedData() {
       created_at: isoMinutesAgo(95)
     },
     {
-      id: "50000000-0000-4000-8000-000000000008",
+      id: "50000000-0000-4000-8000-000000000007",
       channel_id: DEMO_IDS.channels.designResources,
       guild_id: DEMO_IDS.guilds.design,
       author_id: DEMO_IDS.users.diego,
-      content: "Snippet útil:\n```css\nmin-height: 0;\noverflow: auto;\n```",
+      content: "Snippet util:\n```css\nmin-height: 0;\noverflow: auto;\n```",
       reply_to: null,
       attachments: [],
       mention_user_ids: [],
@@ -417,11 +406,11 @@ export function createSeedData() {
       created_at: isoMinutesAgo(82)
     },
     {
-      id: "50000000-0000-4000-8000-000000000009",
+      id: "50000000-0000-4000-8000-000000000008",
       channel_id: DEMO_IDS.channels.dmAnaBruno,
       guild_id: null,
       author_id: DEMO_IDS.users.ana,
-      content: "Te pasé la guía completa. ¿Puedes convertir lo esencial a MVP hoy?",
+      content: "Cuando cierres la parte de desktop, deja el siguiente paso documentado para publicacion.",
       reply_to: null,
       attachments: [],
       mention_user_ids: [],
@@ -430,12 +419,12 @@ export function createSeedData() {
       created_at: isoMinutesAgo(16)
     },
     {
-      id: "50000000-0000-4000-8000-000000000010",
+      id: "50000000-0000-4000-8000-000000000009",
       channel_id: DEMO_IDS.channels.dmAnaBruno,
       guild_id: null,
       author_id: DEMO_IDS.users.bruno,
-      content: "Sí. Empezaré por estructura, luego realtime y al final los detalles bloqueados por accesos.",
-      reply_to: "50000000-0000-4000-8000-000000000009",
+      content: "Si GitHub no esta autenticado, lo dejo en un .md con los comandos finales.",
+      reply_to: "50000000-0000-4000-8000-000000000008",
       attachments: [],
       mention_user_ids: [],
       edited_at: null,
@@ -443,30 +432,17 @@ export function createSeedData() {
       created_at: isoMinutesAgo(7)
     },
     {
-      id: "50000000-0000-4000-8000-000000000011",
+      id: "50000000-0000-4000-8000-000000000010",
       channel_id: DEMO_IDS.channels.dmGroup,
       guild_id: null,
       author_id: DEMO_IDS.users.ana,
-      content: "Equipo, si algo no se puede automatizar por credenciales externas, dejémoslo documentado en un `.md`.",
+      content: "Equipo, todo lo que no se pueda cerrar por accesos externos queda explicado al final.",
       reply_to: null,
       attachments: [],
       mention_user_ids: [],
       edited_at: null,
       deleted_at: null,
       created_at: isoMinutesAgo(24)
-    },
-    {
-      id: "50000000-0000-4000-8000-000000000012",
-      channel_id: DEMO_IDS.channels.dmGroup,
-      guild_id: null,
-      author_id: DEMO_IDS.users.carla,
-      content: "Perfecto. Así el siguiente paso queda clarísimo para continuar luego.",
-      reply_to: "50000000-0000-4000-8000-000000000011",
-      attachments: [],
-      mention_user_ids: [],
-      edited_at: null,
-      deleted_at: null,
-      created_at: isoMinutesAgo(18)
     }
   ];
 
@@ -474,19 +450,19 @@ export function createSeedData() {
     {
       message_id: "50000000-0000-4000-8000-000000000002",
       user_id: DEMO_IDS.users.ana,
-      emoji: "🔥",
+      emoji: "\uD83D\uDD25",
       created_at: isoMinutesAgo(179)
     },
     {
       message_id: "50000000-0000-4000-8000-000000000004",
       user_id: DEMO_IDS.users.bruno,
-      emoji: "🚀",
+      emoji: "\uD83D\uDE80",
       created_at: isoMinutesAgo(130)
     },
     {
-      message_id: "50000000-0000-4000-8000-000000000007",
+      message_id: "50000000-0000-4000-8000-000000000006",
       user_id: DEMO_IDS.users.diego,
-      emoji: "✨",
+      emoji: "\u2728",
       created_at: isoMinutesAgo(90)
     }
   ];
@@ -527,8 +503,8 @@ export function createSeedData() {
     {
       channel_id: DEMO_IDS.channels.ifrosRoadmap,
       user_id: DEMO_IDS.users.ana,
-      last_read_message_id: "50000000-0000-4000-8000-000000000005",
-      last_read_at: isoMinutesAgo(125),
+      last_read_message_id: "50000000-0000-4000-8000-000000000004",
+      last_read_at: isoMinutesAgo(139),
       hidden: false,
       joined_at: isoMinutesAgo(2380)
     },
@@ -543,16 +519,16 @@ export function createSeedData() {
     {
       channel_id: DEMO_IDS.channels.ifrosRoadmap,
       user_id: DEMO_IDS.users.carla,
-      last_read_message_id: "50000000-0000-4000-8000-000000000004",
-      last_read_at: isoMinutesAgo(139),
+      last_read_message_id: null,
+      last_read_at: null,
       hidden: false,
       joined_at: isoMinutesAgo(1990)
     },
     {
       channel_id: DEMO_IDS.channels.ifrosRoadmap,
       user_id: DEMO_IDS.users.diego,
-      last_read_message_id: "50000000-0000-4000-8000-000000000005",
-      last_read_at: isoMinutesAgo(126),
+      last_read_message_id: null,
+      last_read_at: null,
       hidden: false,
       joined_at: isoMinutesAgo(1980)
     },
@@ -575,7 +551,7 @@ export function createSeedData() {
     {
       channel_id: DEMO_IDS.channels.ifrosSupport,
       user_id: DEMO_IDS.users.carla,
-      last_read_message_id: "50000000-0000-4000-8000-000000000006",
+      last_read_message_id: "50000000-0000-4000-8000-000000000005",
       last_read_at: isoMinutesAgo(104),
       hidden: false,
       joined_at: isoMinutesAgo(1990)
@@ -591,7 +567,7 @@ export function createSeedData() {
     {
       channel_id: DEMO_IDS.channels.designShowcase,
       user_id: DEMO_IDS.users.bruno,
-      last_read_message_id: "50000000-0000-4000-8000-000000000007",
+      last_read_message_id: "50000000-0000-4000-8000-000000000006",
       last_read_at: isoMinutesAgo(95),
       hidden: false,
       joined_at: isoMinutesAgo(2180)
@@ -607,7 +583,7 @@ export function createSeedData() {
     {
       channel_id: DEMO_IDS.channels.designShowcase,
       user_id: DEMO_IDS.users.diego,
-      last_read_message_id: "50000000-0000-4000-8000-000000000007",
+      last_read_message_id: "50000000-0000-4000-8000-000000000006",
       last_read_at: isoMinutesAgo(94),
       hidden: false,
       joined_at: isoMinutesAgo(2080)
@@ -615,7 +591,7 @@ export function createSeedData() {
     {
       channel_id: DEMO_IDS.channels.designResources,
       user_id: DEMO_IDS.users.bruno,
-      last_read_message_id: "50000000-0000-4000-8000-000000000008",
+      last_read_message_id: "50000000-0000-4000-8000-000000000007",
       last_read_at: isoMinutesAgo(80),
       hidden: false,
       joined_at: isoMinutesAgo(2180)
@@ -631,7 +607,7 @@ export function createSeedData() {
     {
       channel_id: DEMO_IDS.channels.designResources,
       user_id: DEMO_IDS.users.diego,
-      last_read_message_id: "50000000-0000-4000-8000-000000000008",
+      last_read_message_id: "50000000-0000-4000-8000-000000000007",
       last_read_at: isoMinutesAgo(82),
       hidden: false,
       joined_at: isoMinutesAgo(2080)
@@ -639,7 +615,7 @@ export function createSeedData() {
     {
       channel_id: DEMO_IDS.channels.dmAnaBruno,
       user_id: DEMO_IDS.users.ana,
-      last_read_message_id: "50000000-0000-4000-8000-000000000010",
+      last_read_message_id: "50000000-0000-4000-8000-000000000009",
       last_read_at: isoMinutesAgo(7),
       hidden: false,
       joined_at: isoMinutesAgo(300)
@@ -647,7 +623,7 @@ export function createSeedData() {
     {
       channel_id: DEMO_IDS.channels.dmAnaBruno,
       user_id: DEMO_IDS.users.bruno,
-      last_read_message_id: "50000000-0000-4000-8000-000000000010",
+      last_read_message_id: "50000000-0000-4000-8000-000000000009",
       last_read_at: isoMinutesAgo(7),
       hidden: false,
       joined_at: isoMinutesAgo(300)
@@ -655,24 +631,24 @@ export function createSeedData() {
     {
       channel_id: DEMO_IDS.channels.dmGroup,
       user_id: DEMO_IDS.users.ana,
-      last_read_message_id: "50000000-0000-4000-8000-000000000012",
-      last_read_at: isoMinutesAgo(18),
+      last_read_message_id: "50000000-0000-4000-8000-000000000010",
+      last_read_at: isoMinutesAgo(24),
       hidden: false,
       joined_at: isoMinutesAgo(260)
     },
     {
       channel_id: DEMO_IDS.channels.dmGroup,
       user_id: DEMO_IDS.users.carla,
-      last_read_message_id: "50000000-0000-4000-8000-000000000012",
-      last_read_at: isoMinutesAgo(18),
+      last_read_message_id: "50000000-0000-4000-8000-000000000010",
+      last_read_at: isoMinutesAgo(24),
       hidden: false,
       joined_at: isoMinutesAgo(260)
     },
     {
       channel_id: DEMO_IDS.channels.dmGroup,
       user_id: DEMO_IDS.users.diego,
-      last_read_message_id: "50000000-0000-4000-8000-000000000011",
-      last_read_at: isoMinutesAgo(23),
+      last_read_message_id: "50000000-0000-4000-8000-000000000010",
+      last_read_at: isoMinutesAgo(24),
       hidden: false,
       joined_at: isoMinutesAgo(260)
     }

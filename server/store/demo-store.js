@@ -51,6 +51,10 @@ export class DemoStore {
     return this.db?.profiles?.[0]?.id ?? null;
   }
 
+  getProfileById(profileId) {
+    return this.db.profiles.find((profile) => profile.id === profileId) || null;
+  }
+
   async save() {
     await fs.writeFile(this.filePath, JSON.stringify(this.db, null, 2), "utf8");
   }
@@ -61,6 +65,27 @@ export class DemoStore {
 
   getMessage(messageId) {
     return this.db.messages.find((message) => message.id === messageId);
+  }
+
+  canAccessChannel({ channelId, userId }) {
+    const channel = this.getChannel(channelId);
+    if (!channel) {
+      return false;
+    }
+
+    if (channel.guild_id) {
+      return this.db.guild_members.some(
+        (membership) =>
+          membership.guild_id === channel.guild_id && membership.user_id === userId
+      );
+    }
+
+    return this.db.channel_members.some(
+      (membership) =>
+        membership.channel_id === channelId &&
+        membership.user_id === userId &&
+        !membership.hidden
+    );
   }
 
   assertCanSend(channel, userId) {

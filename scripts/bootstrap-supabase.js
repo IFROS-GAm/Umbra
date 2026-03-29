@@ -36,6 +36,7 @@ async function applySchema() {
   await client.connect();
   try {
     await client.query(schema);
+    await client.query("select pg_notify('pgrst', 'reload schema')");
   } finally {
     await client.end();
   }
@@ -105,6 +106,7 @@ async function main() {
   console.log("Aplicando schema de Supabase...");
   await applySchema();
   console.log("Schema listo.");
+  await new Promise((resolve) => setTimeout(resolve, 1500));
 
   console.log("Sembrando datos iniciales...");
   const profileCount = await seedData();

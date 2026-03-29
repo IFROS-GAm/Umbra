@@ -23,6 +23,19 @@ create table if not exists public.profiles (
   updated_at timestamptz not null default now()
 );
 
+alter table public.profiles add column if not exists auth_user_id uuid;
+alter table public.profiles add column if not exists email text;
+alter table public.profiles add column if not exists email_confirmed_at timestamptz;
+alter table public.profiles add column if not exists auth_provider text not null default 'seed';
+
+create unique index if not exists idx_profiles_auth_user_id
+on public.profiles(auth_user_id)
+where auth_user_id is not null;
+
+create unique index if not exists idx_profiles_email
+on public.profiles(email)
+where email is not null;
+
 create table if not exists public.guilds (
   id uuid primary key default gen_random_uuid(),
   name text not null,
@@ -33,6 +46,8 @@ create table if not exists public.guilds (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.guilds add column if not exists is_default boolean not null default false;
 
 create table if not exists public.roles (
   id uuid primary key default gen_random_uuid(),
@@ -147,3 +162,5 @@ drop trigger if exists trg_channels_updated_at on public.channels;
 create trigger trg_channels_updated_at
 before update on public.channels
 for each row execute function public.set_updated_at();
+
+select pg_notify('pgrst', 'reload schema');

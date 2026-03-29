@@ -25,7 +25,9 @@ export async function createStore() {
     return store;
   }
 
-  const demoPath = path.join(__dirname, "..", "data", "demo-store.json");
+  const demoPath =
+    process.env.UMBRA_DEMO_STORE_PATH ||
+    path.join(__dirname, "..", "data", "demo-store.json");
   const store = new DemoStore(demoPath);
   await store.init();
   return store;

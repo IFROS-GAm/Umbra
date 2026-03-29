@@ -23,11 +23,16 @@ export const PERMISSIONS = Object.freeze({
 });
 
 export const ALL_PERMISSIONS = Object.values(PERMISSIONS).reduce(
-  (sum, perm) => sum | perm,
+  (sum, permission) => sum | permission,
   0
 );
 
-export const DEFAULT_REACTIONS = ["🔥", "👍", "✨", "🚀"];
+export const DEFAULT_REACTIONS = Object.freeze([
+  "\uD83D\uDD25",
+  "\uD83D\uDC4D",
+  "\u2728",
+  "\uD83D\uDE80"
+]);
 
 export const DEMO_IDS = Object.freeze({
   users: {

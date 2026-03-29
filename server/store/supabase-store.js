@@ -5,6 +5,7 @@ import {
   createId,
   enrichMessages,
   resolveMentionUserIds,
+  safePreview,
   sortByDateDesc
 } from "./helpers.js";
 
@@ -12,6 +13,20 @@ function createError(message, statusCode = 400) {
   const error = new Error(message);
   error.statusCode = statusCode;
   return error;
+}
+
+function randomDiscriminator() {
+  return String(Math.floor(1000 + Math.random() * 9000));
+}
+
+function sanitizeUsername(candidate = "") {
+  const normalized = candidate
+    .trim()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-zA-Z0-9_-]/g, "")
+    .slice(0, 24);
+
+  return normalized || "umbra_user";
 }
 
 async function expectData(queryPromise, fallbackMessage = "Error consultando Supabase.") {
@@ -36,6 +51,192 @@ export class SupabaseStore {
 
   async init() {
     return this;
+  }
+
+  async verifyAccessToken(accessToken) {
+    const {
+      data: { user },
+      error
+    } = await this.client.auth.getUser(accessToken);
+
+    if (error || !user) {
+      throw createError("Unauthorized", 401);
+    }
+
+    return user;
+  }
+
+  async getProfileById(profileId) {
+    const profiles = await expectData(
+      this.client.from("profiles").select("*").eq("id", profileId).limit(1)
+    );
+    return profiles[0] || null;
+  }
+
+  async getProfileByAuthUserId(authUserId) {
+    const profiles = await expectData(
+      this.client
+        .from("profiles")
+        .select("*")
+        .eq("auth_user_id", authUserId)
+        .limit(1)
+    );
+    return profiles[0] || null;
+  }
+
+  async getProfileByEmail(email) {
+    if (!email) {
+      return null;
+    }
+
+    const profiles = await expectData(
+      this.client.from("profiles").select("*").eq("email", email).limit(1)
+    );
+    return profiles[0] || null;
+  }
+
+  getAuthProvider(authUser) {
+    return (
+      authUser?.app_metadata?.provider ||
+      authUser?.identities?.[0]?.provider ||
+      "email"
+    );
+  }
+
+  async createUniqueUsername(preferredValue) {
+    const base = sanitizeUsername(preferredValue);
+    const profiles = await expectData(
+      this.client.from("profiles").select("username")
+    );
+    const usernames = new Set(
+      profiles.map((profile) => profile.username.toLowerCase())
+    );
+
+    if (!usernames.has(base.toLowerCase())) {
+      return base;
+    }
+
+    for (let attempt = 1; attempt <= 999; attempt += 1) {
+      const candidate = sanitizeUsername(`${base}_${attempt}`);
+      if (!usernames.has(candidate.toLowerCase())) {
+        return candidate;
+      }
+    }
+
+    return sanitizeUsername(`${base}_${Date.now().toString().slice(-4)}`);
+  }
+
+  async ensureDefaultMemberships(profileId) {
+    const [defaultGuilds, roles, channels] = await Promise.all([
+      expectData(this.client.from("guilds").select("*").eq("is_default", true)),
+      expectData(this.client.from("roles").select("*")),
+      expectData(this.client.from("channels").select("*"))
+    ]);
+
+    for (const guild of defaultGuilds) {
+      const everyoneRole = roles.find(
+        (role) => role.guild_id === guild.id && role.name === "@everyone"
+      );
+
+      await expectData(
+        this.client.from("guild_members").upsert(
+          {
+            guild_id: guild.id,
+            user_id: profileId,
+            role_ids: everyoneRole ? [everyoneRole.id] : [],
+            nickname: "",
+            joined_at: new Date().toISOString()
+          },
+          { onConflict: "guild_id,user_id" }
+        )
+      );
+
+      const guildChannels = channels.filter(
+        (channel) => channel.guild_id === guild.id && channel.type === CHANNEL_TYPES.TEXT
+      );
+
+      for (const channel of guildChannels) {
+        await expectData(
+          this.client.from("channel_members").upsert(
+            {
+              channel_id: channel.id,
+              user_id: profileId,
+              last_read_message_id: null,
+              last_read_at: null,
+              hidden: false,
+              joined_at: new Date().toISOString()
+            },
+            { onConflict: "channel_id,user_id" }
+          )
+        );
+      }
+    }
+  }
+
+  async ensureProfileFromAuthUser(authUser) {
+    const email = authUser.email || null;
+    let profile =
+      (await this.getProfileByAuthUserId(authUser.id)) ||
+      (await this.getProfileByEmail(email));
+
+    const updatePayload = {
+      auth_provider: this.getAuthProvider(authUser),
+      email,
+      email_confirmed_at: authUser.email_confirmed_at || null,
+      status: "online",
+      updated_at: new Date().toISOString()
+    };
+
+    if (profile) {
+      const rows = await expectData(
+        this.client
+          .from("profiles")
+          .update({
+            ...updatePayload,
+            auth_user_id: profile.auth_user_id || authUser.id
+          })
+          .eq("id", profile.id)
+          .select("*")
+      );
+
+      profile = rows[0] || profile;
+      await this.ensureDefaultMemberships(profile.id);
+      return profile;
+    }
+
+    const preferredUsername =
+      authUser.user_metadata?.username ||
+      authUser.user_metadata?.user_name ||
+      authUser.user_metadata?.preferred_username ||
+      authUser.user_metadata?.full_name ||
+      email?.split("@")[0] ||
+      "umbra_user";
+
+    const rows = await expectData(
+      this.client
+        .from("profiles")
+        .insert({
+          id: authUser.id,
+          auth_user_id: authUser.id,
+          email,
+          email_confirmed_at: authUser.email_confirmed_at || null,
+          auth_provider: this.getAuthProvider(authUser),
+          username: await this.createUniqueUsername(preferredUsername),
+          discriminator: randomDiscriminator(),
+          avatar_hue: Math.floor(Math.random() * 360),
+          bio: "Nuevo usuario en Umbra.",
+          status: "online",
+          custom_status: "",
+          theme: "dark",
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select("*")
+    );
+
+    profile = rows[0];
+    await this.ensureDefaultMemberships(profile.id);
+    return profile;
   }
 
   async getDefaultUserId() {
@@ -129,6 +330,37 @@ export class SupabaseStore {
     return rows[0] || null;
   }
 
+  async canAccessChannel({ channelId, userId }) {
+    const channel = await this.getChannel(channelId);
+    if (!channel) {
+      return false;
+    }
+
+    if (channel.guild_id) {
+      const memberships = await expectData(
+        this.client
+          .from("guild_members")
+          .select("guild_id")
+          .eq("guild_id", channel.guild_id)
+          .eq("user_id", userId)
+          .limit(1)
+      );
+
+      return Boolean(memberships[0]);
+    }
+
+    const memberships = await expectData(
+      this.client
+        .from("channel_members")
+        .select("channel_id,hidden")
+        .eq("channel_id", channelId)
+        .eq("user_id", userId)
+        .limit(1)
+    );
+
+    return Boolean(memberships[0]) && !memberships[0].hidden;
+  }
+
   async getPermissionBits(guildId, userId) {
     const [guilds, roles, guildMembers] = await Promise.all([
       expectData(this.client.from("guilds").select("*").eq("id", guildId)),
@@ -145,10 +377,43 @@ export class SupabaseStore {
     });
   }
 
+  async listGuildAudienceIds(guildId) {
+    const memberships = await expectData(
+      this.client.from("guild_members").select("user_id").eq("guild_id", guildId)
+    );
+
+    return [...new Set(memberships.map((membership) => membership.user_id))];
+  }
+
+  async listChannelAudienceIds(channelId) {
+    const channel = await this.getChannel(channelId);
+    if (!channel) {
+      return [];
+    }
+
+    if (channel.guild_id) {
+      return this.listGuildAudienceIds(channel.guild_id);
+    }
+
+    const memberships = await expectData(
+      this.client
+        .from("channel_members")
+        .select("user_id")
+        .eq("channel_id", channelId)
+        .eq("hidden", false)
+    );
+
+    return [...new Set(memberships.map((membership) => membership.user_id))];
+  }
+
   async listChannelMessages({ before, channelId, limit = 30, userId }) {
     const channel = await this.getChannel(channelId);
     if (!channel) {
       throw createError("Canal no encontrado.", 404);
+    }
+
+    if (!(await this.canAccessChannel({ channelId, userId }))) {
+      throw createError("No puedes acceder a este canal.", 403);
     }
 
     let createdBefore = null;
@@ -172,8 +437,6 @@ export class SupabaseStore {
     const messages = await expectData(query);
     const pageMessageIds = messages.map((message) => message.id);
     const replyIds = messages.map((message) => message.reply_to).filter(Boolean);
-    const allMessageIds = [...new Set([...pageMessageIds, ...replyIds])];
-
     const [reactions, profiles, guildMembers, roles, replyMessages] = await Promise.all([
       pageMessageIds.length
         ? expectData(
@@ -233,6 +496,10 @@ export class SupabaseStore {
     const channel = await this.getChannel(channelId);
     if (!channel) {
       throw createError("Canal no encontrado.", 404);
+    }
+
+    if (!(await this.canAccessChannel({ channelId, userId: authorId }))) {
+      throw createError("No puedes escribir en este canal.", 403);
     }
 
     const trimmed = content?.trim();
@@ -353,6 +620,10 @@ export class SupabaseStore {
     const message = await this.getMessage(messageId);
     if (!message || message.deleted_at) {
       throw createError("Mensaje no encontrado.", 404);
+    }
+
+    if (!(await this.canAccessChannel({ channelId: message.channel_id, userId }))) {
+      throw createError("No puedes reaccionar en este canal.", 403);
     }
 
     const existing = await expectData(
@@ -556,6 +827,15 @@ export class SupabaseStore {
   }
 
   async createOrGetDm({ ownerId, recipientId }) {
+    if (ownerId === recipientId) {
+      throw createError("No puedes abrir un DM contigo mismo.", 400);
+    }
+
+    const recipient = await this.getProfileById(recipientId);
+    if (!recipient) {
+      throw createError("Destinatario no encontrado.", 404);
+    }
+
     const memberships = await expectData(
       this.client
         .from("channel_members")
@@ -648,8 +928,16 @@ export class SupabaseStore {
       throw createError("Canal no encontrado.", 404);
     }
 
+    if (!(await this.canAccessChannel({ channelId, userId }))) {
+      throw createError("No puedes acceder a este canal.", 403);
+    }
+
     const targetMessageId = lastReadMessageId || channel.last_message_id || null;
     const targetMessage = targetMessageId ? await this.getMessage(targetMessageId) : null;
+
+    if (targetMessage && targetMessage.channel_id !== channelId) {
+      throw createError("El mensaje leido no pertenece a este canal.", 400);
+    }
 
     await expectData(
       this.client.from("channel_members").upsert(
@@ -729,7 +1017,7 @@ export class SupabaseStore {
         .update({
           last_message_id: message?.id ?? null,
           last_message_author_id: message?.author_id ?? null,
-          last_message_preview: message ? message.content.slice(0, 84) : "",
+          last_message_preview: message ? safePreview(message.content) : "",
           last_message_at: message?.created_at ?? null,
           updated_at: new Date().toISOString()
         })
@@ -741,6 +1029,10 @@ export class SupabaseStore {
     const channel = await this.getChannel(channelId);
     if (!channel) {
       return null;
+    }
+
+    if (!(await this.canAccessChannel({ channelId, userId }))) {
+      throw createError("No puedes acceder a este canal.", 403);
     }
 
     let messages = [];

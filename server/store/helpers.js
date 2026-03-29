@@ -47,7 +47,8 @@ export function safePreview(text = "", maxLength = 84) {
   if (normalized.length <= maxLength) {
     return normalized;
   }
-  return `${normalized.slice(0, maxLength - 1)}…`;
+
+  return `${normalized.slice(0, Math.max(0, maxLength - 3))}...`;
 }
 
 export function resolveMentionUserIds(content, profiles) {
@@ -63,6 +64,7 @@ export function resolveMentionUserIds(content, profiles) {
     const target = profiles.find(
       (profile) => profile.username.toLowerCase() === username
     );
+
     if (target) {
       mentionIds.add(target.id);
     }
@@ -138,7 +140,7 @@ export function getDisplayName({ guildId, guildMembers, profiles, userId }) {
   return guildMember?.nickname?.trim() || profile.username;
 }
 
-export function getHighestRoleColor({ guildId, guildMembers, profiles, roles, userId }) {
+export function getHighestRoleColor({ guildId, guildMembers, roles, userId }) {
   const member = getGuildMember(guildMembers, guildId, userId);
   if (!member) {
     return "#C7D0DD";
@@ -151,17 +153,12 @@ export function getHighestRoleColor({ guildId, guildMembers, profiles, roles, us
 export function refreshChannelSummaries(db) {
   db.channels.forEach((channel) => {
     const latestMessage = db.messages
-      .filter(
-        (message) =>
-          message.channel_id === channel.id && !message.deleted_at
-      )
+      .filter((message) => message.channel_id === channel.id && !message.deleted_at)
       .sort(sortByDateDesc)[0];
 
     channel.last_message_id = latestMessage?.id ?? null;
     channel.last_message_author_id = latestMessage?.author_id ?? null;
-    channel.last_message_preview = latestMessage
-      ? safePreview(latestMessage.content)
-      : "";
+    channel.last_message_preview = latestMessage ? safePreview(latestMessage.content) : "";
     channel.last_message_at = latestMessage?.created_at ?? null;
     channel.updated_at = latestMessage?.created_at ?? channel.updated_at;
   });
@@ -251,7 +248,6 @@ export function buildBootstrapState(db, userId) {
             role_color: getHighestRoleColor({
               guildId: guild.id,
               guildMembers: db.guild_members,
-              profiles: db.profiles,
               roles: db.roles,
               userId: profile.id
             })
@@ -263,6 +259,7 @@ export function buildBootstrapState(db, userId) {
           if (statusDiff !== 0) {
             return statusDiff;
           }
+
           return a.display_name.localeCompare(b.display_name, "es");
         });
 
@@ -332,7 +329,7 @@ export function buildBootstrapState(db, userId) {
 
       return {
         ...channel,
-        display_name: channel.name || fallbackName || "Conversación",
+        display_name: channel.name || fallbackName || "Conversacion",
         unread_count: unread,
         participants
       };
@@ -343,7 +340,7 @@ export function buildBootstrapState(db, userId) {
       return bDate - aDate;
     });
 
-  const defaultGuild = guilds[0] ?? null;
+  const defaultGuild = guilds.find((guild) => guild.is_default) || guilds[0] || null;
   const defaultChannel = defaultGuild?.channels[0] ?? null;
   const defaultDm = dms[0] ?? null;
 
@@ -379,9 +376,7 @@ export function enrichMessages({ channelId, db, messages, userId }) {
     .map((message) => {
       const author = db.profiles.find((profile) => profile.id === message.author_id);
       const replyTarget = message.reply_to
-        ? db.messages.find(
-            (item) => item.id === message.reply_to && !item.deleted_at
-          )
+        ? db.messages.find((item) => item.id === message.reply_to && !item.deleted_at)
         : null;
       const reactions = db.message_reactions.filter(
         (reaction) => reaction.message_id === message.id

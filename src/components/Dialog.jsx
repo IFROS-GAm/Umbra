@@ -62,7 +62,7 @@ export function Dialog({ dialog, onClose, onSubmit, users }) {
                 <input
                   autoFocus
                   onChange={(event) => setName(event.target.value)}
-                  placeholder={dialog.type === "guild" ? "IFROS Studio" : "anuncios"}
+                  placeholder={dialog.type === "guild" ? "Umbra Ops" : "announcements"}
                   required
                   value={name}
                 />
@@ -70,10 +70,10 @@ export function Dialog({ dialog, onClose, onSubmit, users }) {
 
               {dialog.type === "guild" ? (
                 <label>
-                  <span>Descripción</span>
+                  <span>Descripcion</span>
                   <textarea
                     onChange={(event) => setDescription(event.target.value)}
-                    placeholder="¿Para qué servirá este servidor?"
+                    placeholder="Que objetivo tendra este servidor"
                     rows={3}
                     value={description}
                   />
@@ -83,7 +83,7 @@ export function Dialog({ dialog, onClose, onSubmit, users }) {
                   <span>Tema del canal</span>
                   <textarea
                     onChange={(event) => setTopic(event.target.value)}
-                    placeholder="Contexto rápido para el equipo"
+                    placeholder="Contexto rapido para el equipo"
                     rows={3}
                     value={topic}
                   />
