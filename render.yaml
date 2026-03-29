@@ -2,7 +2,7 @@ services:
   - type: web
     name: umbra
     runtime: node
-    plan: standard
+    plan: free
     autoDeploy: false
     healthCheckPath: /api/health
     buildCommand: npm install && npm run build
