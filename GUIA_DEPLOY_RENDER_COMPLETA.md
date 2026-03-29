@@ -98,8 +98,8 @@ Render ya esta preparado en este proyecto con [`render.yaml`](/c:/Users/User/Des
 
 - tipo `web`
 - runtime `node`
-- plan `standard`
-- `buildCommand`: `npm install && npm run build`
+- plan `free`
+- `buildCommand`: `npm install --include=dev && npm run build`
 - `startCommand`: `npm start`
 - health check: `/api/health`
 
