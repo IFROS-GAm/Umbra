@@ -2,7 +2,7 @@
   "name": "umbra",
   "productName": "Umbra",
   "version": "0.2.0",
-  "description": "Umbra is a dark realtime chat app inspired by Discord, built with React, Supabase, Socket.IO, and Electron.",
+  "description": "Umbra — Arriba como abajo. Chat with shadows.",
   "author": "Umbra Local",
   "private": true,
   "type": "module",
@@ -11,13 +11,13 @@
     "dev": "concurrently -k \"npm:dev:server\" \"npm:dev:web\" \"npm:dev:electron\"",
     "dev:server": "node --watch server/index.js",
     "dev:web": "vite",
-    "dev:electron": "wait-on tcp:3030 tcp:5173 && electron .",
+    "dev:electron": "wait-on tcp:3030 tcp:5173 && node scripts/run-electron.cjs .",
     "build": "vite build",
     "build:desktop": "npm run build && electron-builder --win nsis --publish never",
     "pack:desktop": "npm run build && electron-builder --dir --publish never",
     "setup:supabase": "node scripts/bootstrap-supabase.js",
     "start": "node server/index.js",
-    "start:desktop": "electron ."
+    "start:desktop": "node scripts/run-electron.cjs ."
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",
@@ -45,10 +45,13 @@
   "build": {
     "appId": "com.umbra.chat",
     "productName": "Umbra",
+    "icon": "build/icon.png",
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     },
     "files": [
+      "build/icon.png",
       "dist/**/*",
       "electron/**/*",
       "server/**/*",
@@ -63,10 +66,16 @@
       }
     ],
     "win": {
+      "icon": "build/icon.ico",
       "signAndEditExecutable": false,
       "target": [
         "nsis"
       ]
+    },
+    "nsis": {
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico"
     }
   }
 }

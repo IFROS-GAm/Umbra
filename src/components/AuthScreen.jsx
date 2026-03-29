@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 
+import { UmbraLogo } from "./UmbraLogo.jsx";
+
 export function AuthScreen({
   authMessage,
   busy,
@@ -53,12 +55,21 @@ export function AuthScreen({
       <div className="auth-backdrop" />
 
       <section className="auth-brand">
-        <p className="eyebrow">Umbra</p>
-        <h1>Mensajeria oscura, segura y en tiempo real.</h1>
-        <p>
-          Umbra parte del mini Discord, pero ya entra con auth real, backend protegido,
-          flujo desktop y una base lista para despliegue.
-        </p>
+        <div className="auth-brand-top">
+          <div className="brand-lockup">
+            <UmbraLogo alt="Logo de Umbra" size={68} />
+            <div className="brand-lockup-copy">
+              <p className="eyebrow">Umbra</p>
+              <strong>Arriba como abajo</strong>
+            </div>
+          </div>
+
+          <h1>Chat with shadows.</h1>
+          <p>
+            Arriba como abajo. Umbra entra con auth real, backend protegido,
+            flujo desktop y una base lista para despliegue.
+          </p>
+        </div>
 
         <div className="auth-highlights">
           <div>

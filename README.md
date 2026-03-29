@@ -1,5 +1,7 @@
 # Umbra
 
+Arriba como abajo. Chat with shadows.
+
 Umbra es una app de chat estilo mini-Discord con frontend React + Vite, backend Express + Socket.IO, autenticacion con Supabase y empaquetado desktop con Electron.
 
 ## Stack
@@ -33,5 +35,4 @@ Umbra es una app de chat estilo mini-Discord con frontend React + Vite, backend 
 - backend: `server/`
 - electron: `electron/`
 - schema: `supabase/schema.sql`
-- estado y pasos: `ESTADO_IMPLEMENTACION.md`
-- detalle tecnico: `UMBRA_IMPLEMENTACION.md`
+- deploy web: `GUIA_DEPLOY_RENDER_COMPLETA.md`

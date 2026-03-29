@@ -13,6 +13,7 @@ import {
 } from "../utils.js";
 import { Avatar } from "./Avatar.jsx";
 import { Dialog } from "./Dialog.jsx";
+import { UmbraLogo } from "./UmbraLogo.jsx";
 
 function renderHeaderCopy(activeChannel, kind) {
   if (kind === "guild") {
@@ -492,7 +493,10 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
   return (
     <div className={`app-shell theme-${theme}`}>
       <aside className="server-rail">
-        <div className="server-rail-header">UMBRA</div>
+        <div className="server-rail-header">
+          <UmbraLogo alt="Umbra" className="server-rail-logo" size={30} />
+          <span>UMBRA</span>
+        </div>
         <button
           className={`server-pill ${activeSelection.kind === "dm" ? "active" : ""}`}
           onClick={() => {
@@ -670,6 +674,7 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
             <p className="subcopy">{headerCopy.description}</p>
           </div>
           <div className="chat-header-mark">
+            <UmbraLogo alt="Umbra" size={20} />
             <span>Umbra</span>
           </div>
         </header>

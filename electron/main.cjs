@@ -5,6 +5,7 @@ const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
 const isDev = !app.isPackaged;
+const appId = "com.umbra.chat";
 const protocolScheme = "umbra";
 const serverPort = Number(process.env.ELECTRON_SERVER_PORT || 3130);
 
@@ -47,6 +48,18 @@ function loadDesktopEnv() {
 
 function extractProtocolUrl(argv = []) {
   return argv.find((value) => typeof value === "string" && value.startsWith(`${protocolScheme}://`)) || null;
+}
+
+function resolveDesktopIconPath() {
+  const candidates = [
+    path.join(process.cwd(), "build", "icon.png"),
+    path.join(__dirname, "..", "build", "icon.png"),
+    path.join(app.getAppPath(), "build", "icon.png"),
+    path.join(process.resourcesPath || "", "build", "icon.png"),
+    path.join(process.resourcesPath || "", "app.asar.unpacked", "build", "icon.png")
+  ];
+
+  return candidates.find((candidatePath) => candidatePath && fs.existsSync(candidatePath)) || null;
 }
 
 function registerProtocolClient() {
@@ -99,6 +112,7 @@ async function startEmbeddedServer() {
 
 async function createWindow() {
   const preloadPath = path.join(__dirname, "preload.cjs");
+  const iconPath = resolveDesktopIconPath();
 
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -107,6 +121,7 @@ async function createWindow() {
     minHeight: 720,
     backgroundColor: "#090b10",
     autoHideMenuBar: true,
+    icon: iconPath || undefined,
     title: "Umbra",
     webPreferences: {
       contextIsolation: true,
@@ -139,6 +154,7 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 }
 
+app.setAppUserModelId(appId);
 registerProtocolClient();
 loadDesktopEnv();
 

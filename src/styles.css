@@ -127,6 +127,29 @@ button {
   padding: 34px;
 }
 
+.auth-brand-top {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.brand-lockup {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+}
+
+.brand-lockup-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.brand-lockup-copy strong {
+  font-size: 1.05rem;
+  letter-spacing: 0.04em;
+}
+
 .auth-brand h1 {
   font-size: clamp(2.2rem, 4vw, 4.6rem);
   letter-spacing: -0.04em;
@@ -296,10 +319,16 @@ button {
 }
 
 .server-rail-header {
+  align-items: center;
   color: var(--text-2);
+  display: flex;
+  flex-direction: column;
   font-size: 0.72rem;
+  gap: 10px;
   letter-spacing: 0.18em;
-  writing-mode: vertical-rl;
+  line-height: 1;
+  text-align: center;
+  width: 100%;
 }
 
 .server-stack {
@@ -486,6 +515,16 @@ button {
 .navigator-top h2,
 .members-header h3 {
   margin: 0;
+}
+
+.chat-header-mark {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  display: inline-flex;
+  gap: 10px;
+  padding: 10px 14px;
 }
 
 .message-feed {
@@ -746,6 +785,18 @@ button {
 
 .avatar-shell {
   position: relative;
+}
+
+.umbra-logo {
+  border-radius: 22px;
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.28);
+  display: block;
+  flex-shrink: 0;
+  object-fit: cover;
+}
+
+.server-rail-logo {
+  border-radius: 12px;
 }
 
 .avatar {
