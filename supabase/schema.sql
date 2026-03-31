@@ -27,6 +27,9 @@ alter table public.profiles add column if not exists auth_user_id uuid;
 alter table public.profiles add column if not exists email text;
 alter table public.profiles add column if not exists email_confirmed_at timestamptz;
 alter table public.profiles add column if not exists auth_provider text not null default 'seed';
+alter table public.profiles add column if not exists avatar_url text not null default '';
+alter table public.profiles add column if not exists profile_banner_url text not null default '';
+alter table public.profiles add column if not exists profile_color text not null default '#5865F2';
 
 create unique index if not exists idx_profiles_auth_user_id
 on public.profiles(auth_user_id)

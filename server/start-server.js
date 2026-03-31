@@ -9,10 +9,12 @@ import dotenv from "dotenv";
 import rateLimit from "express-rate-limit";
 import express from "express";
 import helmet from "helmet";
+import multer from "multer";
 import { Server } from "socket.io";
 
 import { USER_STATUSES } from "./constants.js";
 import { createStore } from "./store/index.js";
+import { isGuildVoiceChannel } from "./store/helpers.js";
 
 dotenv.config();
 
@@ -151,10 +153,17 @@ function createCloseHandle({ io, server }) {
 
 export async function startServer(options = {}) {
   const store = await createStore();
-  const port = Number(options.port || process.env.PORT || 3030);
-  const host = options.host || process.env.HOST || "0.0.0.0";
+  const port = Number(options.port ?? process.env.PORT ?? 3030);
+  const host = options.host ?? process.env.HOST ?? "0.0.0.0";
   const quiet = Boolean(options.quiet);
   const allowedOrigins = parseAllowedOrigins(options.allowedOrigins || []);
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+      fileSize: Number(process.env.MAX_ATTACHMENT_BYTES || 8 * 1024 * 1024),
+      files: Number(process.env.MAX_ATTACHMENT_FILES || 8)
+    }
+  });
 
   const app = express();
   const server = http.createServer(app);
@@ -163,6 +172,7 @@ export async function startServer(options = {}) {
     serveClient: false
   });
   const connectedUsers = new Map();
+  const voiceSessions = new Map();
 
   app.set("trust proxy", 1);
   app.use(
@@ -184,6 +194,10 @@ export async function startServer(options = {}) {
       legacyHeaders: false
     })
   );
+
+  if (store.uploadDir && fs.existsSync(store.uploadDir)) {
+    app.use("/uploads", express.static(store.uploadDir));
+  }
 
   function sendError(res, error) {
     res.status(error.statusCode || 500).json({
@@ -212,6 +226,51 @@ export async function startServer(options = {}) {
 
   function emitNavigationUpdate(payload = {}) {
     io.emit("navigation:update", payload);
+  }
+
+  function buildVoicePayload(channelId) {
+    return {
+      channelId,
+      userIds: [...(voiceSessions.get(channelId)?.keys() || [])]
+    };
+  }
+
+  function emitVoiceUpdate(channelId) {
+    io.emit("voice:update", buildVoicePayload(channelId));
+  }
+
+  function serializeVoiceState() {
+    return Object.fromEntries(
+      [...voiceSessions.keys()].map((channelId) => [
+        channelId,
+        [...(voiceSessions.get(channelId)?.keys() || [])]
+      ])
+    );
+  }
+
+  function leaveVoiceChannel(socket, userId) {
+    const previousChannelId = socket.data.voiceChannelId;
+    if (!previousChannelId) {
+      return;
+    }
+
+    const channelUsers = voiceSessions.get(previousChannelId);
+    if (channelUsers) {
+      const nextCount = Math.max(0, (channelUsers.get(userId) || 1) - 1);
+      if (nextCount === 0) {
+        channelUsers.delete(userId);
+      } else {
+        channelUsers.set(userId, nextCount);
+      }
+
+      if (channelUsers.size === 0) {
+        voiceSessions.delete(previousChannelId);
+      }
+    }
+
+    socket.leave(`voice:${previousChannelId}`);
+    socket.data.voiceChannelId = null;
+    emitVoiceUpdate(previousChannelId);
   }
 
   app.get("/api/health", async (_, res) => {
@@ -251,9 +310,11 @@ export async function startServer(options = {}) {
   app.post("/api/channels/:channelId/messages", requireViewer, async (req, res) => {
     try {
       const message = await store.createMessage({
+        attachments: Array.isArray(req.body.attachments) ? req.body.attachments : [],
         authorId: req.viewer.id,
         channelId: req.params.channelId,
         content: req.body.content,
+        replyMentionUserId: req.body.replyMentionUserId || null,
         replyTo: req.body.replyTo || null
       });
       const preview = await store.getChannelPreview(req.params.channelId);
@@ -272,6 +333,24 @@ export async function startServer(options = {}) {
       sendError(res, error);
     }
   });
+
+  app.post(
+    "/api/attachments",
+    requireViewer,
+    upload.array("files", Number(process.env.MAX_ATTACHMENT_FILES || 8)),
+    async (req, res) => {
+      try {
+        if (!req.files?.length) {
+          throw createHttpError("No se recibieron archivos.", 400);
+        }
+
+        const attachments = await store.storeAttachments(req.files);
+        res.status(201).json({ attachments });
+      } catch (error) {
+        sendError(res, error);
+      }
+    }
+  );
 
   app.patch("/api/messages/:messageId", requireViewer, async (req, res) => {
     try {
@@ -364,6 +443,7 @@ export async function startServer(options = {}) {
       const channel = await store.createChannel({
         createdBy: req.viewer.id,
         guildId: req.params.guildId,
+        kind: req.body.kind || "text",
         name: req.body.name,
         topic: req.body.topic || ""
       });
@@ -382,10 +462,23 @@ export async function startServer(options = {}) {
 
   app.post("/api/dms", requireViewer, async (req, res) => {
     try {
-      const channel = await store.createOrGetDm({
-        ownerId: req.viewer.id,
-        recipientId: req.body.recipientId
-      });
+      let channel = null;
+      const recipientIds = Array.isArray(req.body.recipientIds)
+        ? [...new Set(req.body.recipientIds.map((id) => String(id)).filter(Boolean))]
+        : [];
+
+      if (recipientIds.length) {
+        channel = await store.createGroupDm({
+          name: req.body.name || "",
+          ownerId: req.viewer.id,
+          recipientIds
+        });
+      } else {
+        channel = await store.createOrGetDm({
+          ownerId: req.viewer.id,
+          recipientId: req.body.recipientId
+        });
+      }
 
       emitNavigationUpdate({
         channelId: channel.id,
@@ -417,6 +510,30 @@ export async function startServer(options = {}) {
     }
   });
 
+  app.patch("/api/users/me/profile", requireViewer, async (req, res) => {
+    try {
+      const user = await store.updateProfile({
+        avatarHue: req.body.avatarHue,
+        avatarUrl: req.body.avatarUrl,
+        bannerImageUrl: req.body.bannerImageUrl,
+        bio: req.body.bio,
+        customStatus: req.body.customStatus,
+        profileColor: req.body.profileColor,
+        userId: req.viewer.id,
+        username: req.body.username
+      });
+
+      emitPresenceUpdate(user);
+      emitNavigationUpdate({
+        type: "profile:update",
+        userId: req.viewer.id
+      });
+      res.json({ user });
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
   app.post("/api/channels/:channelId/read", requireViewer, async (req, res) => {
     try {
       const payload = await store.markChannelRead({
@@ -429,6 +546,20 @@ export async function startServer(options = {}) {
     } catch (error) {
       sendError(res, error);
     }
+  });
+
+  app.use((error, _req, res, next) => {
+    if (error instanceof multer.MulterError) {
+      sendError(res, createHttpError("No se pudieron procesar los adjuntos.", 400));
+      return;
+    }
+
+    if (error) {
+      sendError(res, error);
+      return;
+    }
+
+    next();
   });
 
   const distPath = path.join(__dirname, "..", "dist");
@@ -464,6 +595,7 @@ export async function startServer(options = {}) {
   io.on("connection", (socket) => {
     const viewer = socket.data.user;
     socket.join(`user:${viewer.id}`);
+    socket.emit("voice:state", serializeVoiceState());
 
     const currentCount = connectedUsers.get(viewer.id) || 0;
     connectedUsers.set(viewer.id, currentCount + 1);
@@ -539,7 +671,54 @@ export async function startServer(options = {}) {
       }
     });
 
+    socket.on("voice:join", async ({ channelId }) => {
+      if (!channelId) {
+        return;
+      }
+
+      try {
+        const canAccess = await store.canAccessChannel({
+          channelId,
+          userId: viewer.id
+        });
+        const channel = await store.getChannel(channelId);
+
+        if (!canAccess || !isGuildVoiceChannel(channel)) {
+          socket.emit("room:error", {
+            channelId,
+            error: "No puedes entrar a este canal de voz."
+          });
+          return;
+        }
+
+        if (socket.data.voiceChannelId === channelId) {
+          socket.emit("voice:update", buildVoicePayload(channelId));
+          return;
+        }
+
+        leaveVoiceChannel(socket, viewer.id);
+
+        const channelUsers = voiceSessions.get(channelId) || new Map();
+        channelUsers.set(viewer.id, (channelUsers.get(viewer.id) || 0) + 1);
+        voiceSessions.set(channelId, channelUsers);
+
+        socket.data.voiceChannelId = channelId;
+        socket.join(`voice:${channelId}`);
+        emitVoiceUpdate(channelId);
+      } catch (error) {
+        socket.emit("room:error", {
+          channelId,
+          error: error.message || "No se pudo entrar al canal de voz."
+        });
+      }
+    });
+
+    socket.on("voice:leave", () => {
+      leaveVoiceChannel(socket, viewer.id);
+    });
+
     socket.on("disconnect", () => {
+      leaveVoiceChannel(socket, viewer.id);
       const nextCount = Math.max(0, (connectedUsers.get(viewer.id) || 1) - 1);
 
       if (nextCount === 0) {
@@ -567,7 +746,10 @@ export async function startServer(options = {}) {
   });
 
   const displayHost = host === "0.0.0.0" ? "localhost" : host;
-  const url = `http://${displayHost}:${port}`;
+  const address = server.address();
+  const listeningPort =
+    typeof address === "object" && address?.port ? address.port : port;
+  const url = `http://${displayHost}:${listeningPort}`;
 
   if (!quiet) {
     console.log(`Umbra server running at ${url}`);

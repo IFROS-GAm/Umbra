@@ -6,8 +6,8 @@ export const REACTION_OPTIONS = [
 ];
 
 export const STATUS_OPTIONS = [
-  { value: "online", label: "Online" },
-  { value: "idle", label: "Ausente" },
+  { value: "online", label: "En linea" },
+  { value: "idle", label: "Inactivo" },
   { value: "dnd", label: "No molestar" },
   { value: "invisible", label: "Invisible" },
   { value: "offline", label: "Offline" }
@@ -31,6 +31,7 @@ function escapeHtml(text = "") {
 export function formatMessageHtml(text = "") {
   const codeBlocks = [];
   const inlineCodes = [];
+  const everyoneMentions = [];
 
   let html = escapeHtml(text)
     .replace(/```([\s\S]*?)```/g, (_, content) => {
@@ -47,11 +48,22 @@ export function formatMessageHtml(text = "") {
     .replace(/\*([^*]+)\*/g, "<em>$1</em>")
     .replace(/~~([^~]+)~~/g, "<s>$1</s>")
     .replace(/\|\|([^|]+)\|\|/g, '<span class="spoiler">$1</span>')
+    .replace(/(^|\s)@everyone\b/gi, (_, prefix) => {
+      const token = `%%EVERYONE_${everyoneMentions.length}%%`;
+      everyoneMentions.push(
+        `${prefix}<span class="mention mention-everyone">@everyone</span>`
+      );
+      return token;
+    })
     .replace(/(^|\s)@([a-zA-Z0-9_-]+)/g, '$1<span class="mention">@$2</span>')
     .replace(/\n/g, "<br />");
 
   inlineCodes.forEach((block, index) => {
     html = html.replace(`%%INLINECODE_${index}%%`, block);
+  });
+
+  everyoneMentions.forEach((block, index) => {
+    html = html.replace(`%%EVERYONE_${index}%%`, block);
   });
 
   codeBlocks.forEach((block, index) => {
@@ -76,6 +88,54 @@ export function relativeTime(isoDate) {
 
   const days = Math.round(hours / 24);
   return `${days}d`;
+}
+
+function toDateParts(isoDate) {
+  const date = new Date(isoDate);
+  return {
+    day: date.getDate(),
+    month: date.getMonth(),
+    year: date.getFullYear()
+  };
+}
+
+export function isSameCalendarDay(left, right) {
+  if (!left || !right) {
+    return false;
+  }
+
+  const leftParts = toDateParts(left);
+  const rightParts = toDateParts(right);
+
+  return (
+    leftParts.day === rightParts.day &&
+    leftParts.month === rightParts.month &&
+    leftParts.year === rightParts.year
+  );
+}
+
+export function shouldShowDateDivider(previousMessage, nextMessage) {
+  if (!nextMessage?.created_at) {
+    return false;
+  }
+
+  if (!previousMessage?.created_at) {
+    return true;
+  }
+
+  return !isSameCalendarDay(previousMessage.created_at, nextMessage.created_at);
+}
+
+export function formatDateDivider(isoDate) {
+  if (!isoDate) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat("es-CO", {
+    day: "numeric",
+    month: "long",
+    year: "numeric"
+  }).format(new Date(isoDate));
 }
 
 export function isGrouped(prev, next) {

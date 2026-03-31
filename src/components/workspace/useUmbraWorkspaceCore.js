@@ -1,0 +1,951 @@
+import { useEffect, useRef, useState } from "react";
+
+import { api, configureApiAuth } from "../../api.js";
+import { getSocket } from "../../socket.js";
+import { findChannelInSession, resolveSelection } from "../../utils.js";
+import { fallbackDeviceLabel, renderHeaderCopy } from "./workspaceHelpers.js";
+
+export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
+  const [workspace, setWorkspace] = useState(null);
+  const [activeSelection, setActiveSelection] = useState({
+    channelId: null,
+    guildId: null,
+    kind: "guild"
+  });
+  const [messages, setMessages] = useState([]);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [composer, setComposer] = useState("");
+  const [composerAttachments, setComposerAttachments] = useState([]);
+  const [replyTarget, setReplyTarget] = useState(null);
+  const [replyMentionEnabled, setReplyMentionEnabled] = useState(true);
+  const [editingMessage, setEditingMessage] = useState(null);
+  const [dialog, setDialog] = useState(null);
+  const [typingEvents, setTypingEvents] = useState([]);
+  const [theme, setTheme] = useState("dark");
+  const [appError, setAppError] = useState("");
+  const [uiNotice, setUiNotice] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [membersPanelVisible, setMembersPanelVisible] = useState(true);
+  const [composerMenuOpen, setComposerMenuOpen] = useState(false);
+  const [composerPicker, setComposerPicker] = useState(null);
+  const [reactionPickerFor, setReactionPickerFor] = useState(null);
+  const [messageMenuFor, setMessageMenuFor] = useState(null);
+  const [profileCard, setProfileCard] = useState(null);
+  const [headerPanel, setHeaderPanel] = useState(null);
+  const [inboxTab, setInboxTab] = useState("for_you");
+  const [voiceMenu, setVoiceMenu] = useState(null);
+  const [hoveredVoiceChannelId, setHoveredVoiceChannelId] = useState(null);
+  const [noiseTestActive, setNoiseTestActive] = useState(false);
+  const [voiceState, setVoiceState] = useState({
+    cameraEnabled: false,
+    deafen: false,
+    inputVolume: 84,
+    micMuted: false,
+    noiseSuppression: true,
+    pushToTalk: false,
+    outputVolume: 52,
+    screenShareEnabled: false,
+    shareAudio: true
+  });
+  const [voiceSessions, setVoiceSessions] = useState({});
+  const [voiceDevices, setVoiceDevices] = useState({
+    audioinput: [],
+    audiooutput: [],
+    videoinput: []
+  });
+  const [selectedVoiceDevices, setSelectedVoiceDevices] = useState({
+    audioinput: "default",
+    audiooutput: "default",
+    videoinput: "default"
+  });
+  const [joinedVoiceChannelId, setJoinedVoiceChannelId] = useState(null);
+  const [uploadingAttachments, setUploadingAttachments] = useState(false);
+  const [booting, setBooting] = useState(true);
+
+  const listRef = useRef(null);
+  const composerRef = useRef(null);
+  const attachmentInputRef = useRef(null);
+  const headerActionsRef = useRef(null);
+  const headerPanelRef = useRef(null);
+  const topbarActionsRef = useRef(null);
+  const lastTypingAtRef = useRef(0);
+  const activeSelectionRef = useRef(activeSelection);
+  const loadBootstrapRef = useRef(null);
+  const accessTokenRef = useRef(accessToken);
+  const joinedVoiceChannelIdRef = useRef(joinedVoiceChannelId);
+
+  activeSelectionRef.current = activeSelection;
+  accessTokenRef.current = accessToken;
+  joinedVoiceChannelIdRef.current = joinedVoiceChannelId;
+
+  const activeLookup = findChannelInSession(workspace, activeSelection.channelId);
+  const activeChannel = activeLookup?.channel || null;
+  const activeGuild = activeLookup?.guild || null;
+  const isVoiceChannel = Boolean(activeChannel?.is_voice);
+  const activeGuildTextChannels = activeGuild?.channels.filter((channel) => !channel.is_voice) || [];
+  const activeGuildVoiceChannels = activeGuild?.channels.filter((channel) => channel.is_voice) || [];
+  const headerCopy = renderHeaderCopy(activeChannel, activeSelection.kind);
+  const currentUserLabel =
+    workspace?.current_user?.display_name || workspace?.current_user?.username || "Umbra user";
+  const directUnreadCount =
+    workspace?.dms?.reduce((count, dm) => count + (dm.unread_count || 0), 0) || 0;
+  const typingUsers = typingEvents.filter(
+    (item) =>
+      item.channelId === activeSelection.channelId &&
+      item.userId !== workspace?.current_user?.id &&
+      item.expires_at > Date.now()
+  );
+  const voiceUserIds = activeChannel?.id ? voiceSessions[activeChannel.id] || [] : [];
+
+  async function loadBootstrap(preferredSelection = activeSelectionRef.current) {
+    configureApiAuth(() => accessTokenRef.current);
+
+    try {
+      const payload = await api.bootstrap();
+      setWorkspace(payload);
+      setActiveSelection(resolveSelection(payload, preferredSelection));
+      setAppError("");
+    } catch (error) {
+      if (String(error.message || "").toLowerCase().includes("unauthorized")) {
+        onSignOut();
+        return;
+      }
+      setAppError(error.message);
+    } finally {
+      setBooting(false);
+    }
+  }
+
+  loadBootstrapRef.current = loadBootstrap;
+
+  async function loadMessages({ before = null, channelId = activeSelection.channelId, prepend = false } = {}) {
+    const targetChannel = findChannelInSession(workspace, channelId)?.channel;
+    if (!channelId || targetChannel?.is_voice) {
+      setMessages([]);
+      setHasMore(false);
+      return;
+    }
+
+    setLoadingMessages(true);
+    const previousHeight = listRef.current?.scrollHeight || 0;
+
+    try {
+      const payload = await api.fetchMessages({
+        before,
+        channelId,
+        limit: 30
+      });
+
+      setHasMore(payload.has_more);
+
+      if (prepend) {
+        setMessages((previous) => {
+          const next = [...payload.messages, ...previous];
+          return next.filter(
+            (message, index, collection) =>
+              collection.findIndex((item) => item.id === message.id) === index
+          );
+        });
+
+        requestAnimationFrame(() => {
+          const element = listRef.current;
+          if (element) {
+            element.scrollTop = element.scrollHeight - previousHeight;
+          }
+        });
+      } else {
+        setMessages(payload.messages);
+        requestAnimationFrame(() => {
+          const element = listRef.current;
+          if (element) {
+            element.scrollTop = element.scrollHeight;
+          }
+        });
+      }
+
+      const latest = payload.messages[payload.messages.length - 1];
+      if (latest) {
+        await api.markRead({
+          channelId,
+          lastReadMessageId: latest.id
+        });
+      }
+    } catch (error) {
+      setAppError(error.message);
+    } finally {
+      setLoadingMessages(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!accessToken) {
+      return;
+    }
+    loadBootstrap();
+  }, [accessToken]);
+
+  useEffect(() => {
+    if (workspace?.current_user?.id) {
+      const savedTheme = localStorage.getItem(`umbra-theme-${workspace.current_user.id}`);
+      setTheme(savedTheme || workspace.current_user.theme || "dark");
+    }
+  }, [workspace?.current_user?.id]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    if (workspace?.current_user?.id) {
+      localStorage.setItem(`umbra-theme-${workspace.current_user.id}`, theme);
+    }
+  }, [theme, workspace?.current_user?.id]);
+
+  useEffect(() => {
+    setComposer("");
+    setComposerAttachments([]);
+    setReplyTarget(null);
+    setEditingMessage(null);
+    setComposerMenuOpen(false);
+    setComposerPicker(null);
+    setReactionPickerFor(null);
+    setProfileCard(null);
+    setVoiceMenu(null);
+    setTypingEvents([]);
+
+    if (activeSelection.channelId && !activeChannel?.is_voice) {
+      loadMessages({
+        channelId: activeSelection.channelId
+      });
+    } else {
+      setMessages([]);
+      setHasMore(false);
+    }
+  }, [activeSelection.channelId, activeChannel?.is_voice]);
+
+  useEffect(() => {
+    if (!accessToken) {
+      return undefined;
+    }
+
+    const socket = getSocket(accessToken);
+
+    const refreshNavigation = async (payload = {}) => {
+      await loadBootstrapRef.current?.(activeSelectionRef.current);
+
+      if (
+        payload?.type === "profile:update" &&
+        activeSelectionRef.current.channelId
+      ) {
+        await loadMessages({
+          channelId: activeSelectionRef.current.channelId
+        });
+      }
+    };
+
+    const onMessageCreate = async ({ message }) => {
+      if (message?.channel_id === activeSelectionRef.current.channelId) {
+        setMessages((previous) =>
+          previous.some((item) => item.id === message.id) ? previous : [...previous, message]
+        );
+
+        requestAnimationFrame(() => {
+          const element = listRef.current;
+          if (!element) {
+            return;
+          }
+          const nearBottom =
+            element.scrollHeight - element.scrollTop - element.clientHeight < 160;
+          if (nearBottom || message.author?.id === workspace?.current_user?.id) {
+            element.scrollTop = element.scrollHeight;
+          }
+        });
+
+        if (message.id) {
+          await api.markRead({
+            channelId: activeSelectionRef.current.channelId,
+            lastReadMessageId: message.id
+          });
+        }
+      }
+
+      refreshNavigation();
+    };
+
+    const onMessageUpdate = ({ message }) => {
+      if (message?.channel_id === activeSelectionRef.current.channelId) {
+        setMessages((previous) =>
+          previous.map((item) => (item.id === message.id ? message : item))
+        );
+      }
+      refreshNavigation();
+    };
+
+    const onMessageDelete = ({ channel_id, id }) => {
+      if (channel_id === activeSelectionRef.current.channelId) {
+        setMessages((previous) => previous.filter((item) => item.id !== id));
+      }
+      refreshNavigation();
+    };
+
+    const onReactionUpdate = ({ message }) => {
+      if (message?.channel_id === activeSelectionRef.current.channelId) {
+        setMessages((previous) =>
+          previous.map((item) => (item.id === message.id ? message : item))
+        );
+      }
+    };
+
+    const onPresenceUpdate = ({ user }) => {
+      if (!user) {
+        return;
+      }
+
+      setWorkspace((previous) => {
+        if (!previous) {
+          return previous;
+        }
+
+        const nextStatus = user.status === "invisible" ? "offline" : user.status;
+        return {
+          ...previous,
+          available_users: previous.available_users.map((item) =>
+            item.id === user.id ? { ...item, ...user } : item
+          ),
+          current_user:
+            previous.current_user.id === user.id
+              ? { ...previous.current_user, ...user }
+              : previous.current_user,
+          guilds: previous.guilds.map((guild) => ({
+            ...guild,
+            members: guild.members.map((member) =>
+              member.id === user.id
+                ? { ...member, status: nextStatus, custom_status: user.custom_status }
+                : member
+            )
+          })),
+          dms: previous.dms.map((dm) => ({
+            ...dm,
+            participants: dm.participants.map((participant) =>
+              participant.id === user.id
+                ? { ...participant, status: nextStatus, custom_status: user.custom_status }
+                : participant
+            )
+          }))
+        };
+      });
+    };
+
+    const onTypingUpdate = (payload) => {
+      setTypingEvents((previous) => {
+        const filtered = previous.filter(
+          (item) =>
+            !(
+              item.channelId === payload.channelId && item.userId === payload.userId
+            ) && item.expires_at > Date.now()
+        );
+        return [...filtered, payload];
+      });
+    };
+
+    const onVoiceState = (payload) => {
+      setVoiceSessions(payload || {});
+    };
+
+    const onVoiceUpdate = ({ channelId, userIds }) => {
+      if (!channelId) {
+        return;
+      }
+
+      setVoiceSessions((previous) => ({
+        ...previous,
+        [channelId]: userIds || []
+      }));
+    };
+
+    const onRoomError = (payload) => {
+      if (!payload?.error) {
+        return;
+      }
+
+      setAppError(payload.error);
+      if (payload.channelId && joinedVoiceChannelIdRef.current === payload.channelId) {
+        setJoinedVoiceChannelId(null);
+      }
+    };
+
+    const onConnect = () => {
+      if (joinedVoiceChannelIdRef.current) {
+        socket.emit("voice:join", {
+          channelId: joinedVoiceChannelIdRef.current
+        });
+      }
+    };
+
+    socket.connect();
+    socket.on("connect", onConnect);
+    socket.on("message:create", onMessageCreate);
+    socket.on("message:update", onMessageUpdate);
+    socket.on("message:delete", onMessageDelete);
+    socket.on("reaction:update", onReactionUpdate);
+    socket.on("presence:update", onPresenceUpdate);
+    socket.on("navigation:update", refreshNavigation);
+    socket.on("typing:update", onTypingUpdate);
+    socket.on("voice:state", onVoiceState);
+    socket.on("voice:update", onVoiceUpdate);
+    socket.on("room:error", onRoomError);
+
+    return () => {
+      socket.off("message:create", onMessageCreate);
+      socket.off("message:update", onMessageUpdate);
+      socket.off("message:delete", onMessageDelete);
+      socket.off("reaction:update", onReactionUpdate);
+      socket.off("presence:update", onPresenceUpdate);
+      socket.off("navigation:update", refreshNavigation);
+      socket.off("typing:update", onTypingUpdate);
+      socket.off("connect", onConnect);
+      socket.off("voice:state", onVoiceState);
+      socket.off("voice:update", onVoiceUpdate);
+      socket.off("room:error", onRoomError);
+      socket.disconnect();
+    };
+  }, [accessToken, workspace?.current_user?.id]);
+
+  useEffect(() => {
+    if (activeSelection.channelId && accessToken) {
+      getSocket(accessToken).emit("room:join", { channelId: activeSelection.channelId });
+    }
+  }, [accessToken, activeSelection.channelId]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setTypingEvents((previous) =>
+        previous.filter((item) => item.expires_at > Date.now())
+      );
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (!uiNotice) {
+      return undefined;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setUiNotice("");
+    }, 3200);
+
+    return () => window.clearTimeout(timeout);
+  }, [uiNotice]);
+
+  useEffect(() => {
+    if (!navigator.mediaDevices?.enumerateDevices) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function syncDevices() {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        if (cancelled) {
+          return;
+        }
+
+        const nextDevices = {
+          audioinput: devices.filter((device) => device.kind === "audioinput"),
+          audiooutput: devices.filter((device) => device.kind === "audiooutput"),
+          videoinput: devices.filter((device) => device.kind === "videoinput")
+        };
+
+        setVoiceDevices(nextDevices);
+        setSelectedVoiceDevices((previous) => ({
+          audioinput:
+            previous.audioinput !== "default" &&
+            nextDevices.audioinput.some((device) => device.deviceId === previous.audioinput)
+              ? previous.audioinput
+              : nextDevices.audioinput[0]?.deviceId || "default",
+          audiooutput:
+            previous.audiooutput !== "default" &&
+            nextDevices.audiooutput.some((device) => device.deviceId === previous.audiooutput)
+              ? previous.audiooutput
+              : nextDevices.audiooutput[0]?.deviceId || "default",
+          videoinput:
+            previous.videoinput !== "default" &&
+            nextDevices.videoinput.some((device) => device.deviceId === previous.videoinput)
+              ? previous.videoinput
+              : nextDevices.videoinput[0]?.deviceId || "default"
+        }));
+      } catch {
+        // Ignore device enumeration issues in unsupported contexts.
+      }
+    }
+
+    syncDevices();
+
+    navigator.mediaDevices.addEventListener?.("devicechange", syncDevices);
+
+    return () => {
+      cancelled = true;
+      navigator.mediaDevices.removeEventListener?.("devicechange", syncDevices);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!noiseTestActive) {
+      return undefined;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setNoiseTestActive(false);
+    }, 2600);
+
+    return () => window.clearTimeout(timeout);
+  }, [noiseTestActive]);
+
+  useEffect(() => {
+    if (!headerPanel) {
+      return undefined;
+    }
+
+    function handlePointerDown(event) {
+      const target = event.target;
+      if (
+        headerPanelRef.current?.contains(target) ||
+        headerActionsRef.current?.contains(target) ||
+        topbarActionsRef.current?.contains(target)
+      ) {
+        return;
+      }
+
+      setHeaderPanel(null);
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [headerPanel]);
+
+  useEffect(() => {
+    if (!messageMenuFor) {
+      return undefined;
+    }
+
+    function handlePointerDown(event) {
+      if (event.target.closest(".message-menu-anchor")) {
+        return;
+      }
+
+      setMessageMenuFor(null);
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [messageMenuFor]);
+
+  useEffect(() => {
+    setHeaderPanel(null);
+  }, [activeSelection.channelId, activeSelection.guildId, activeSelection.kind]);
+
+  async function handleSubmitMessage(event) {
+    event.preventDefault();
+    if ((!composer.trim() && !composerAttachments.length) || !activeSelection.channelId || isVoiceChannel) {
+      return;
+    }
+
+    try {
+      if (editingMessage) {
+        await api.updateMessage({
+          content: composer,
+          messageId: editingMessage.id
+        });
+      } else {
+        await api.createMessage({
+          attachments: composerAttachments,
+          channelId: activeSelection.channelId,
+          content: composer,
+          replyMentionUserId:
+            replyTarget && replyMentionEnabled ? replyTarget.author?.id || null : null,
+          replyTo: replyTarget?.id || null
+        });
+      }
+
+      setComposer("");
+      setComposerAttachments([]);
+      setReplyTarget(null);
+      setReplyMentionEnabled(true);
+      setEditingMessage(null);
+      setAppError("");
+    } catch (error) {
+      setAppError(error.message);
+    }
+  }
+
+  async function handleDeleteMessage(message) {
+    if (!window.confirm("Eliminar este mensaje?")) {
+      return;
+    }
+
+    try {
+      await api.deleteMessage({
+        messageId: message.id
+      });
+    } catch (error) {
+      setAppError(error.message);
+    }
+  }
+
+  async function handleReaction(messageId, emoji) {
+    try {
+      await api.toggleReaction({
+        emoji,
+        messageId
+      });
+    } catch (error) {
+      setAppError(error.message);
+    }
+  }
+
+  async function handleStatusChange(status) {
+    try {
+      await api.updateStatus({
+        status
+      });
+      setProfileCard((previous) =>
+        previous?.profile?.id === workspace?.current_user?.id
+          ? {
+              ...previous,
+              profile: {
+                ...previous.profile,
+                status
+              }
+            }
+          : previous
+      );
+      await loadBootstrap(activeSelection);
+    } catch (error) {
+      setAppError(error.message);
+    }
+  }
+
+  async function handleProfileUpdate(nextProfile) {
+    try {
+      const {
+        avatarFile,
+        avatarUrl: requestedAvatarUrl,
+        bannerFile,
+        bannerImageUrl: requestedBannerImageUrl,
+        clearAvatar,
+        clearBanner,
+        ...profilePatch
+      } =
+        nextProfile;
+      let avatarUrl = requestedAvatarUrl;
+      let bannerImageUrl = requestedBannerImageUrl;
+
+      if (avatarFile) {
+        const uploadPayload = await api.uploadAttachments([avatarFile]);
+        avatarUrl = uploadPayload.attachments?.[0]?.url;
+
+        if (!avatarUrl) {
+          throw new Error("No se pudo subir la foto de perfil.");
+        }
+      } else if (clearAvatar) {
+        avatarUrl = "";
+      }
+
+      if (bannerFile) {
+        const uploadPayload = await api.uploadAttachments([bannerFile]);
+        bannerImageUrl = uploadPayload.attachments?.[0]?.url;
+
+        if (!bannerImageUrl) {
+          throw new Error("No se pudo subir la imagen del panel.");
+        }
+      } else if (clearBanner) {
+        bannerImageUrl = "";
+      }
+
+      await api.updateProfile({
+        ...profilePatch,
+        avatarUrl,
+        bannerImageUrl
+      });
+      await loadBootstrap(activeSelectionRef.current);
+
+      if (activeSelectionRef.current.channelId) {
+        await loadMessages({
+          channelId: activeSelectionRef.current.channelId
+        });
+      }
+
+      setAppError("");
+      showUiNotice("Perfil actualizado.");
+    } catch (error) {
+      setAppError(error.message);
+      throw error;
+    }
+  }
+
+  async function handleDialogSubmit(values) {
+    if (!dialog) {
+      return;
+    }
+
+    try {
+      if (dialog.type === "guild") {
+        const payload = await api.createGuild({
+          description: values.description,
+          name: values.name
+        });
+        await loadBootstrap({
+          channelId: payload.channel_id,
+          guildId: payload.guild_id,
+          kind: "guild"
+        });
+      }
+
+      if (dialog.type === "channel") {
+        const payload = await api.createChannel({
+          guildId: activeGuild.id,
+          kind: values.kind,
+          name: values.name,
+          topic: values.topic
+        });
+        await loadBootstrap({
+          channelId: payload.channel.id,
+          guildId: activeGuild.id,
+          kind: "guild"
+        });
+      }
+
+      if (dialog.type === "dm") {
+        const payload = await api.createDm({
+          recipientId: values.recipientId
+        });
+        await loadBootstrap({
+          channelId: payload.channel.id,
+          guildId: null,
+          kind: "dm"
+        });
+      }
+
+      if (dialog.type === "dm_group") {
+        const payload = await api.createGroupDm({
+          name: values.name,
+          recipientIds: values.recipientIds
+        });
+        await loadBootstrap({
+          channelId: payload.channel.id,
+          guildId: null,
+          kind: "dm"
+        });
+      }
+
+      setDialog(null);
+      setAppError("");
+    } catch (error) {
+      setAppError(error.message);
+      throw error;
+    }
+  }
+
+  function handleComposerChange(value) {
+    setComposer(value);
+    const now = Date.now();
+    if (
+      activeSelection.channelId &&
+      workspace?.current_user &&
+      now - lastTypingAtRef.current > 1200
+    ) {
+      getSocket(accessToken).emit("typing:start", {
+        channelId: activeSelection.channelId
+      });
+      lastTypingAtRef.current = now;
+    }
+  }
+
+  function handleScroll() {
+    const element = listRef.current;
+    if (!element || loadingMessages || !hasMore || !messages.length) {
+      return;
+    }
+    if (element.scrollTop < 80) {
+      loadMessages({
+        before: messages[0].id,
+        prepend: true
+      });
+    }
+  }
+
+  function showUiNotice(message) {
+    setUiNotice(message);
+  }
+
+  function toggleHeaderPanel(panelName) {
+    setHeaderPanel((previous) => (previous === panelName ? null : panelName));
+  }
+
+  function toggleVoiceState(key) {
+    setVoiceState((previous) => ({
+      ...previous,
+      [key]: !previous[key]
+    }));
+  }
+
+  function toggleVoiceMenu(name) {
+    setVoiceMenu((previous) => (previous === name ? null : name));
+  }
+
+  function updateVoiceSetting(key, value) {
+    setVoiceState((previous) => ({
+      ...previous,
+      [key]: value
+    }));
+  }
+
+  function handleVoiceDeviceChange(kind, value) {
+    setSelectedVoiceDevices((previous) => ({
+      ...previous,
+      [kind]: value
+    }));
+  }
+
+  function cycleVoiceDevice(kind) {
+    const devices = voiceDevices[kind] || [];
+    if (!devices.length) {
+      return;
+    }
+
+    const currentIndex = devices.findIndex(
+      (device) => device.deviceId === selectedVoiceDevices[kind]
+    );
+    const nextDevice = devices[(currentIndex + 1 + devices.length) % devices.length];
+    handleVoiceDeviceChange(kind, nextDevice.deviceId);
+    showUiNotice(`Ahora usando ${nextDevice.label || fallbackDeviceLabel(kind, (currentIndex + 1) % devices.length)}.`);
+  }
+
+  function getSelectedDeviceLabel(kind) {
+    const selectedId = selectedVoiceDevices[kind];
+    const devices = voiceDevices[kind] || [];
+    const index = devices.findIndex((device) => device.deviceId === selectedId);
+    const device = index >= 0 ? devices[index] : devices[0];
+
+    if (!device) {
+      return "Configuracion predeterminada";
+    }
+
+    return device.label || fallbackDeviceLabel(kind, Math.max(index, 0));
+  }
+
+  function appendToComposer(token) {
+    setComposer((previous) => {
+      const prefix = previous && !previous.endsWith(" ") ? `${previous} ` : previous;
+      return `${prefix}${token}`;
+    });
+
+    requestAnimationFrame(() => {
+      composerRef.current?.focus();
+    });
+  }
+
+  function handleComposerShortcut(shortcut) {
+    setComposerMenuOpen(false);
+    if (shortcut.id === "upload") {
+      if (editingMessage) {
+        showUiNotice("Por ahora los adjuntos nuevos se agregan solo en mensajes nuevos.");
+        return;
+      }
+
+      if (isVoiceChannel) {
+        showUiNotice("Los canales de voz no aceptan mensajes ni adjuntos.");
+        return;
+      }
+
+      attachmentInputRef.current?.click();
+      return;
+    }
+
+    showUiNotice(shortcut.description);
+  }
+
+  function handlePickerInsert(value) {
+    appendToComposer(value);
+    setComposerPicker(null);
+  }
+
+  async function handleAttachmentSelection(event) {
+    const files = [...(event.target.files || [])];
+    event.target.value = "";
+
+    if (!files.length) {
+      return;
+    }
+
+    try {
+      setUploadingAttachments(true);
+      const payload = await api.uploadAttachments(files);
+      setComposerAttachments((previous) =>
+        [...previous, ...(payload.attachments || [])].slice(0, 8)
+      );
+      showUiNotice(
+        `${payload.attachments?.length || files.length} adjunto(s) listos para enviar.`
+      );
+      setAppError("");
+    } catch (error) {
+      setAppError(error.message);
+    } finally {
+      setUploadingAttachments(false);
+    }
+  }
+
+  function removeComposerAttachment(targetAttachment) {
+    setComposerAttachments((previous) =>
+      previous.filter((attachment) => attachmentKey(attachment) !== attachmentKey(targetAttachment))
+    );
+  }
+
+  function handleSelectGuildChannel(channel) {
+    setVoiceMenu(null);
+    setActiveSelection({
+      channelId: channel.id,
+      guildId: activeGuild.id,
+      kind: "guild"
+    });
+
+    if (channel.is_voice && accessToken) {
+      getSocket(accessToken).emit("voice:join", {
+        channelId: channel.id
+      });
+      setJoinedVoiceChannelId(channel.id);
+    }
+  }
+
+  function handleVoiceLeave() {
+    if (!joinedVoiceChannelId || !accessToken) {
+      return;
+    }
+
+    getSocket(accessToken).emit("voice:leave");
+    setVoiceMenu(null);
+    setJoinedVoiceChannelId(null);
+  }
+
+  return {
+    accessTokenRef, activeChannel, activeGuild, activeGuildTextChannels, activeGuildVoiceChannels, activeLookup,
+    activeSelection, activeSelectionRef, appError, attachmentInputRef, booting, composer, composerAttachments,
+    composerMenuOpen, composerPicker, composerRef, currentUserLabel, dialog, directUnreadCount, editingMessage,
+    handleAttachmentSelection, handleComposerChange, handleComposerShortcut, handleDeleteMessage, handleDialogSubmit,
+    handlePickerInsert, handleProfileUpdate, handleReaction, handleScroll, handleSelectGuildChannel,
+    handleStatusChange, handleSubmitMessage, handleVoiceDeviceChange, handleVoiceLeave, hasMore, headerActionsRef,
+    headerCopy, headerPanel, headerPanelRef, hoveredVoiceChannelId, inboxTab, isVoiceChannel, joinedVoiceChannelId,
+    joinedVoiceChannelIdRef, lastTypingAtRef, listRef, loadBootstrap, loadBootstrapRef, loadMessages,
+    loadingMessages, messageMenuFor, messages, membersPanelVisible, noiseTestActive, profileCard,
+    reactionPickerFor, removeComposerAttachment, replyMentionEnabled, replyTarget, selectedVoiceDevices,
+    setActiveSelection, setAppError, setBooting, setComposer, setComposerAttachments, setComposerMenuOpen,
+    setComposerPicker, setDialog, setEditingMessage, setHeaderPanel, setHoveredVoiceChannelId, setInboxTab,
+    setJoinedVoiceChannelId, setMembersPanelVisible, setMessageMenuFor, setNoiseTestActive, setProfileCard,
+    setReactionPickerFor, setReplyMentionEnabled, setReplyTarget, setSettingsOpen, setTheme, setTypingEvents,
+    setUiNotice, setVoiceDevices, setVoiceMenu, setVoiceSessions, setVoiceState, settingsOpen, showUiNotice,
+    theme, toggleHeaderPanel, toggleVoiceMenu, toggleVoiceState, topbarActionsRef, typingEvents, typingUsers,
+    uiNotice, updateVoiceSetting, uploadingAttachments, voiceDevices, voiceMenu, voiceSessions, voiceState,
+    voiceUserIds, workspace
+  };
+}

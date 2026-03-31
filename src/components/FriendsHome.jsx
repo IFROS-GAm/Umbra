@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 
 import { Avatar } from "./Avatar.jsx";
+import { Icon } from "./Icon.jsx";
 
 function isActiveStatus(status) {
   return status && status !== "offline" && status !== "invisible";
@@ -34,6 +35,7 @@ export function FriendsHome({
 }) {
   const [tab, setTab] = useState("online");
   const [query, setQuery] = useState("");
+  const hasFriends = users.length > 0;
 
   const sortedUsers = useMemo(() => {
     return [...users].sort((a, b) => {
@@ -73,6 +75,9 @@ export function FriendsHome({
     <section className="friends-home">
       <header className="friends-header">
         <div className="friends-title">
+          <span className="friends-title-icon">
+            <Icon name="friends" />
+          </span>
           <strong>Amigos</strong>
           <span className="friends-dot">.</span>
           <span className="friends-tab-chip active">En linea</span>
@@ -101,16 +106,19 @@ export function FriendsHome({
             Pendiente
           </button>
           <button className="primary-button friends-add-button" onClick={() => onShowNotice("Invitaciones y lista de amigos llegan en una siguiente iteracion.")} type="button">
-            Anadir amigos
+            <Icon name="add" />
+            <span>Anadir amigos</span>
           </button>
         </div>
       </header>
 
       <div className="friends-search-row">
         <label className="friends-search">
+          <Icon name="search" />
           <input
+            disabled={!hasFriends}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Buscar"
+            placeholder={hasFriends ? "Buscar" : "No tienes sombras"}
             type="text"
             value={query}
           />
@@ -119,8 +127,16 @@ export function FriendsHome({
 
       {tab === "pending" ? (
         <div className="friends-empty">
-          <h3>Sin solicitudes pendientes</h3>
-          <p>Umbra todavia no tiene sistema de amistad completo conectado al backend.</p>
+          <h3>No hay solicitudes pendientes</h3>
+          <p>Todavia no hay invitaciones ni sombras nuevas esperando respuesta.</p>
+        </div>
+      ) : !hasFriends ? (
+        <div className="friends-empty">
+          <h3>No tienes sombras</h3>
+          <p>
+            Cuando conectes amistades reales en Umbra, aqui apareceran tus conversaciones y accesos
+            directos como en Discord.
+          </p>
         </div>
       ) : (
         <>
@@ -140,6 +156,7 @@ export function FriendsHome({
                     hue={user.avatar_hue}
                     label={user.username}
                     size={44}
+                    src={user.avatar_url}
                     status={user.status}
                   />
                   <div className="friend-copy">
@@ -149,15 +166,23 @@ export function FriendsHome({
                 </button>
 
                 <div className="friend-actions">
-                  <button className="ghost-button icon-only" onClick={() => onOpenDm(user)} type="button">
-                    Chat
-                  </button>
                   <button
+                    aria-label={`Abrir chat con ${user.username}`}
                     className="ghost-button icon-only"
-                    onClick={(event) => onOpenProfileCard(event, user)}
+                    onClick={() => onOpenDm(user)}
+                    title="Abrir chat"
                     type="button"
                   >
-                    Perfil
+                    <Icon name="mail" />
+                  </button>
+                  <button
+                    aria-label={`Abrir perfil de ${user.username}`}
+                    className="ghost-button icon-only"
+                    onClick={(event) => onOpenProfileCard(event, user)}
+                    title="Ver perfil"
+                    type="button"
+                  >
+                    <Icon name="profile" />
                   </button>
                 </div>
               </div>
@@ -165,8 +190,8 @@ export function FriendsHome({
 
             {!filteredUsers.length ? (
               <div className="friends-empty inline">
-                <h3>No hay resultados</h3>
-                <p>Prueba otra busqueda dentro de tus usuarios visibles.</p>
+                <h3>No hay sombras que coincidan</h3>
+                <p>Prueba otra busqueda dentro de tu lista de amigos.</p>
               </div>
             ) : null}
           </div>

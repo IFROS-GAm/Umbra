@@ -51,9 +51,44 @@ export function safePreview(text = "", maxLength = 84) {
   return `${normalized.slice(0, Math.max(0, maxLength - 3))}...`;
 }
 
-export function resolveMentionUserIds(content, profiles) {
+export function isGuildVoiceChannel(channel) {
+  return Boolean(channel?.guild_id) && channel.type === CHANNEL_TYPES.GROUP_DM;
+}
+
+export function buildMessagePreview(content = "", attachments = []) {
+  const textPreview = safePreview(content);
+  if (textPreview) {
+    return textPreview;
+  }
+
+  const attachmentCount = attachments.length || 0;
+  if (!attachmentCount) {
+    return "";
+  }
+
+  if (attachmentCount === 1) {
+    return attachments[0]?.content_type?.startsWith("image/")
+      ? "[imagen]"
+      : `[${attachments[0]?.name || "archivo"}]`;
+  }
+
+  return `[${attachmentCount} adjuntos]`;
+}
+
+export function resolveMentionUserIds(content, profiles, options = {}) {
   const matches = [...content.matchAll(/(^|\s)@([a-zA-Z0-9_-]+)/g)];
   const mentionIds = new Set();
+  const everyoneMentioned = /(^|\s)@everyone\b/i.test(content);
+  const audienceIds = options.audienceUserIds || [];
+  const authorId = options.authorId || null;
+
+  if (everyoneMentioned) {
+    audienceIds.forEach((id) => {
+      if (id && id !== authorId) {
+        mentionIds.add(id);
+      }
+    });
+  }
 
   matches.forEach((match) => {
     const username = match[2]?.toLowerCase();
@@ -158,7 +193,9 @@ export function refreshChannelSummaries(db) {
 
     channel.last_message_id = latestMessage?.id ?? null;
     channel.last_message_author_id = latestMessage?.author_id ?? null;
-    channel.last_message_preview = latestMessage ? safePreview(latestMessage.content) : "";
+    channel.last_message_preview = latestMessage
+      ? buildMessagePreview(latestMessage.content, latestMessage.attachments || [])
+      : "";
     channel.last_message_at = latestMessage?.created_at ?? null;
     channel.updated_at = latestMessage?.created_at ?? channel.updated_at;
   });
@@ -213,6 +250,7 @@ export function buildBootstrapState(db, userId) {
         .map((channel) => {
           const membership = userChannelMembershipById.get(channel.id);
           const unread =
+            !isGuildVoiceChannel(channel) &&
             Boolean(channel.last_message_at) &&
             channel.last_message_author_id !== viewerId &&
             (!membership?.last_read_at ||
@@ -223,6 +261,7 @@ export function buildBootstrapState(db, userId) {
 
           return {
             ...channel,
+            is_voice: isGuildVoiceChannel(channel),
             unread_count: unread,
             last_read_at: membership?.last_read_at ?? null
           };
@@ -241,6 +280,9 @@ export function buildBootstrapState(db, userId) {
             username: profile.username,
             discriminator: profile.discriminator,
             avatar_hue: profile.avatar_hue,
+            avatar_url: profile.avatar_url || "",
+            profile_banner_url: profile.profile_banner_url || "",
+            profile_color: profile.profile_color || "#5865F2",
             status: visibleStatus(profile.status),
             custom_status: profile.custom_status,
             bio: profile.bio,
@@ -304,8 +346,12 @@ export function buildBootstrapState(db, userId) {
           username: profile.username,
           discriminator: profile.discriminator,
           avatar_hue: profile.avatar_hue,
+          avatar_url: profile.avatar_url || "",
+          profile_banner_url: profile.profile_banner_url || "",
+          profile_color: profile.profile_color || "#5865F2",
           status: visibleStatus(profile.status),
-          custom_status: profile.custom_status
+          custom_status: profile.custom_status,
+          bio: profile.bio
         }));
 
       const fallbackName =
@@ -343,12 +389,32 @@ export function buildBootstrapState(db, userId) {
   const defaultGuild = guilds.find((guild) => guild.is_default) || guilds[0] || null;
   const defaultChannel = defaultGuild?.channels[0] ?? null;
   const defaultDm = dms[0] ?? null;
+  const friendIds = [...new Set(
+    (db.friendships || [])
+      .flatMap((friendship) => {
+        if (friendship.user_id === viewerId) {
+          return [friendship.friend_id];
+        }
+
+        if (friendship.friend_id === viewerId) {
+          return [friendship.user_id];
+        }
+
+        return [];
+      })
+      .filter(Boolean)
+  )];
+  const friends = friendIds
+    .map((friendId) => db.profiles.find((profile) => profile.id === friendId))
+    .filter(Boolean)
+    .sort((a, b) => a.username.localeCompare(b.username, "es"));
 
   return {
     current_user: currentUser,
     available_users: [...db.profiles].sort((a, b) =>
       a.username.localeCompare(b.username, "es")
     ),
+    friends,
     guilds,
     dms,
     defaults: {
@@ -400,6 +466,9 @@ export function enrichMessages({ channelId, db, messages, userId }) {
               username: author.username,
               discriminator: author.discriminator,
               avatar_hue: author.avatar_hue,
+              avatar_url: author.avatar_url || "",
+              profile_banner_url: author.profile_banner_url || "",
+              profile_color: author.profile_color || "#5865F2",
               status: visibleStatus(author.status)
             }
           : null,
@@ -413,6 +482,7 @@ export function enrichMessages({ channelId, db, messages, userId }) {
         can_delete:
           message.author_id === userId ||
           hasPermission(permissionBits, PERMISSIONS.MANAGE_MESSAGES),
+        attachments: message.attachments || [],
         is_mentioning_me: message.mention_user_ids.includes(userId),
         reply_preview: replyTarget
           ? {

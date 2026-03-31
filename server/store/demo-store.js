@@ -1,16 +1,16 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { CHANNEL_TYPES, PERMISSIONS } from "../constants.js";
+import { CHANNEL_TYPES, GUILD_CHANNEL_KINDS, PERMISSIONS } from "../constants.js";
 import { createSeedData } from "../seed-data.js";
 import {
   buildBootstrapState,
   computePermissionBits,
   createId,
   enrichMessages,
+  isGuildVoiceChannel,
   refreshChannelSummaries,
   resolveMentionUserIds,
-  safePreview,
   sortByDateDesc,
   upsertChannelMembership
 } from "./helpers.js";
@@ -21,9 +21,37 @@ function createError(message, statusCode = 400) {
   return error;
 }
 
+function sanitizeUsername(candidate = "") {
+  const normalized = candidate
+    .trim()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-zA-Z0-9_-]/g, "")
+    .slice(0, 24);
+
+  return normalized || "umbra_user";
+}
+
+function normalizeProfileColor(candidate, fallback = "#5865F2") {
+  const normalized = String(candidate || "")
+    .trim()
+    .replace(/^([^#])/, "#$1")
+    .toUpperCase();
+
+  if (/^#[0-9A-F]{6}$/.test(normalized)) {
+    return normalized;
+  }
+
+  if (/^#[0-9A-F]{3}$/.test(normalized)) {
+    return `#${normalized[1]}${normalized[1]}${normalized[2]}${normalized[2]}${normalized[3]}${normalized[3]}`;
+  }
+
+  return fallback;
+}
+
 export class DemoStore {
   constructor(filePath) {
     this.filePath = filePath;
+    this.uploadDir = path.join(path.dirname(filePath), "uploads");
     this.db = null;
   }
 
@@ -33,6 +61,7 @@ export class DemoStore {
 
   async init() {
     await fs.mkdir(path.dirname(this.filePath), { recursive: true });
+    await fs.mkdir(this.uploadDir, { recursive: true });
 
     try {
       const raw = await fs.readFile(this.filePath, "utf8");
@@ -42,6 +71,13 @@ export class DemoStore {
       refreshChannelSummaries(this.db);
       await this.save();
     }
+
+    this.db.profiles = (this.db.profiles || []).map((profile) => ({
+      avatar_url: "",
+      profile_banner_url: "",
+      profile_color: "#5865F2",
+      ...profile
+    }));
 
     refreshChannelSummaries(this.db);
     return this;
@@ -180,24 +216,57 @@ export class DemoStore {
     };
   }
 
-  async createMessage({ authorId, channelId, content, replyTo = null }) {
+  async createMessage({
+    attachments = [],
+    authorId,
+    channelId,
+    content,
+    replyMentionUserId = null,
+    replyTo = null
+  }) {
     const channel = this.getChannel(channelId);
     if (!channel) {
       throw createError("Canal no encontrado.", 404);
     }
 
-    const trimmed = content?.trim();
-    if (!trimmed) {
+    if (isGuildVoiceChannel(channel)) {
+      throw createError("No puedes enviar mensajes dentro de un canal de voz.", 400);
+    }
+
+    const trimmed = content?.trim() || "";
+    if (!trimmed && !attachments.length) {
       throw createError("El mensaje no puede estar vacío.", 400);
     }
 
     this.assertCanSend(channel, authorId);
 
+    let replyTarget = null;
     if (replyTo) {
-      const target = this.getMessage(replyTo);
-      if (!target || target.channel_id !== channelId) {
+      replyTarget = this.getMessage(replyTo);
+      if (!replyTarget || replyTarget.channel_id !== channelId) {
         throw createError("El mensaje al que respondes no existe en este canal.", 400);
       }
+    }
+
+    const mentionUserIds = resolveMentionUserIds(trimmed, this.db.profiles, {
+      audienceUserIds: channel.guild_id
+        ? this.db.guild_members
+            .filter((membership) => membership.guild_id === channel.guild_id)
+            .map((membership) => membership.user_id)
+        : this.db.channel_members
+            .filter((membership) => membership.channel_id === channelId && !membership.hidden)
+            .map((membership) => membership.user_id),
+      authorId
+    });
+
+    if (
+      replyTarget &&
+      replyMentionUserId &&
+      replyTarget.author_id === replyMentionUserId &&
+      replyTarget.author_id !== authorId &&
+      !mentionUserIds.includes(replyTarget.author_id)
+    ) {
+      mentionUserIds.push(replyTarget.author_id);
     }
 
     const message = {
@@ -207,8 +276,8 @@ export class DemoStore {
       author_id: authorId,
       content: trimmed,
       reply_to: replyTo,
-      attachments: [],
-      mention_user_ids: resolveMentionUserIds(trimmed, this.db.profiles),
+      attachments,
+      mention_user_ids: mentionUserIds,
       edited_at: null,
       deleted_at: null,
       created_at: new Date().toISOString()
@@ -246,13 +315,22 @@ export class DemoStore {
       throw createError("Solo el autor puede editar este mensaje.", 403);
     }
 
-    const trimmed = content?.trim();
-    if (!trimmed) {
+    const trimmed = content?.trim() || "";
+    if (!trimmed && !(message.attachments || []).length) {
       throw createError("El mensaje editado no puede estar vacío.", 400);
     }
 
     message.content = trimmed;
-    message.mention_user_ids = resolveMentionUserIds(trimmed, this.db.profiles);
+    message.mention_user_ids = resolveMentionUserIds(trimmed, this.db.profiles, {
+      audienceUserIds: message.guild_id
+        ? this.db.guild_members
+            .filter((membership) => membership.guild_id === message.guild_id)
+            .map((membership) => membership.user_id)
+        : this.db.channel_members
+            .filter((membership) => membership.channel_id === message.channel_id && !membership.hidden)
+            .map((membership) => membership.user_id),
+      authorId: userId
+    });
     message.edited_at = new Date().toISOString();
 
     refreshChannelSummaries(this.db);
@@ -435,7 +513,7 @@ export class DemoStore {
     };
   }
 
-  async createChannel({ createdBy, guildId, name, topic = "" }) {
+  async createChannel({ createdBy, guildId, kind = GUILD_CHANNEL_KINDS.TEXT, name, topic = "" }) {
     const guild = this.db.guilds.find((item) => item.id === guildId);
     if (!guild) {
       throw createError("Servidor no encontrado.", 404);
@@ -464,7 +542,7 @@ export class DemoStore {
     const channel = {
       id: createId(),
       guild_id: guildId,
-      type: CHANNEL_TYPES.TEXT,
+      type: kind === GUILD_CHANNEL_KINDS.VOICE ? CHANNEL_TYPES.GROUP_DM : CHANNEL_TYPES.TEXT,
       name: trimmed,
       topic: topic.trim(),
       position: nextPosition,
@@ -549,6 +627,61 @@ export class DemoStore {
     return channel;
   }
 
+  async createGroupDm({ name = "", ownerId, recipientIds }) {
+    const uniqueRecipientIds = [...new Set((recipientIds || []).map((id) => String(id)).filter(Boolean))]
+      .filter((id) => id !== ownerId);
+
+    if (uniqueRecipientIds.length < 2) {
+      const error = new Error("Selecciona al menos dos amigos para crear el grupo.");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const missingUserId = uniqueRecipientIds.find(
+      (userId) => !this.db.profiles.some((profile) => profile.id === userId)
+    );
+
+    if (missingUserId) {
+      const error = new Error("Una de las personas seleccionadas ya no esta disponible.");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const now = new Date().toISOString();
+    const channel = {
+      id: createId(),
+      guild_id: null,
+      type: CHANNEL_TYPES.GROUP_DM,
+      name: String(name || "").trim(),
+      topic: "Grupo directo",
+      position: 0,
+      parent_id: null,
+      created_by: ownerId,
+      last_message_id: null,
+      last_message_author_id: null,
+      last_message_preview: "",
+      last_message_at: null,
+      created_at: now,
+      updated_at: now
+    };
+
+    this.db.channels.push(channel);
+    [ownerId, ...uniqueRecipientIds].forEach((userId) => {
+      this.db.channel_members.push({
+        channel_id: channel.id,
+        user_id: userId,
+        last_read_message_id: null,
+        last_read_at: null,
+        hidden: false,
+        joined_at: now
+      });
+    });
+
+    await this.save();
+
+    return channel;
+  }
+
   async markChannelRead({ channelId, lastReadMessageId = null, userId }) {
     const channel = this.getChannel(channelId);
     if (!channel) {
@@ -586,6 +719,74 @@ export class DemoStore {
     await this.save();
 
     return profile;
+  }
+
+  async updateProfile({
+    avatarHue,
+    avatarUrl,
+    bannerImageUrl,
+    bio,
+    customStatus,
+    profileColor,
+    userId,
+    username
+  }) {
+    const profile = this.db.profiles.find((item) => item.id === userId);
+    if (!profile) {
+      throw createError("Usuario no encontrado.", 404);
+    }
+
+    const nextUsername = sanitizeUsername(username);
+    const duplicate = this.db.profiles.find(
+      (item) => item.id !== userId && item.username.toLowerCase() === nextUsername.toLowerCase()
+    );
+
+    if (duplicate) {
+      throw createError("Ese nombre de usuario ya esta en uso.", 400);
+    }
+
+    profile.username = nextUsername;
+    profile.bio = String(bio || "").trim().slice(0, 240);
+    profile.custom_status = String(customStatus || "").trim().slice(0, 80);
+    profile.avatar_hue = Math.max(0, Math.min(360, Number(avatarHue) || 220));
+    if (avatarUrl !== undefined) {
+      profile.avatar_url = String(avatarUrl || "").trim();
+    }
+    if (bannerImageUrl !== undefined) {
+      profile.profile_banner_url = String(bannerImageUrl || "").trim();
+    }
+    profile.profile_color = normalizeProfileColor(
+      profileColor,
+      profile.profile_color || "#5865F2"
+    );
+    profile.updated_at = new Date().toISOString();
+    await this.save();
+
+    return profile;
+  }
+
+  async storeAttachments(files = []) {
+    const attachments = [];
+
+    for (const file of files) {
+      if (!file?.buffer || !file.mimetype?.startsWith("image/")) {
+        continue;
+      }
+
+      const extension = path.extname(file.originalname || "") || ".png";
+      const objectName = `${createId()}${extension}`;
+      await fs.writeFile(path.join(this.uploadDir, objectName), file.buffer);
+
+      attachments.push({
+        content_type: file.mimetype,
+        name: file.originalname || objectName,
+        path: `/uploads/${objectName}`,
+        size: file.size || file.buffer.length,
+        url: `/uploads/${objectName}`
+      });
+    }
+
+    return attachments;
   }
 
   async syncConnectionPresence({ isOnline, userId }) {

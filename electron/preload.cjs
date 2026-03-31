@@ -1,8 +1,9 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
+const runtimeConfig = ipcRenderer.sendSync("umbra:get-runtime-config");
+
 contextBridge.exposeInMainWorld("umbraDesktop", {
-  isDesktop: true,
-  redirectUri: "umbra://auth/callback",
+  ...runtimeConfig,
   consumeAuthCallback: () => ipcRenderer.invoke("umbra:consume-auth-callback"),
   openExternalAuth: (url) => ipcRenderer.invoke("umbra:open-external", url),
   onAuthCallback: (listener) => {

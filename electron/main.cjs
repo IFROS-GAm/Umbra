@@ -13,6 +13,43 @@ let mainWindow = null;
 let pendingAuthCallback = null;
 let embeddedServer = null;
 
+function trimTrailingSlash(value) {
+  return String(value || "").replace(/\/$/, "");
+}
+
+function getDesktopRuntimeConfig() {
+  if (isDev) {
+    const apiBaseUrl = trimTrailingSlash(
+      process.env.ELECTRON_API_URL ||
+        process.env.VITE_API_URL ||
+        "http://localhost:3030"
+    );
+    const socketBaseUrl = trimTrailingSlash(
+      process.env.ELECTRON_SOCKET_URL ||
+        process.env.VITE_SOCKET_URL ||
+        apiBaseUrl
+    );
+
+    return {
+      apiBaseUrl,
+      isDesktop: true,
+      redirectUri: "umbra://auth/callback",
+      socketBaseUrl
+    };
+  }
+
+  const embeddedBaseUrl = trimTrailingSlash(
+    embeddedServer?.url || `http://127.0.0.1:${serverPort}`
+  );
+
+  return {
+    apiBaseUrl: embeddedBaseUrl,
+    isDesktop: true,
+    redirectUri: "umbra://auth/callback",
+    socketBaseUrl: embeddedBaseUrl
+  };
+}
+
 function getDesktopLogPath() {
   return path.join(process.env.TEMP || process.cwd(), "umbra-electron.log");
 }
@@ -139,6 +176,16 @@ async function createWindow() {
 
   writeDesktopLog("Main window loaded.");
 
+  mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+    writeDesktopLog(
+      `renderer console [${level}] ${sourceId || "renderer"}:${line || 0} ${message}`
+    );
+  });
+
+  mainWindow.webContents.on("render-process-gone", (_event, details) => {
+    writeDesktopLog(`render-process-gone: ${JSON.stringify(details)}`);
+  });
+
   mainWindow.webContents.on("did-finish-load", () => {
     if (pendingAuthCallback) {
       mainWindow.webContents.send("umbra:oauth-callback", pendingAuthCallback);
@@ -192,6 +239,10 @@ ipcMain.handle("umbra:consume-auth-callback", async () => {
   const callbackUrl = pendingAuthCallback;
   pendingAuthCallback = null;
   return callbackUrl;
+});
+
+ipcMain.on("umbra:get-runtime-config", (event) => {
+  event.returnValue = getDesktopRuntimeConfig();
 });
 
 app.whenReady().then(async () => {

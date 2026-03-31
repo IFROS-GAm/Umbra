@@ -2,6 +2,7 @@ node_modules/
 dist/
 .env
 server/data/demo-store.json
+server/data/uploads/
 Links.md
 Links
 *.log

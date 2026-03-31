@@ -1,6 +1,8 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
+import { resolveAssetUrl } from "../api.js";
 import { Avatar } from "./Avatar.jsx";
+import { Icon } from "./Icon.jsx";
 
 const CARD_WIDTH = 340;
 const CARD_GAP = 14;
@@ -45,6 +47,20 @@ function getPosition(anchorRect) {
 }
 
 function buildBannerStyle(profile) {
+  if (profile.profileBannerUrl) {
+    return {
+      backgroundImage: `linear-gradient(180deg, rgba(0, 0, 0, 0.16), rgba(0, 0, 0, 0.62)), url("${resolveAssetUrl(profile.profileBannerUrl)}")`,
+      backgroundPosition: "center",
+      backgroundSize: "cover"
+    };
+  }
+
+  if (profile.profileColor) {
+    return {
+      background: `linear-gradient(135deg, ${profile.profileColor}, hsl(${(profile.avatarHue + 42) % 360} 28% 14%))`
+    };
+  }
+
   if (profile.roleColor) {
     return {
       background: `linear-gradient(135deg, ${profile.roleColor}, hsl(${(profile.avatarHue + 36) % 360} 45% 18%))`
@@ -56,8 +72,58 @@ function buildBannerStyle(profile) {
   };
 }
 
-export function UserProfileCard({ card, onClose, onOpenDm, onOpenSelfProfile }) {
+const STATUS_MENU_OPTIONS = [
+  {
+    description: "Visible para tus contactos y servidores.",
+    icon: "mission",
+    label: "En linea",
+    value: "online"
+  },
+  {
+    description: "Umbra seguira abierta, pero en modo ausente.",
+    icon: "moon",
+    label: "Inactivo",
+    value: "idle"
+  },
+  {
+    description: "Silencia notificaciones y reduce interrupciones.",
+    icon: "close",
+    label: "No molestar",
+    value: "dnd"
+  },
+  {
+    description: "Apareces sin conexion aunque sigues dentro.",
+    icon: "profile",
+    label: "Invisible",
+    value: "invisible"
+  }
+];
+
+function currentStatusLabel(status) {
+  switch (status) {
+    case "online":
+      return "En linea";
+    case "idle":
+      return "Inactivo";
+    case "dnd":
+      return "No molestar";
+    case "invisible":
+      return "Invisible";
+    default:
+      return "Offline";
+  }
+}
+
+export function UserProfileCard({
+  card,
+  onChangeStatus,
+  onClose,
+  onOpenDm,
+  onOpenSelfProfile
+}) {
   const position = useMemo(() => getPosition(card?.anchorRect), [card?.anchorRect]);
+  const [copyMessage, setCopyMessage] = useState("");
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
 
   if (!card) {
     return null;
@@ -65,6 +131,32 @@ export function UserProfileCard({ card, onClose, onOpenDm, onOpenSelfProfile }) 
 
   const profile = card.profile;
   const bannerStyle = buildBannerStyle(profile);
+
+  useEffect(() => {
+    setCopyMessage("");
+    setStatusMenuOpen(false);
+  }, [card?.profile?.id]);
+
+  useEffect(() => {
+    if (!copyMessage) {
+      return undefined;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setCopyMessage("");
+    }, 1800);
+
+    return () => window.clearTimeout(timeout);
+  }, [copyMessage]);
+
+  async function handleCopyId() {
+    try {
+      await navigator.clipboard.writeText(profile.id);
+      setCopyMessage("ID copiado.");
+    } catch {
+      setCopyMessage("No se pudo copiar el ID.");
+    }
+  }
 
   return (
     <div className="profile-popover-layer" onClick={onClose}>
@@ -81,6 +173,7 @@ export function UserProfileCard({ card, onClose, onOpenDm, onOpenSelfProfile }) 
               hue={profile.avatarHue}
               label={profile.displayName || profile.username}
               size={82}
+              src={profile.avatarUrl}
               status={profile.status}
             />
             {profile.customStatus ? (
@@ -147,7 +240,8 @@ export function UserProfileCard({ card, onClose, onOpenDm, onOpenSelfProfile }) 
           <div className="user-profile-action-row">
             {profile.isCurrentUser ? (
               <button className="primary-button" onClick={onOpenSelfProfile} type="button">
-                Editar perfil
+                <Icon name="edit" />
+                <span>Editar perfil</span>
               </button>
             ) : (
               <button
@@ -155,19 +249,86 @@ export function UserProfileCard({ card, onClose, onOpenDm, onOpenSelfProfile }) 
                 onClick={() => onOpenDm(profile)}
                 type="button"
               >
-                Mensaje directo
+                <Icon name="mail" />
+                <span>Mensaje directo</span>
               </button>
             )}
-            <button className="ghost-button" onClick={onClose} type="button">
-              Cerrar
+            <button
+              aria-label="Cerrar perfil"
+              className="ghost-button icon-only"
+              onClick={onClose}
+              title="Cerrar"
+              type="button"
+            >
+              <Icon name="close" />
             </button>
           </div>
 
-          {!profile.isCurrentUser ? (
+          {profile.isCurrentUser ? (
+            <>
+              <button
+                className="user-profile-status-trigger"
+                onClick={() => setStatusMenuOpen((previous) => !previous)}
+                type="button"
+              >
+                <span className="user-profile-status-main">
+                  <span className={`user-profile-status-dot ${profile.status}`} />
+                  <span>
+                    <strong>{currentStatusLabel(profile.status)}</strong>
+                    <small>{profile.customStatus || "Sin estado personalizado."}</small>
+                  </span>
+                </span>
+                <Icon name="chevronDown" size={16} />
+              </button>
+
+              {statusMenuOpen ? (
+                <div className="user-profile-status-menu">
+                  {STATUS_MENU_OPTIONS.map((item) => (
+                    <button
+                      className={`user-profile-status-option ${
+                        profile.status === item.value ? "active" : ""
+                      }`}
+                      key={item.value}
+                      onClick={async () => {
+                        await onChangeStatus(item.value);
+                        setStatusMenuOpen(false);
+                      }}
+                      type="button"
+                    >
+                      <span className={`user-profile-status-dot ${item.value}`} />
+                      <span className="user-profile-status-option-copy">
+                        <strong>{item.label}</strong>
+                        <small>{item.description}</small>
+                      </span>
+                      <Icon name="arrowRight" size={14} />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+
+              <div className="user-profile-utility-list">
+                <button className="user-profile-utility-row" onClick={onOpenSelfProfile} type="button">
+                  <span className="user-profile-utility-copy">
+                    <Icon name="profile" />
+                    <span>Cambiar cuentas</span>
+                  </span>
+                  <Icon name="arrowRight" size={14} />
+                </button>
+                <button className="user-profile-utility-row" onClick={handleCopyId} type="button">
+                  <span className="user-profile-utility-copy">
+                    <Icon name="server" />
+                    <span>{copyMessage || "Copiar ID del usuario"}</span>
+                  </span>
+                  <Icon name="arrowRight" size={14} />
+                </button>
+              </div>
+            </>
+          ) : (
             <button className="user-profile-message-box" onClick={() => onOpenDm(profile)} type="button">
-              Enviar un mensaje a @{profile.username}
+              <Icon name="mail" />
+              <span>Enviar un mensaje a @{profile.username}</span>
             </button>
-          ) : null}
+          )}
         </div>
       </aside>
     </div>

@@ -1,13 +1,34 @@
-const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+function getApiBase() {
+  if (typeof window !== "undefined" && window.umbraDesktop?.apiBaseUrl) {
+    return String(window.umbraDesktop.apiBaseUrl).replace(/\/$/, "");
+  }
+
+  return (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+}
 
 let getAccessToken = () => null;
 
 function buildUrl(path) {
-  if (!API_BASE) {
+  const apiBase = getApiBase();
+
+  if (!apiBase) {
     return path;
   }
 
-  return `${API_BASE}${path}`;
+  return `${apiBase}${path}`;
+}
+
+export function resolveAssetUrl(path) {
+  if (!path) {
+    return "";
+  }
+
+  if (/^(https?:|data:|blob:)/i.test(path)) {
+    return path;
+  }
+
+  const normalizedPath = String(path).startsWith("/") ? path : `/${path}`;
+  return buildUrl(normalizedPath);
 }
 
 export function configureApiAuth(tokenGetter) {
@@ -60,13 +81,32 @@ export const api = {
 
     return request(`/api/channels/${channelId}/messages?${params.toString()}`);
   },
-  createMessage({ channelId, content, replyTo }) {
+  createMessage({
+    attachments = [],
+    channelId,
+    content,
+    replyMentionUserId = null,
+    replyTo
+  }) {
     return request(`/api/channels/${channelId}/messages`, {
       method: "POST",
       body: JSON.stringify({
+        attachments,
         content,
+        replyMentionUserId,
         replyTo
       })
+    });
+  },
+  uploadAttachments(files) {
+    const formData = new FormData();
+    [...files].forEach((file) => {
+      formData.append("files", file);
+    });
+
+    return request("/api/attachments", {
+      method: "POST",
+      body: formData
     });
   },
   updateMessage({ content, messageId }) {
@@ -99,10 +139,11 @@ export const api = {
       })
     });
   },
-  createChannel({ guildId, name, topic }) {
+  createChannel({ guildId, kind = "text", name, topic }) {
     return request(`/api/guilds/${guildId}/channels`, {
       method: "POST",
       body: JSON.stringify({
+        kind,
         name,
         topic
       })
@@ -116,11 +157,42 @@ export const api = {
       })
     });
   },
+  createGroupDm({ name = "", recipientIds = [] }) {
+    return request("/api/dms", {
+      method: "POST",
+      body: JSON.stringify({
+        name,
+        recipientIds
+      })
+    });
+  },
   updateStatus({ status }) {
     return request("/api/users/me/status", {
       method: "PATCH",
       body: JSON.stringify({
         status
+      })
+    });
+  },
+  updateProfile({
+    avatarHue,
+    avatarUrl,
+    bannerImageUrl,
+    bio,
+    customStatus,
+    profileColor,
+    username
+  }) {
+    return request("/api/users/me/profile", {
+      method: "PATCH",
+      body: JSON.stringify({
+        avatarHue,
+        avatarUrl,
+        bannerImageUrl,
+        bio,
+        customStatus,
+        profileColor,
+        username
       })
     });
   },

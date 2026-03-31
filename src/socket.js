@@ -1,10 +1,26 @@
 import { io } from "socket.io-client";
 
 let socket;
+let socketUrl = "";
+
+function getSocketUrl() {
+  if (typeof window !== "undefined" && window.umbraDesktop?.socketBaseUrl) {
+    return window.umbraDesktop.socketBaseUrl;
+  }
+
+  return import.meta.env.VITE_SOCKET_URL || window.location.origin;
+}
 
 export function getSocket(accessToken) {
-  if (!socket) {
-    socket = io(import.meta.env.VITE_SOCKET_URL || window.location.origin, {
+  const nextSocketUrl = getSocketUrl();
+
+  if (!socket || socketUrl !== nextSocketUrl) {
+    if (socket) {
+      socket.disconnect();
+    }
+
+    socketUrl = nextSocketUrl;
+    socket = io(nextSocketUrl, {
       autoConnect: false,
       auth: accessToken ? { token: accessToken } : {},
       transports: ["websocket", "polling"]

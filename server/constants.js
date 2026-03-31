@@ -4,6 +4,11 @@ export const CHANNEL_TYPES = Object.freeze({
   GROUP_DM: "group_dm"
 });
 
+export const GUILD_CHANNEL_KINDS = Object.freeze({
+  TEXT: "text",
+  VOICE: "voice"
+});
+
 export const USER_STATUSES = Object.freeze([
   "online",
   "idle",
@@ -55,6 +60,9 @@ export const DEMO_IDS = Object.freeze({
     ifrosGeneral: "aaaaaaa1-3000-4000-8000-aaaaaaaaaaa1",
     ifrosRoadmap: "aaaaaaa1-3000-4000-8000-aaaaaaaaaaa2",
     ifrosSupport: "aaaaaaa1-3000-4000-8000-aaaaaaaaaaa3",
+    ifrosLounge: "aaaaaaa1-3000-4000-8000-aaaaaaaaaaa4",
+    ifrosStudyOne: "aaaaaaa1-3000-4000-8000-aaaaaaaaaaa5",
+    ifrosStudyTwo: "aaaaaaa1-3000-4000-8000-aaaaaaaaaaa6",
     designShowcase: "bbbbbbb2-3000-4000-8000-bbbbbbbbbbb1",
     designResources: "bbbbbbb2-3000-4000-8000-bbbbbbbbbbb2",
     dmAnaBruno: "ddddddd1-3000-4000-8000-ddddddddddd1",

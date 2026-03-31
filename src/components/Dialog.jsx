@@ -1,23 +1,88 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+
+import { Icon } from "./Icon.jsx";
+
+const GUILD_TEMPLATES = [
+  { id: "games", icon: "games", label: "Juegos", description: "Raids, squads y noches de party." },
+  { id: "friends", icon: "friends", label: "Amigos", description: "Servidor social pequeno y directo." },
+  { id: "study", icon: "study", label: "Grupo de estudio", description: "Clases, tareas y seguimiento." },
+  { id: "community", icon: "community", label: "Comunidad local", description: "Eventos, anuncios y equipo." }
+];
+
+function getDialogMeta(type) {
+  switch (type) {
+    case "guild":
+      return {
+        heroIcon: "server",
+        subtitle: "Crea un servidor con identidad propia y un punto de arranque claro.",
+        title: "Crea tu servidor"
+      };
+    case "channel":
+      return {
+        heroIcon: "channel",
+        subtitle: "Abre un nuevo espacio de texto y organiza mejor el flujo del equipo.",
+        title: "Nuevo canal"
+      };
+    case "dm_group":
+      return {
+        heroIcon: "friends",
+        subtitle: "Crea un grupo privado dentro de mensajes directos usando solo gente de tu lista.",
+        title: "Nuevo grupo"
+      };
+    default:
+      return {
+        heroIcon: "mail",
+        subtitle: "Abre una conversacion directa sin salir del workspace.",
+        title: "Nuevo mensaje directo"
+      };
+  }
+}
 
 export function Dialog({ dialog, onClose, onSubmit, users }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [kind, setKind] = useState("text");
   const [topic, setTopic] = useState("");
   const [recipientId, setRecipientId] = useState(
     users.find((user) => user.id !== dialog.currentUserId)?.id || ""
   );
+  const [recipientIds, setRecipientIds] = useState([]);
+  const [friendQuery, setFriendQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const meta = useMemo(() => getDialogMeta(dialog.type), [dialog.type]);
+  const filteredFriendUsers = useMemo(() => {
+    const normalizedQuery = friendQuery.trim().toLowerCase();
+    if (!normalizedQuery) {
+      return users;
+    }
+
+    return users.filter((user) =>
+      `${user.display_name || ""} ${user.username || ""} ${user.custom_status || ""}`
+        .toLowerCase()
+        .includes(normalizedQuery)
+    );
+  }, [friendQuery, users]);
 
   useEffect(() => {
     setName("");
     setDescription("");
+    setKind("text");
     setTopic("");
     setError("");
     setBusy(false);
     setRecipientId(users.find((user) => user.id !== dialog.currentUserId)?.id || "");
+    setRecipientIds([]);
+    setFriendQuery("");
   }, [dialog, users]);
+
+  function toggleRecipient(userId) {
+    setRecipientIds((previous) =>
+      previous.includes(userId)
+        ? previous.filter((item) => item !== userId)
+        : [...previous, userId]
+    );
+  }
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -25,10 +90,16 @@ export function Dialog({ dialog, onClose, onSubmit, users }) {
     setError("");
 
     try {
+      if (dialog.type === "dm_group" && recipientIds.length < 2) {
+        throw new Error("Selecciona al menos dos amigos para crear el grupo.");
+      }
+
       await onSubmit({
         description,
+        kind,
         name,
         recipientId,
+        recipientIds,
         topic
       });
     } catch (submitError) {
@@ -37,66 +108,218 @@ export function Dialog({ dialog, onClose, onSubmit, users }) {
     }
   }
 
-  const title =
-    dialog.type === "guild"
-      ? "Crear servidor"
-      : dialog.type === "channel"
-        ? "Crear canal"
-        : "Nuevo DM";
-
   return (
     <div className="dialog-backdrop" onClick={onClose}>
       <div className="dialog-card" onClick={(event) => event.stopPropagation()}>
         <div className="dialog-header">
-          <h3>{title}</h3>
-          <button className="ghost-button" onClick={onClose} type="button">
-            Cerrar
+          <button
+            aria-label="Cerrar modal"
+            className="ghost-button icon-only dialog-close-button"
+            onClick={onClose}
+            title="Cerrar"
+            type="button"
+          >
+            <Icon name="close" />
           </button>
+
+          <div className="dialog-hero-icon">
+            <Icon name={meta.heroIcon} size={28} />
+          </div>
+
+          <h3>{meta.title}</h3>
+          <p>{meta.subtitle}</p>
         </div>
 
+        {dialog.type === "guild" ? (
+          <div className="dialog-template-list">
+            {GUILD_TEMPLATES.map((template) => (
+              <button
+                className="dialog-template-card"
+                key={template.id}
+                onClick={() => {
+                  setName((previous) => previous || `Servidor de ${template.label}`);
+                  setDescription((previous) => previous || template.description);
+                }}
+                type="button"
+              >
+                <span className="dialog-template-icon">
+                  <Icon name={template.icon} />
+                </span>
+                <div>
+                  <strong>{template.label}</strong>
+                  <span>{template.description}</span>
+                </div>
+                <Icon name="arrowRight" />
+              </button>
+            ))}
+          </div>
+        ) : null}
+
         <form className="dialog-form" onSubmit={handleSubmit}>
-          {dialog.type !== "dm" ? (
+          {dialog.type === "guild" || dialog.type === "channel" ? (
             <>
-              <label>
-                <span>{dialog.type === "guild" ? "Nombre del servidor" : "Nombre del canal"}</span>
+              <label className="dialog-field">
+                <span className="dialog-field-label">
+                  <Icon name={dialog.type === "guild" ? "server" : "channel"} />
+                  <em>{dialog.type === "guild" ? "Nombre del servidor" : "Nombre del canal"}</em>
+                </span>
                 <input
                   autoFocus
+                  maxLength={40}
                   onChange={(event) => setName(event.target.value)}
-                  placeholder={dialog.type === "guild" ? "Umbra Ops" : "announcements"}
+                  placeholder={dialog.type === "guild" ? "Umbra Core" : "general"}
                   required
                   value={name}
                 />
               </label>
 
               {dialog.type === "guild" ? (
-                <label>
-                  <span>Descripcion</span>
+                <label className="dialog-field">
+                  <span className="dialog-field-label">
+                    <Icon name="sparkles" />
+                    <em>Descripcion</em>
+                  </span>
                   <textarea
+                    maxLength={180}
                     onChange={(event) => setDescription(event.target.value)}
-                    placeholder="Que objetivo tendra este servidor"
+                    placeholder="Que energia o funcion tendra este servidor"
                     rows={3}
                     value={description}
                   />
                 </label>
               ) : (
-                <label>
-                  <span>Tema del canal</span>
-                  <textarea
-                    onChange={(event) => setTopic(event.target.value)}
-                    placeholder="Contexto rapido para el equipo"
-                    rows={3}
-                    value={topic}
-                  />
-                </label>
+                <>
+                  <div className="dialog-field">
+                    <span className="dialog-field-label">
+                      <Icon name="channel" />
+                      <em>Tipo de canal</em>
+                    </span>
+                    <div className="dialog-segmented-control">
+                      <button
+                        className={kind === "text" ? "active" : ""}
+                        onClick={() => setKind("text")}
+                        type="button"
+                      >
+                        <Icon name="channel" size={16} />
+                        <span>Texto</span>
+                      </button>
+                      <button
+                        className={kind === "voice" ? "active" : ""}
+                        onClick={() => setKind("voice")}
+                        type="button"
+                      >
+                        <Icon name="headphones" size={16} />
+                        <span>Voz</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <label className="dialog-field">
+                    <span className="dialog-field-label">
+                      <Icon name={kind === "voice" ? "headphones" : "threads"} />
+                      <em>{kind === "voice" ? "Descripcion del canal" : "Tema del canal"}</em>
+                    </span>
+                    <textarea
+                      maxLength={180}
+                      onChange={(event) => setTopic(event.target.value)}
+                      placeholder={
+                        kind === "voice"
+                          ? "Que ocurrira dentro de este canal de voz"
+                          : "Contexto rapido para el equipo"
+                      }
+                      rows={3}
+                      value={topic}
+                    />
+                  </label>
+                </>
               )}
             </>
+          ) : dialog.type === "dm_group" ? (
+            <>
+              <label className="dialog-field">
+                <span className="dialog-field-label">
+                  <Icon name="friends" />
+                  <em>Nombre del grupo</em>
+                </span>
+                <input
+                  autoFocus
+                  maxLength={40}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="Grupo de madrugada"
+                  value={name}
+                />
+              </label>
+
+              <div className="dialog-field">
+                <span className="dialog-field-label">
+                  <Icon name="community" />
+                  <em>Sombras disponibles</em>
+                </span>
+                {users.length ? (
+                  <>
+                    <div className="dialog-field-helper">
+                      Selecciona al menos dos sombras. Si no nombras el grupo, Umbra mostrara a los integrantes.
+                    </div>
+                    <label className="dialog-friend-search">
+                      <Icon name="search" size={16} />
+                      <input
+                        onChange={(event) => setFriendQuery(event.target.value)}
+                        placeholder="Buscar sombras"
+                        type="text"
+                        value={friendQuery}
+                      />
+                    </label>
+                    <div className="dialog-selected-count">{recipientIds.length} sombras elegidas</div>
+                    <div className="dialog-friend-list discord-like">
+                      {filteredFriendUsers.map((user) => {
+                        const selected = recipientIds.includes(user.id);
+                        return (
+                          <button
+                            className={`dialog-friend-option ${selected ? "selected" : ""}`}
+                            key={user.id}
+                            onClick={() => toggleRecipient(user.id)}
+                            type="button"
+                          >
+                            <span className="dialog-friend-check" aria-hidden="true">
+                              {selected ? <Icon name="check" size={14} /> : null}
+                            </span>
+                            <span className="dialog-friend-copy">
+                              <strong>{user.display_name || user.username}</strong>
+                              <small>
+                                @{user.username}
+                                {user.custom_status ? ` - ${user.custom_status}` : ""}
+                              </small>
+                            </span>
+                          </button>
+                        );
+                      })}
+
+                      {!filteredFriendUsers.length ? (
+                        <div className="dialog-friends-empty">
+                          <strong>No encontramos sombras</strong>
+                          <span>Prueba otra busqueda dentro de tu lista de amigos.</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  </>
+                ) : (
+                  <div className="dialog-friends-empty prominent">
+                    <strong>No tienes sombras</strong>
+                    <span>
+                      Cuando tengas amistades reales en Umbra, aqui podras reunirlas en un grupo DM
+                      como en Discord.
+                    </span>
+                  </div>
+                )}
+              </div>
+            </>
           ) : (
-            <label>
-              <span>Persona</span>
-              <select
-                onChange={(event) => setRecipientId(event.target.value)}
-                value={recipientId}
-              >
+            <label className="dialog-field">
+              <span className="dialog-field-label">
+                <Icon name="friends" />
+                <em>Persona</em>
+              </span>
+              <select onChange={(event) => setRecipientId(event.target.value)} value={recipientId}>
                 {users
                   .filter((user) => user.id !== dialog.currentUserId)
                   .map((user) => (
@@ -110,9 +333,22 @@ export function Dialog({ dialog, onClose, onSubmit, users }) {
 
           {error ? <p className="form-error">{error}</p> : null}
 
-          <button className="primary-button" disabled={busy} type="submit">
-            {busy ? "Guardando..." : "Confirmar"}
-          </button>
+          <div className="dialog-actions">
+            <button className="ghost-button" onClick={onClose} type="button">
+              <Icon name="close" />
+              <span>Cancelar</span>
+            </button>
+            <button
+              className="primary-button"
+              disabled={busy || (dialog.type === "dm_group" && users.length === 0)}
+              type="submit"
+            >
+              <Icon
+                name={dialog.type === "dm_group" ? "friends" : dialog.type === "dm" ? "mail" : "add"}
+              />
+              <span>{busy ? "Guardando..." : "Confirmar"}</span>
+            </button>
+          </div>
         </form>
       </div>
     </div>
