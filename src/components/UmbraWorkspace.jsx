@@ -272,6 +272,9 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
   const inboxCount =
     inboxItems.unread.length + inboxItems.mentions.length;
   const currentInboxItems = inboxItems[inboxTab] || [];
+  const availableUsersById = Object.fromEntries(
+    (workspace.available_users || []).map((user) => [user.id, user])
+  );
   const voiceUsers = voiceUserIds
     .map((userId) => {
       if (workspace.current_user.id === userId) {
@@ -280,7 +283,7 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
 
       return (
         activeGuild?.members.find((member) => member.id === userId) ||
-        workspace.available_users.find((user) => user.id === userId) ||
+        availableUsersById[userId] ||
         null
       );
     })
@@ -300,7 +303,7 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
 
           return (
             activeGuild?.members.find((member) => member.id === userId) ||
-            workspace.available_users.find((user) => user.id === userId) ||
+            availableUsersById[userId] ||
             null
           );
         })
@@ -878,6 +881,7 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
                   typingUsers={typingUsers}
                   uiNotice={uiNotice}
                   uploadingAttachments={uploadingAttachments}
+                  availableUsersById={availableUsersById}
                   workspace={workspace}
                 />
               )}

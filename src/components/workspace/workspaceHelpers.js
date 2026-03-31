@@ -153,3 +153,156 @@ export function fallbackDeviceLabel(kind, index) {
 export function resolveGuildIcon(guild) {
   return guild?.icon_url || guild?.image_url || guild?.avatar_url || "";
 }
+
+function computeChannelUnread(channel, currentUserId) {
+  if (
+    !channel?.last_message_at ||
+    channel.last_message_author_id === currentUserId ||
+    channel.is_voice
+  ) {
+    return 0;
+  }
+
+  const lastReadTime = channel.last_read_at
+    ? new Date(channel.last_read_at).getTime()
+    : 0;
+  const lastMessageTime = new Date(channel.last_message_at).getTime();
+  return lastReadTime < lastMessageTime ? 1 : 0;
+}
+
+function sortDmsByRecent(dms = []) {
+  return [...dms].sort((a, b) => {
+    const aDate = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+    const bDate = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+    return bDate - aDate;
+  });
+}
+
+export function applyChannelPreviewToWorkspace(workspace, preview) {
+  if (!workspace || !preview?.id) {
+    return workspace;
+  }
+
+  const currentUserId = workspace.current_user?.id;
+  let changed = false;
+
+  const guilds = workspace.guilds.map((guild) => {
+    let guildTouched = false;
+    const channels = guild.channels.map((channel) => {
+      if (channel.id !== preview.id) {
+        return channel;
+      }
+
+      guildTouched = true;
+      changed = true;
+      const nextChannel = {
+        ...channel,
+        ...preview
+      };
+      nextChannel.unread_count = computeChannelUnread(nextChannel, currentUserId);
+      return nextChannel;
+    });
+
+    if (!guildTouched) {
+      return guild;
+    }
+
+    return {
+      ...guild,
+      channels,
+      unread_count: channels.reduce(
+        (sum, channel) => sum + Number(channel.unread_count || 0),
+        0
+      )
+    };
+  });
+
+  const dms = sortDmsByRecent(
+    workspace.dms.map((dm) => {
+      if (dm.id !== preview.id) {
+        return dm;
+      }
+
+      changed = true;
+      const nextDm = {
+        ...dm,
+        ...preview
+      };
+      nextDm.unread_count = computeChannelUnread(nextDm, currentUserId);
+      return nextDm;
+    })
+  );
+
+  if (!changed) {
+    return workspace;
+  }
+
+  return {
+    ...workspace,
+    guilds,
+    dms
+  };
+}
+
+export function markChannelReadInWorkspace(workspace, { channelId, lastReadAt }) {
+  if (!workspace || !channelId) {
+    return workspace;
+  }
+
+  let changed = false;
+
+  const guilds = workspace.guilds.map((guild) => {
+    let guildTouched = false;
+    const channels = guild.channels.map((channel) => {
+      if (channel.id !== channelId) {
+        return channel;
+      }
+
+      guildTouched = true;
+      changed = true;
+      return {
+        ...channel,
+        last_read_at: lastReadAt || channel.last_message_at || channel.last_read_at,
+        unread_count: 0
+      };
+    });
+
+    if (!guildTouched) {
+      return guild;
+    }
+
+    return {
+      ...guild,
+      channels,
+      unread_count: channels.reduce(
+        (sum, channel) => sum + Number(channel.unread_count || 0),
+        0
+      )
+    };
+  });
+
+  const dms = sortDmsByRecent(
+    workspace.dms.map((dm) => {
+      if (dm.id !== channelId) {
+        return dm;
+      }
+
+      changed = true;
+      return {
+        ...dm,
+        last_read_at: lastReadAt || dm.last_message_at || dm.last_read_at,
+        unread_count: 0
+      };
+    })
+  );
+
+  if (!changed) {
+    return workspace;
+  }
+
+  return {
+    ...workspace,
+    guilds,
+    dms
+  };
+}

@@ -23,7 +23,10 @@ export function getSocket(accessToken) {
     socket = io(nextSocketUrl, {
       autoConnect: false,
       auth: accessToken ? { token: accessToken } : {},
-      transports: ["websocket", "polling"]
+      transports: ["websocket"],
+      upgrade: false,
+      rememberUpgrade: true,
+      timeout: 5000
     });
   }
 

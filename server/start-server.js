@@ -93,7 +93,7 @@ function extractBearerToken(value) {
   return match ? match[1] : String(value);
 }
 
-async function resolveViewer(store, token) {
+async function resolveViewer(store, token, authCache = null) {
   if (store.getMode() !== "supabase") {
     const userId = await store.getDefaultUserId();
     if (!userId) {
@@ -110,13 +110,38 @@ async function resolveViewer(store, token) {
     throw createHttpError("Unauthorized", 401);
   }
 
+  const cachedEntry = authCache?.get(token);
+  if (cachedEntry && cachedEntry.expiresAt > Date.now()) {
+    return cachedEntry.value;
+  }
+
+  if (cachedEntry) {
+    authCache.delete(token);
+  }
+
   const authUser = await store.verifyAccessToken(token);
   const viewer = await store.ensureProfileFromAuthUser(authUser);
 
-  return {
+  const resolved = {
     authUser,
     viewer
   };
+
+  if (authCache) {
+    authCache.set(token, {
+      expiresAt: Date.now() + Number(process.env.AUTH_CACHE_TTL_MS || 15_000),
+      value: resolved
+    });
+
+    if (authCache.size > Number(process.env.AUTH_CACHE_MAX || 300)) {
+      const oldestKey = authCache.keys().next().value;
+      if (oldestKey) {
+        authCache.delete(oldestKey);
+      }
+    }
+  }
+
+  return resolved;
 }
 
 function createCloseHandle({ io, server }) {
@@ -169,8 +194,13 @@ export async function startServer(options = {}) {
   const server = http.createServer(app);
   const io = new Server(server, {
     cors: createCorsOptions(allowedOrigins),
-    serveClient: false
+    serveClient: false,
+    transports: ["websocket"],
+    allowUpgrades: false,
+    httpCompression: false,
+    perMessageDeflate: false
   });
+  const authCache = new Map();
   const connectedUsers = new Map();
   const voiceSessions = new Map();
 
@@ -209,7 +239,8 @@ export async function startServer(options = {}) {
     try {
       const auth = await resolveViewer(
         store,
-        extractBearerToken(req.get("authorization"))
+        extractBearerToken(req.get("authorization")),
+        authCache
       );
 
       req.authUser = auth.authUser;
@@ -226,6 +257,17 @@ export async function startServer(options = {}) {
 
   function emitNavigationUpdate(payload = {}) {
     io.emit("navigation:update", payload);
+  }
+
+  async function emitChannelPreview(channelId, preview) {
+    if (!channelId || !preview) {
+      return;
+    }
+
+    const audienceUserIds = await store.listChannelAudienceIds(channelId);
+    for (const audienceUserId of audienceUserIds) {
+      io.to(`user:${audienceUserId}`).emit("channel:preview", { preview });
+    }
   }
 
   function buildVoicePayload(channelId) {
@@ -323,10 +365,7 @@ export async function startServer(options = {}) {
         message,
         preview
       });
-      emitNavigationUpdate({
-        channelId: req.params.channelId,
-        type: "message:create"
-      });
+      emitChannelPreview(req.params.channelId, preview).catch(() => {});
 
       res.status(201).json({ message, preview });
     } catch (error) {
@@ -365,10 +404,7 @@ export async function startServer(options = {}) {
         message,
         preview
       });
-      emitNavigationUpdate({
-        channelId: message.channel_id,
-        type: "message:update"
-      });
+      emitChannelPreview(message.channel_id, preview).catch(() => {});
 
       res.json({ message, preview });
     } catch (error) {
@@ -388,10 +424,7 @@ export async function startServer(options = {}) {
         ...payload,
         preview
       });
-      emitNavigationUpdate({
-        channelId: payload.channel_id,
-        type: "message:delete"
-      });
+      emitChannelPreview(payload.channel_id, preview).catch(() => {});
 
       res.json({
         ok: true,
@@ -581,7 +614,8 @@ export async function startServer(options = {}) {
         store,
         extractBearerToken(
           socket.handshake.auth?.token || socket.handshake.headers?.authorization
-        )
+        ),
+        authCache
       );
 
       socket.data.authUser = auth.authUser;
@@ -650,25 +684,16 @@ export async function startServer(options = {}) {
         return;
       }
 
-      try {
-        const canAccess = await store.canAccessChannel({
-          channelId,
-          userId: viewer.id
-        });
-
-        if (!canAccess) {
-          return;
-        }
-
-        socket.to(`channel:${channelId}`).emit("typing:update", {
-          channelId,
-          userId: viewer.id,
-          username: viewer.username,
-          expires_at: Date.now() + 5000
-        });
-      } catch {
-        // Ignore transient typing errors.
+      if (socket.data.activeChannelId !== channelId) {
+        return;
       }
+
+      socket.to(`channel:${channelId}`).emit("typing:update", {
+        channelId,
+        userId: viewer.id,
+        username: viewer.username,
+        expires_at: Date.now() + 5000
+      });
     });
 
     socket.on("voice:join", async ({ channelId }) => {

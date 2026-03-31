@@ -60,6 +60,7 @@ export function MessageStage({
   typingUsers,
   uiNotice,
   uploadingAttachments,
+  availableUsersById,
   workspace
 }) {
   async function copyToClipboard(value, successMessage) {
@@ -123,7 +124,7 @@ export function MessageStage({
   function getMessageAuthor(message) {
     return {
       ...message.author,
-      bio: workspace.available_users.find((item) => item.id === message.author?.id)?.bio
+      bio: availableUsersById?.[message.author?.id]?.bio
     };
   }
 

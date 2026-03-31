@@ -334,8 +334,7 @@ export class SupabaseStore {
   }
 
   async loadBootstrapSnapshot(userId) {
-    const [profiles, guildMemberships, dmMemberships] = await Promise.all([
-      expectData(this.client.from("profiles").select("*")),
+    const [guildMemberships, dmMemberships] = await Promise.all([
       expectData(
         this.client.from("guild_members").select("*").eq("user_id", userId)
       ),
@@ -382,6 +381,21 @@ export class SupabaseStore {
       ? await expectData(
           this.client.from("channel_members").select("*").in("channel_id", channelIds)
         )
+      : [];
+    const relatedUserIds = [
+      ...new Set(
+        [
+          userId,
+          ...guildMembers.map((member) => member.user_id),
+          ...channelMembers.map((member) => member.user_id),
+          ...guilds.map((guild) => guild.owner_id),
+          ...channels.map((channel) => channel.created_by),
+          ...channels.map((channel) => channel.last_message_author_id)
+        ].filter(Boolean)
+      )
+    ];
+    const profiles = relatedUserIds.length
+      ? await expectData(this.client.from("profiles").select("*").in("id", relatedUserIds))
       : [];
 
     const snapshot = {

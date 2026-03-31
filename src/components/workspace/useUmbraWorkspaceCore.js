@@ -3,7 +3,12 @@ import { useEffect, useRef, useState } from "react";
 import { api, configureApiAuth } from "../../api.js";
 import { getSocket } from "../../socket.js";
 import { findChannelInSession, resolveSelection } from "../../utils.js";
-import { fallbackDeviceLabel, renderHeaderCopy } from "./workspaceHelpers.js";
+import {
+  applyChannelPreviewToWorkspace,
+  fallbackDeviceLabel,
+  markChannelReadInWorkspace,
+  renderHeaderCopy
+} from "./workspaceHelpers.js";
 
 export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
   const [workspace, setWorkspace] = useState(null);
@@ -70,6 +75,8 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
   const headerPanelRef = useRef(null);
   const topbarActionsRef = useRef(null);
   const lastTypingAtRef = useRef(0);
+  const pendingReadRef = useRef(null);
+  const readReceiptTimeoutRef = useRef(null);
   const activeSelectionRef = useRef(activeSelection);
   const loadBootstrapRef = useRef(null);
   const accessTokenRef = useRef(accessToken);
@@ -119,6 +126,48 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
 
   loadBootstrapRef.current = loadBootstrap;
 
+  function queueMarkRead({ channelId, lastReadAt, lastReadMessageId }) {
+    if (!channelId || !lastReadMessageId) {
+      return;
+    }
+
+    setWorkspace((previous) =>
+      markChannelReadInWorkspace(previous, {
+        channelId,
+        lastReadAt
+      })
+    );
+
+    pendingReadRef.current = {
+      channelId,
+      lastReadAt,
+      lastReadMessageId
+    };
+
+    if (readReceiptTimeoutRef.current) {
+      window.clearTimeout(readReceiptTimeoutRef.current);
+    }
+
+    readReceiptTimeoutRef.current = window.setTimeout(async () => {
+      const pending = pendingReadRef.current;
+      pendingReadRef.current = null;
+      readReceiptTimeoutRef.current = null;
+
+      if (!pending) {
+        return;
+      }
+
+      try {
+        await api.markRead({
+          channelId: pending.channelId,
+          lastReadMessageId: pending.lastReadMessageId
+        });
+      } catch {
+        // Keep local optimistic read state even if the ack arrives late.
+      }
+    }, 240);
+  }
+
   async function loadMessages({ before = null, channelId = activeSelection.channelId, prepend = false } = {}) {
     const targetChannel = findChannelInSession(workspace, channelId)?.channel;
     if (!channelId || targetChannel?.is_voice) {
@@ -166,8 +215,9 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
 
       const latest = payload.messages[payload.messages.length - 1];
       if (latest) {
-        await api.markRead({
+        queueMarkRead({
           channelId,
+          lastReadAt: latest.created_at,
           lastReadMessageId: latest.id
         });
       }
@@ -229,19 +279,24 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
     const socket = getSocket(accessToken);
 
     const refreshNavigation = async (payload = {}) => {
+      if (!["guild:create", "channel:create", "dm:create", "profile:update"].includes(payload?.type)) {
+        return;
+      }
+
       await loadBootstrapRef.current?.(activeSelectionRef.current);
 
-      if (
-        payload?.type === "profile:update" &&
-        activeSelectionRef.current.channelId
-      ) {
+      if (payload?.type === "profile:update" && activeSelectionRef.current.channelId) {
         await loadMessages({
           channelId: activeSelectionRef.current.channelId
         });
       }
     };
 
-    const onMessageCreate = async ({ message }) => {
+    const onMessageCreate = async ({ message, preview }) => {
+      if (preview) {
+        setWorkspace((previous) => applyChannelPreviewToWorkspace(previous, preview));
+      }
+
       if (message?.channel_id === activeSelectionRef.current.channelId) {
         setMessages((previous) =>
           previous.some((item) => item.id === message.id) ? previous : [...previous, message]
@@ -259,31 +314,36 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
           }
         });
 
-        if (message.id) {
-          await api.markRead({
+        if (message.id && message.author?.id !== workspace?.current_user?.id) {
+          queueMarkRead({
             channelId: activeSelectionRef.current.channelId,
+            lastReadAt: message.created_at,
             lastReadMessageId: message.id
           });
         }
       }
-
-      refreshNavigation();
     };
 
-    const onMessageUpdate = ({ message }) => {
+    const onMessageUpdate = ({ message, preview }) => {
+      if (preview) {
+        setWorkspace((previous) => applyChannelPreviewToWorkspace(previous, preview));
+      }
+
       if (message?.channel_id === activeSelectionRef.current.channelId) {
         setMessages((previous) =>
           previous.map((item) => (item.id === message.id ? message : item))
         );
       }
-      refreshNavigation();
     };
 
-    const onMessageDelete = ({ channel_id, id }) => {
+    const onMessageDelete = ({ channel_id, id, preview }) => {
+      if (preview) {
+        setWorkspace((previous) => applyChannelPreviewToWorkspace(previous, preview));
+      }
+
       if (channel_id === activeSelectionRef.current.channelId) {
         setMessages((previous) => previous.filter((item) => item.id !== id));
       }
-      refreshNavigation();
     };
 
     const onReactionUpdate = ({ message }) => {
@@ -361,6 +421,14 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
       }));
     };
 
+    const onChannelPreview = ({ preview }) => {
+      if (!preview) {
+        return;
+      }
+
+      setWorkspace((previous) => applyChannelPreviewToWorkspace(previous, preview));
+    };
+
     const onRoomError = (payload) => {
       if (!payload?.error) {
         return;
@@ -391,6 +459,7 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
     socket.on("typing:update", onTypingUpdate);
     socket.on("voice:state", onVoiceState);
     socket.on("voice:update", onVoiceUpdate);
+    socket.on("channel:preview", onChannelPreview);
     socket.on("room:error", onRoomError);
 
     return () => {
@@ -404,6 +473,7 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
       socket.off("connect", onConnect);
       socket.off("voice:state", onVoiceState);
       socket.off("voice:update", onVoiceUpdate);
+      socket.off("channel:preview", onChannelPreview);
       socket.off("room:error", onRoomError);
       socket.disconnect();
     };
@@ -423,6 +493,14 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
     }, 1000);
 
     return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (readReceiptTimeoutRef.current) {
+        window.clearTimeout(readReceiptTimeoutRef.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
