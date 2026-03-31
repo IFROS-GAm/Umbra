@@ -406,6 +406,15 @@
   padding: 10px 14px;
 }
 
+.message-feed-host {
+  flex: 1;
+  min-height: 0;
+}
+
+.message-feed-virtuoso {
+  height: 100%;
+}
+
 .message-feed {
   display: flex;
   flex: 1;
@@ -612,6 +621,45 @@
   flex-direction: column;
   gap: 10px;
   padding: 16px 22px 20px;
+}
+
+.workspace-panel-fallback {
+  align-items: center;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 16px;
+  justify-content: center;
+  min-height: 260px;
+  padding: 28px;
+}
+
+.workspace-panel-fallback.compact {
+  min-height: 180px;
+}
+
+.workspace-panel-pulse {
+  animation: workspacePulse 1.4s ease-in-out infinite;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.05));
+  background-size: 200% 100%;
+  border-radius: 18px;
+  height: 22px;
+  width: min(380px, 72%);
+}
+
+.workspace-panel-pulse.short {
+  height: 14px;
+  width: min(220px, 40%);
+}
+
+@keyframes workspacePulse {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 .composer-banner,

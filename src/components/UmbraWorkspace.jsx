@@ -1,20 +1,36 @@
-import React from "react";
+import React, { Suspense, lazy, useMemo } from "react";
 
 import { api } from "../api.js";
-import { Dialog } from "./Dialog.jsx";
-import { FriendsHome } from "./FriendsHome.jsx";
 import { Icon } from "./Icon.jsx";
-import { MessageRequestsHome } from "./MessageRequestsHome.jsx";
-import { SettingsModal } from "./SettingsModal.jsx";
-import { UserProfileCard } from "./UserProfileCard.jsx";
 import { ChatHeader } from "./workspace/ChatHeader.jsx";
 import { DesktopTopbar } from "./workspace/DesktopTopbar.jsx";
 import { MembersPanel } from "./workspace/MembersPanel.jsx";
-import { MessageStage } from "./workspace/MessageStage.jsx";
-import { VoiceRoomStage } from "./workspace/VoiceRoomStage.jsx";
 import { WorkspaceNavigation } from "./workspace/WorkspaceNavigation.jsx";
 import { buildMemberGroups, buildVoiceStageTone, isVisibleStatus } from "./workspace/workspaceHelpers.js";
 import { useUmbraWorkspaceCore } from "./workspace/useUmbraWorkspaceCore.js";
+
+const lazyNamed = (loader, exportName) =>
+  lazy(() => loader().then((module) => ({ default: module[exportName] })));
+
+const Dialog = lazyNamed(() => import("./Dialog.jsx"), "Dialog");
+const FriendsHome = lazyNamed(() => import("./FriendsHome.jsx"), "FriendsHome");
+const MessageRequestsHome = lazyNamed(
+  () => import("./MessageRequestsHome.jsx"),
+  "MessageRequestsHome"
+);
+const SettingsModal = lazyNamed(() => import("./SettingsModal.jsx"), "SettingsModal");
+const UserProfileCard = lazyNamed(() => import("./UserProfileCard.jsx"), "UserProfileCard");
+const MessageStage = lazyNamed(() => import("./workspace/MessageStage.jsx"), "MessageStage");
+const VoiceRoomStage = lazyNamed(() => import("./workspace/VoiceRoomStage.jsx"), "VoiceRoomStage");
+
+function WorkspacePanelFallback({ compact = false }) {
+  return (
+    <div className={`workspace-panel-fallback ${compact ? "compact" : ""}`.trim()}>
+      <div className="workspace-panel-pulse" />
+      <div className="workspace-panel-pulse short" />
+    </div>
+  );
+}
 
 export function UmbraWorkspace({ accessToken, onSignOut }) {
   const {
@@ -212,90 +228,85 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
     );
   }
 
-  const friendUsers = (workspace.friends || [])
-    .filter((user) => user.id !== workspace.current_user.id)
-    .sort((a, b) => {
-      const aStatus = isVisibleStatus(a.status) ? 0 : 1;
-      const bStatus = isVisibleStatus(b.status) ? 0 : 1;
-      if (aStatus !== bStatus) {
-        return aStatus - bStatus;
-      }
-
-      return String(a.username || "").localeCompare(String(b.username || ""), "es");
-    });
-  const activeNowUsers = friendUsers.filter((user) => isVisibleStatus(user.status)).slice(0, 3);
-  const desktopTitle =
-    activeGuild?.name ||
-    activeChannel?.display_name ||
-    activeChannel?.name ||
-    "Umbra";
-  const inboxItems = {
-    for_you: friendUsers.slice(0, 4).map((user, index) => ({
-      id: `for-you-${user.id}`,
-      actionLabel: "Enviar mensaje",
-      tab: "for_you",
-      meta: [`11 d`, `17 d`, `1 mes`, `2 mes`][index] || "Hace poco",
-      text: `${user.display_name || user.username} ha aceptado tu solicitud de amistad.`,
-      user
-    })),
-    unread: (workspace.dms || [])
-      .filter((dm) => dm.unread_count)
-      .slice(0, 4)
-      .map((dm) => {
-        const user =
-          dm.participants.find((participant) => participant.id !== workspace.current_user.id) || null;
-
-        return {
-          actionLabel: "Abrir chat",
-          channelId: dm.id,
-          id: `unread-${dm.id}`,
-          meta: dm.unread_count === 1 ? "1 no leido" : `${dm.unread_count} no leidos`,
-          tab: "unread",
-          text: `${dm.display_name} tiene actividad pendiente para ti.`,
-          user
-        };
-      }),
-    mentions: activeGuild
-      ? [
-          {
-            actionLabel: "Ver canal",
-            channelId: activeSelection.channelId,
-            id: `mention-${activeGuild.id}`,
-            meta: activeChannel?.name ? `#${activeChannel.name}` : "Canal actual",
-            tab: "mentions",
-            text: `Actividad reciente en ${activeGuild.name} puede requerir tu atencion.`,
-            user: workspace.current_user
+  const friendUsers = useMemo(
+    () =>
+      (workspace.friends || [])
+        .filter((user) => user.id !== workspace.current_user.id)
+        .sort((a, b) => {
+          const aStatus = isVisibleStatus(a.status) ? 0 : 1;
+          const bStatus = isVisibleStatus(b.status) ? 0 : 1;
+          if (aStatus !== bStatus) {
+            return aStatus - bStatus;
           }
-        ]
-      : []
-  };
-  const inboxCount =
-    inboxItems.unread.length + inboxItems.mentions.length;
-  const currentInboxItems = inboxItems[inboxTab] || [];
-  const availableUsersById = Object.fromEntries(
-    (workspace.available_users || []).map((user) => [user.id, user])
-  );
-  const voiceUsers = voiceUserIds
-    .map((userId) => {
-      if (workspace.current_user.id === userId) {
-        return workspace.current_user;
-      }
 
-      return (
-        activeGuild?.members.find((member) => member.id === userId) ||
-        availableUsersById[userId] ||
-        null
-      );
-    })
-    .filter(Boolean);
-  const joinedVoiceChannel =
-    workspace.guilds
-      .flatMap((guild) => guild.channels)
-      .find((channel) => channel.id === joinedVoiceChannelId) || null;
-  const voiceUsersByChannel = Object.fromEntries(
-    activeGuildVoiceChannels.map((channel) => [
-      channel.id,
-      (voiceSessions[channel.id] || [])
+          return String(a.username || "").localeCompare(String(b.username || ""), "es");
+        }),
+    [workspace.current_user.id, workspace.friends]
+  );
+  const activeNowUsers = useMemo(
+    () => friendUsers.filter((user) => isVisibleStatus(user.status)).slice(0, 3),
+    [friendUsers]
+  );
+  const desktopTitle = activeGuild?.name || activeChannel?.display_name || activeChannel?.name || "Umbra";
+  const inboxItems = useMemo(
+    () => ({
+      for_you: friendUsers.slice(0, 4).map((user, index) => ({
+        id: `for-you-${user.id}`,
+        actionLabel: "Enviar mensaje",
+        tab: "for_you",
+        meta: [`11 d`, `17 d`, `1 mes`, `2 mes`][index] || "Hace poco",
+        text: `${user.display_name || user.username} ha aceptado tu solicitud de amistad.`,
+        user
+      })),
+      unread: (workspace.dms || [])
+        .filter((dm) => dm.unread_count)
+        .slice(0, 4)
+        .map((dm) => {
+          const user =
+            dm.participants.find((participant) => participant.id !== workspace.current_user.id) || null;
+
+          return {
+            actionLabel: "Abrir chat",
+            channelId: dm.id,
+            id: `unread-${dm.id}`,
+            meta: dm.unread_count === 1 ? "1 no leido" : `${dm.unread_count} no leidos`,
+            tab: "unread",
+            text: `${dm.display_name} tiene actividad pendiente para ti.`,
+            user
+          };
+        }),
+      mentions: activeGuild
+        ? [
+            {
+              actionLabel: "Ver canal",
+              channelId: activeSelection.channelId,
+              id: `mention-${activeGuild.id}`,
+              meta: activeChannel?.name ? `#${activeChannel.name}` : "Canal actual",
+              tab: "mentions",
+              text: `Actividad reciente en ${activeGuild.name} puede requerir tu atencion.`,
+              user: workspace.current_user
+            }
+          ]
+        : []
+    }),
+    [
+      activeChannel?.name,
+      activeGuild,
+      activeSelection.channelId,
+      friendUsers,
+      workspace.current_user,
+      workspace.dms
+    ]
+  );
+  const inboxCount = inboxItems.unread.length + inboxItems.mentions.length;
+  const currentInboxItems = inboxItems[inboxTab] || [];
+  const availableUsersById = useMemo(
+    () => Object.fromEntries((workspace.available_users || []).map((user) => [user.id, user])),
+    [workspace.available_users]
+  );
+  const voiceUsers = useMemo(
+    () =>
+      voiceUserIds
         .map((userId) => {
           if (workspace.current_user.id === userId) {
             return workspace.current_user;
@@ -307,8 +318,34 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
             null
           );
         })
-        .filter(Boolean)
-    ])
+        .filter(Boolean),
+    [activeGuild?.members, availableUsersById, voiceUserIds, workspace.current_user]
+  );
+  const joinedVoiceChannel =
+    workspace.guilds
+      .flatMap((guild) => guild.channels)
+      .find((channel) => channel.id === joinedVoiceChannelId) || null;
+  const voiceUsersByChannel = useMemo(
+    () =>
+      Object.fromEntries(
+        activeGuildVoiceChannels.map((channel) => [
+          channel.id,
+          (voiceSessions[channel.id] || [])
+            .map((userId) => {
+              if (workspace.current_user.id === userId) {
+                return workspace.current_user;
+              }
+
+              return (
+                activeGuild?.members.find((member) => member.id === userId) ||
+                availableUsersById[userId] ||
+                null
+              );
+            })
+            .filter(Boolean)
+        ])
+      ),
+    [activeGuild?.members, activeGuildVoiceChannels, availableUsersById, voiceSessions, workspace.current_user]
   );
   const memberList =
     activeSelection.kind === "guild"
@@ -316,15 +353,17 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
         ? voiceUsers
         : activeGuild?.members || []
       : activeChannel?.participants || [];
-  const memberGroups = buildMemberGroups(memberList);
-  const voiceStageParticipants = voiceUsers.map((user) => ({
-    ...user,
-    isStreaming:
-      user.id === workspace.current_user.id && voiceState.screenShareEnabled,
-    isCameraOn:
-      user.id === workspace.current_user.id && voiceState.cameraEnabled,
-    stageStyle: buildVoiceStageTone(user.avatar_hue || 220)
-  }));
+  const memberGroups = useMemo(() => buildMemberGroups(memberList), [memberList]);
+  const voiceStageParticipants = useMemo(
+    () =>
+      voiceUsers.map((user) => ({
+        ...user,
+        isStreaming: user.id === workspace.current_user.id && voiceState.screenShareEnabled,
+        isCameraOn: user.id === workspace.current_user.id && voiceState.cameraEnabled,
+        stageStyle: buildVoiceStageTone(user.avatar_hue || 220)
+      })),
+    [voiceState.cameraEnabled, voiceState.screenShareEnabled, voiceUsers, workspace.current_user.id]
+  );
   const headerSearchPlaceholder = activeGuild
     ? `Buscar ${activeGuild.name}`
     : `Buscar ${activeChannel?.display_name || "Umbra"}`;
@@ -782,22 +821,26 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
           {activeSelection.kind === "home" ? (
             <>
               {appError ? <div className="error-banner">{appError}</div> : null}
-              <FriendsHome
-                onOpenDm={handleOpenDmFromCard}
-                onOpenProfileCard={openProfileCard}
-                onShowNotice={showUiNotice}
-                users={friendUsers}
-              />
+              <Suspense fallback={<WorkspacePanelFallback />}>
+                <FriendsHome
+                  onOpenDm={handleOpenDmFromCard}
+                  onOpenProfileCard={openProfileCard}
+                  onShowNotice={showUiNotice}
+                  users={friendUsers}
+                />
+              </Suspense>
             </>
           ) : activeSelection.kind === "requests" ? (
             <>
               {appError ? <div className="error-banner">{appError}</div> : null}
-              <MessageRequestsHome
-                onOpenDm={handleOpenDmFromCard}
-                onShowNotice={showUiNotice}
-                requests={workspace.message_requests || []}
-                spam={workspace.message_request_spam || []}
-              />
+              <Suspense fallback={<WorkspacePanelFallback />}>
+                <MessageRequestsHome
+                  onOpenDm={handleOpenDmFromCard}
+                  onShowNotice={showUiNotice}
+                  requests={workspace.message_requests || []}
+                  spam={workspace.message_request_spam || []}
+                />
+              </Suspense>
             </>
           ) : (
             <>
@@ -816,74 +859,78 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
               {appError ? <div className="error-banner">{appError}</div> : null}
 
               {isVoiceChannel ? (
-                <VoiceRoomStage
-                  activeChannel={activeChannel}
-                  cameraMenuNode={voiceMenu === "camera" ? renderCameraMenu() : null}
-                  inputMenuNode={voiceMenu === "input" ? renderInputMenu() : null}
-                  joinedVoiceChannelId={joinedVoiceChannelId}
-                  onHandleVoiceLeave={handleVoiceLeave}
-                  onJoinVoiceChannel={() => handleSelectGuildChannel(activeChannel)}
-                  onOpenProfileCard={openProfileCard}
-                  onShowNotice={showUiNotice}
-                  onToggleVoiceMenu={toggleVoiceMenu}
-                  onToggleVoiceState={toggleVoiceState}
-                  shareMenuNode={voiceMenu === "share" ? renderShareMenu() : null}
-                  voiceMenu={voiceMenu}
-                  voiceStageParticipants={voiceStageParticipants}
-                  voiceState={voiceState}
-                  workspace={workspace}
-                />
+                <Suspense fallback={<WorkspacePanelFallback />}>
+                  <VoiceRoomStage
+                    activeChannel={activeChannel}
+                    cameraMenuNode={voiceMenu === "camera" ? renderCameraMenu() : null}
+                    inputMenuNode={voiceMenu === "input" ? renderInputMenu() : null}
+                    joinedVoiceChannelId={joinedVoiceChannelId}
+                    onHandleVoiceLeave={handleVoiceLeave}
+                    onJoinVoiceChannel={() => handleSelectGuildChannel(activeChannel)}
+                    onOpenProfileCard={openProfileCard}
+                    onShowNotice={showUiNotice}
+                    onToggleVoiceMenu={toggleVoiceMenu}
+                    onToggleVoiceState={toggleVoiceState}
+                    shareMenuNode={voiceMenu === "share" ? renderShareMenu() : null}
+                    voiceMenu={voiceMenu}
+                    voiceStageParticipants={voiceStageParticipants}
+                    voiceState={voiceState}
+                    workspace={workspace}
+                  />
+                </Suspense>
               ) : (
-                <MessageStage
-                  activeChannel={activeChannel}
-                  activeSelectionKind={activeSelection.kind}
-                  attachmentInputRef={attachmentInputRef}
-                  composer={composer}
-                  composerAttachments={composerAttachments}
-                  composerMenuOpen={composerMenuOpen}
-                  composerPicker={composerPicker}
-                  composerRef={composerRef}
-                  editingMessage={editingMessage}
-                  handleAttachmentSelection={handleAttachmentSelection}
-                  handleComposerChange={handleComposerChange}
-                  handleComposerShortcut={handleComposerShortcut}
-                  handleDeleteMessage={handleDeleteMessage}
-                  handlePickerInsert={handlePickerInsert}
-                  handleReaction={handleReaction}
-                  handleScroll={handleScroll}
-                  handleSubmitMessage={handleSubmitMessage}
-                  listRef={listRef}
-                  loadingMessages={loadingMessages}
-                  messageMenuFor={messageMenuFor}
-                  messages={messages}
-                  onCancelEdit={() => {
-                    setEditingMessage(null);
-                    setComposerAttachments([]);
-                    setComposer("");
-                  }}
-                  onCancelReply={() => {
-                    setReplyTarget(null);
-                    setReplyMentionEnabled(true);
-                  }}
-                  onEditMessage={handleEditMessage}
-                  onSetComposerMenuOpen={setComposerMenuOpen}
-                  onSetComposerPicker={setComposerPicker}
-                  onSetMessageMenuFor={setMessageMenuFor}
-                  onSetReactionPickerFor={setReactionPickerFor}
-                  onStartReply={handleStartReply}
-                  onToggleReplyMention={() => setReplyMentionEnabled((previous) => !previous)}
-                  openProfileCard={openProfileCard}
-                  reactionPickerFor={reactionPickerFor}
-                  removeComposerAttachment={removeComposerAttachment}
-                  replyMentionEnabled={replyMentionEnabled}
-                  replyTarget={replyTarget}
-                  showUiNotice={showUiNotice}
-                  typingUsers={typingUsers}
-                  uiNotice={uiNotice}
-                  uploadingAttachments={uploadingAttachments}
-                  availableUsersById={availableUsersById}
-                  workspace={workspace}
-                />
+                <Suspense fallback={<WorkspacePanelFallback />}>
+                  <MessageStage
+                    activeChannel={activeChannel}
+                    activeSelectionKind={activeSelection.kind}
+                    attachmentInputRef={attachmentInputRef}
+                    composer={composer}
+                    composerAttachments={composerAttachments}
+                    composerMenuOpen={composerMenuOpen}
+                    composerPicker={composerPicker}
+                    composerRef={composerRef}
+                    editingMessage={editingMessage}
+                    handleAttachmentSelection={handleAttachmentSelection}
+                    handleComposerChange={handleComposerChange}
+                    handleComposerShortcut={handleComposerShortcut}
+                    handleDeleteMessage={handleDeleteMessage}
+                    handlePickerInsert={handlePickerInsert}
+                    handleReaction={handleReaction}
+                    handleScroll={handleScroll}
+                    handleSubmitMessage={handleSubmitMessage}
+                    listRef={listRef}
+                    loadingMessages={loadingMessages}
+                    messageMenuFor={messageMenuFor}
+                    messages={messages}
+                    onCancelEdit={() => {
+                      setEditingMessage(null);
+                      setComposerAttachments([]);
+                      setComposer("");
+                    }}
+                    onCancelReply={() => {
+                      setReplyTarget(null);
+                      setReplyMentionEnabled(true);
+                    }}
+                    onEditMessage={handleEditMessage}
+                    onSetComposerMenuOpen={setComposerMenuOpen}
+                    onSetComposerPicker={setComposerPicker}
+                    onSetMessageMenuFor={setMessageMenuFor}
+                    onSetReactionPickerFor={setReactionPickerFor}
+                    onStartReply={handleStartReply}
+                    onToggleReplyMention={() => setReplyMentionEnabled((previous) => !previous)}
+                    openProfileCard={openProfileCard}
+                    reactionPickerFor={reactionPickerFor}
+                    removeComposerAttachment={removeComposerAttachment}
+                    replyMentionEnabled={replyMentionEnabled}
+                    replyTarget={replyTarget}
+                    showUiNotice={showUiNotice}
+                    typingUsers={typingUsers}
+                    uiNotice={uiNotice}
+                    uploadingAttachments={uploadingAttachments}
+                    availableUsersById={availableUsersById}
+                    workspace={workspace}
+                  />
+                </Suspense>
               )}
             </>
           )}
@@ -901,38 +948,44 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
         ) : null}
 
         {settingsOpen ? (
-          <SettingsModal
-            dmCount={workspace.dms.length}
-            guildCount={workspace.guilds.length}
-            onClose={() => setSettingsOpen(false)}
-            onSignOut={onSignOut}
-            onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
-            onUpdateProfile={handleProfileUpdate}
-            theme={theme}
-            user={workspace.current_user}
-          />
+          <Suspense fallback={<WorkspacePanelFallback compact />}>
+            <SettingsModal
+              dmCount={workspace.dms.length}
+              guildCount={workspace.guilds.length}
+              onClose={() => setSettingsOpen(false)}
+              onSignOut={onSignOut}
+              onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
+              onUpdateProfile={handleProfileUpdate}
+              theme={theme}
+              user={workspace.current_user}
+            />
+          </Suspense>
         ) : null}
 
         {profileCard ? (
-          <UserProfileCard
-            card={profileCard}
-            onChangeStatus={handleStatusChange}
-            onClose={() => setProfileCard(null)}
-            onOpenDm={handleOpenDmFromCard}
-            onOpenSelfProfile={() => {
-              setProfileCard(null);
-              setSettingsOpen(true);
-            }}
-          />
+          <Suspense fallback={<WorkspacePanelFallback compact />}>
+            <UserProfileCard
+              card={profileCard}
+              onChangeStatus={handleStatusChange}
+              onClose={() => setProfileCard(null)}
+              onOpenDm={handleOpenDmFromCard}
+              onOpenSelfProfile={() => {
+                setProfileCard(null);
+                setSettingsOpen(true);
+              }}
+            />
+          </Suspense>
         ) : null}
 
         {dialog ? (
-          <Dialog
-            dialog={dialog}
-            onClose={() => setDialog(null)}
-            onSubmit={handleDialogSubmit}
-            users={dialog.type === "dm_group" ? friendUsers : workspace.available_users}
-          />
+          <Suspense fallback={<WorkspacePanelFallback compact />}>
+            <Dialog
+              dialog={dialog}
+              onClose={() => setDialog(null)}
+              onSubmit={handleDialogSubmit}
+              users={dialog.type === "dm_group" ? friendUsers : workspace.available_users}
+            />
+          </Suspense>
         ) : null}
       </div>
     </div>
