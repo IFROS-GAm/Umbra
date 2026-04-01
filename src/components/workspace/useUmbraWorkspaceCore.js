@@ -9,6 +9,7 @@ import {
   markChannelReadInWorkspace,
   renderHeaderCopy
 } from "./workspaceHelpers.js";
+import { createVoiceInputProcessingSession } from "./voiceInputProcessing.js";
 
 export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
   const [workspace, setWorkspace] = useState(null);
@@ -41,10 +42,16 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
   const [inboxTab, setInboxTab] = useState("for_you");
   const [voiceMenu, setVoiceMenu] = useState(null);
   const [hoveredVoiceChannelId, setHoveredVoiceChannelId] = useState(null);
-  const [noiseTestActive, setNoiseTestActive] = useState(false);
+  const [voiceInputLevel, setVoiceInputLevel] = useState(0);
+  const [voiceInputStatus, setVoiceInputStatus] = useState({
+    engine: "off",
+    error: "",
+    ready: false
+  });
   const [voiceState, setVoiceState] = useState({
     cameraEnabled: false,
     deafen: false,
+    inputProfile: "custom",
     inputVolume: 84,
     micMuted: false,
     noiseSuppression: true,
@@ -81,6 +88,7 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
   const loadBootstrapRef = useRef(null);
   const accessTokenRef = useRef(accessToken);
   const joinedVoiceChannelIdRef = useRef(joinedVoiceChannelId);
+  const voiceInputSessionRef = useRef(null);
 
   activeSelectionRef.current = activeSelection;
   accessTokenRef.current = accessToken;
@@ -166,6 +174,80 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
         // Keep local optimistic read state even if the ack arrives late.
       }
     }, 240);
+  }
+
+  function buildLocalMessagePreview(content = "", attachments = []) {
+    const normalized = String(content || "").replace(/\s+/g, " ").trim();
+    if (normalized) {
+      return normalized.length > 84 ? `${normalized.slice(0, 81)}...` : normalized;
+    }
+
+    if (!attachments.length) {
+      return "";
+    }
+
+    if (attachments.length === 1) {
+      return attachments[0]?.content_type?.startsWith("image/")
+        ? "[imagen]"
+        : `[${attachments[0]?.name || "archivo"}]`;
+    }
+
+    return `[${attachments.length} adjuntos]`;
+  }
+
+  function buildOptimisticMessage({
+    attachments,
+    channelId,
+    clientNonce,
+    content,
+    createdAt,
+    currentUser,
+    currentUserDisplayName,
+    replyTo
+  }) {
+    return {
+      id: `temp-${clientNonce}`,
+      client_nonce: clientNonce,
+      optimistic: true,
+      channel_id: channelId,
+      guild_id: activeGuild?.id || null,
+      author_id: currentUser?.id || "",
+      content: String(content || "").trim(),
+      reply_to: replyTo?.id || null,
+      attachments,
+      mention_user_ids: [],
+      edited_at: null,
+      deleted_at: null,
+      created_at: createdAt,
+      author: currentUser
+        ? {
+            id: currentUser.id,
+            username: currentUser.username,
+            discriminator: currentUser.discriminator,
+            avatar_hue: currentUser.avatar_hue,
+            avatar_url: currentUser.avatar_url || "",
+            profile_banner_url: currentUser.profile_banner_url || "",
+            profile_color: currentUser.profile_color || "#5865F2",
+            status: currentUser.status === "invisible" ? "offline" : currentUser.status
+          }
+        : null,
+      display_name: currentUserDisplayName,
+      can_edit: true,
+      can_delete: true,
+      is_mentioning_me: false,
+      reply_preview: replyTo
+        ? {
+            id: replyTo.id,
+            author_name:
+              replyTo.display_name ||
+              replyTo.author?.username ||
+              replyTo.author?.display_name ||
+              "Usuario",
+            content: String(replyTo.content || "").replace(/\s+/g, " ").trim().slice(0, 120)
+          }
+        : null,
+      reactions: []
+    };
   }
 
   async function loadMessages({ before = null, channelId = activeSelection.channelId, prepend = false } = {}) {
@@ -298,9 +380,23 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
       }
 
       if (message?.channel_id === activeSelectionRef.current.channelId) {
-        setMessages((previous) =>
-          previous.some((item) => item.id === message.id) ? previous : [...previous, message]
-        );
+        setMessages((previous) => {
+          const optimisticIndex = message.client_nonce
+            ? previous.findIndex(
+                (item) =>
+                  item.client_nonce === message.client_nonce &&
+                  item.author?.id === message.author?.id
+              )
+            : -1;
+
+          if (optimisticIndex >= 0) {
+            const next = [...previous];
+            next[optimisticIndex] = message;
+            return next;
+          }
+
+          return previous.some((item) => item.id === message.id) ? previous : [...previous, message];
+        });
 
         requestAnimationFrame(() => {
           const element = listRef.current;
@@ -569,16 +665,92 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
   }, []);
 
   useEffect(() => {
-    if (!noiseTestActive) {
+    const shouldProcessInput = Boolean(
+      joinedVoiceChannelId || voiceMenu === "input"
+    );
+
+    if (!shouldProcessInput) {
+      setVoiceInputLevel(0);
+      setVoiceInputStatus({
+        engine: voiceState.noiseSuppression ? "native" : "off",
+        error: "",
+        ready: false
+      });
+
+      if (voiceInputSessionRef.current) {
+        voiceInputSessionRef.current.destroy().catch(() => {});
+        voiceInputSessionRef.current = null;
+      }
+
       return undefined;
     }
 
-    const timeout = window.setTimeout(() => {
-      setNoiseTestActive(false);
-    }, 2600);
+    let cancelled = false;
 
-    return () => window.clearTimeout(timeout);
-  }, [noiseTestActive]);
+    async function startVoiceInputSession() {
+      if (voiceInputSessionRef.current) {
+        await voiceInputSessionRef.current.destroy().catch(() => {});
+        voiceInputSessionRef.current = null;
+      }
+
+      try {
+        const session = await createVoiceInputProcessingSession({
+          deviceId: selectedVoiceDevices.audioinput,
+          inputVolume: voiceState.micMuted ? 0 : voiceState.inputVolume,
+          noiseSuppressionEnabled: voiceState.noiseSuppression,
+          onLevelChange: (level) => {
+            if (!cancelled) {
+              setVoiceInputLevel(level);
+            }
+          }
+        });
+
+        if (cancelled) {
+          await session.destroy();
+          return;
+        }
+
+        voiceInputSessionRef.current = session;
+        setVoiceInputStatus({
+          engine: session.engine,
+          error: "",
+          ready: true
+        });
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setVoiceInputLevel(0);
+        setVoiceInputStatus({
+          engine: "off",
+          error: error.message || "No se pudo abrir el microfono.",
+          ready: false
+        });
+      }
+    }
+
+    startVoiceInputSession();
+
+    return () => {
+      cancelled = true;
+      if (voiceInputSessionRef.current) {
+        voiceInputSessionRef.current.destroy().catch(() => {});
+        voiceInputSessionRef.current = null;
+      }
+    };
+  }, [
+    joinedVoiceChannelId,
+    selectedVoiceDevices.audioinput,
+    voiceMenu,
+    voiceState.noiseSuppression
+  ]);
+
+  useEffect(() => {
+    voiceInputSessionRef.current?.setInputVolume(
+      voiceState.micMuted ? 0 : voiceState.inputVolume
+    );
+  }, [voiceState.inputVolume, voiceState.micMuted]);
 
   useEffect(() => {
     if (!headerPanel) {
@@ -629,6 +801,12 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
       return;
     }
 
+    const draftComposer = composer;
+    const draftAttachments = composerAttachments;
+    const draftReplyTarget = replyTarget;
+    const draftReplyMentionEnabled = replyMentionEnabled;
+    let pendingClientNonce = null;
+
     try {
       if (editingMessage) {
         await api.updateMessage({
@@ -636,23 +814,92 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
           messageId: editingMessage.id
         });
       } else {
-        await api.createMessage({
-          attachments: composerAttachments,
+        const clientNonce =
+          globalThis.crypto?.randomUUID?.() ||
+          `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        pendingClientNonce = clientNonce;
+        const createdAt = new Date().toISOString();
+        const currentUser = workspace?.current_user || null;
+        const currentUserDisplayName =
+          activeGuild?.members.find((member) => member.id === currentUser?.id)?.display_name ||
+          currentUserLabel;
+        const optimisticMessage = buildOptimisticMessage({
+          attachments: draftAttachments,
           channelId: activeSelection.channelId,
-          content: composer,
-          replyMentionUserId:
-            replyTarget && replyMentionEnabled ? replyTarget.author?.id || null : null,
-          replyTo: replyTarget?.id || null
+          clientNonce,
+          content: draftComposer,
+          createdAt,
+          currentUser,
+          currentUserDisplayName,
+          replyTo: draftReplyTarget
         });
+        const optimisticPreview = {
+          id: activeSelection.channelId,
+          last_message_id: optimisticMessage.id,
+          last_message_author_id: currentUser?.id || null,
+          last_message_preview: buildLocalMessagePreview(draftComposer, draftAttachments),
+          last_message_at: createdAt
+        };
+
+        setMessages((previous) => [...previous, optimisticMessage]);
+        setWorkspace((previous) => applyChannelPreviewToWorkspace(previous, optimisticPreview));
+        requestAnimationFrame(() => {
+          const element = listRef.current;
+          if (element) {
+            element.scrollTop = element.scrollHeight;
+          }
+        });
+
+        setComposer("");
+        setComposerAttachments([]);
+        setReplyTarget(null);
+        setReplyMentionEnabled(true);
+        setEditingMessage(null);
+
+        const payload = await api.createMessage({
+          attachments: draftAttachments,
+          channelId: activeSelection.channelId,
+          clientNonce,
+          content: draftComposer,
+          replyMentionUserId:
+            draftReplyTarget && draftReplyMentionEnabled
+              ? draftReplyTarget.author?.id || null
+              : null,
+          replyTo: draftReplyTarget?.id || null
+        });
+
+        if (payload?.preview) {
+          setWorkspace((previous) => applyChannelPreviewToWorkspace(previous, payload.preview));
+        }
+
+        if (payload?.message) {
+          setMessages((previous) =>
+            previous.map((item) =>
+              item.client_nonce === clientNonce ? payload.message : item
+            )
+          );
+        }
       }
 
-      setComposer("");
-      setComposerAttachments([]);
-      setReplyTarget(null);
-      setReplyMentionEnabled(true);
-      setEditingMessage(null);
+      if (editingMessage) {
+        setComposer("");
+        setComposerAttachments([]);
+        setReplyTarget(null);
+        setReplyMentionEnabled(true);
+        setEditingMessage(null);
+      }
       setAppError("");
     } catch (error) {
+      if (!editingMessage) {
+        setMessages((previous) =>
+          previous.filter((item) => item.client_nonce !== pendingClientNonce)
+        );
+        setComposer(draftComposer);
+        setComposerAttachments(draftAttachments);
+        setReplyTarget(draftReplyTarget);
+        setReplyMentionEnabled(draftReplyMentionEnabled);
+        await loadBootstrap(activeSelectionRef.current);
+      }
       setAppError(error.message);
     }
   }
@@ -1009,21 +1256,21 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
   return {
     accessTokenRef, activeChannel, activeGuild, activeGuildTextChannels, activeGuildVoiceChannels, activeLookup,
     activeSelection, activeSelectionRef, appError, attachmentInputRef, booting, composer, composerAttachments,
-    composerMenuOpen, composerPicker, composerRef, currentUserLabel, dialog, directUnreadCount, editingMessage,
+    composerMenuOpen, composerPicker, composerRef, currentUserLabel, cycleVoiceDevice, dialog, directUnreadCount, editingMessage,
     handleAttachmentSelection, handleComposerChange, handleComposerShortcut, handleDeleteMessage, handleDialogSubmit,
     handlePickerInsert, handleProfileUpdate, handleReaction, handleScroll, handleSelectGuildChannel,
     handleStatusChange, handleSubmitMessage, handleVoiceDeviceChange, handleVoiceLeave, hasMore, headerActionsRef,
-    headerCopy, headerPanel, headerPanelRef, hoveredVoiceChannelId, inboxTab, isVoiceChannel, joinedVoiceChannelId,
+    getSelectedDeviceLabel, headerCopy, headerPanel, headerPanelRef, hoveredVoiceChannelId, inboxTab, isVoiceChannel, joinedVoiceChannelId,
     joinedVoiceChannelIdRef, lastTypingAtRef, listRef, loadBootstrap, loadBootstrapRef, loadMessages,
-    loadingMessages, messageMenuFor, messages, membersPanelVisible, noiseTestActive, profileCard,
+    loadingMessages, messageMenuFor, messages, membersPanelVisible, profileCard,
     reactionPickerFor, removeComposerAttachment, replyMentionEnabled, replyTarget, selectedVoiceDevices,
     setActiveSelection, setAppError, setBooting, setComposer, setComposerAttachments, setComposerMenuOpen,
     setComposerPicker, setDialog, setEditingMessage, setHeaderPanel, setHoveredVoiceChannelId, setInboxTab,
-    setJoinedVoiceChannelId, setMembersPanelVisible, setMessageMenuFor, setNoiseTestActive, setProfileCard,
+    setJoinedVoiceChannelId, setMembersPanelVisible, setMessageMenuFor, setProfileCard,
     setReactionPickerFor, setReplyMentionEnabled, setReplyTarget, setSettingsOpen, setTheme, setTypingEvents,
     setUiNotice, setVoiceDevices, setVoiceMenu, setVoiceSessions, setVoiceState, settingsOpen, showUiNotice,
     theme, toggleHeaderPanel, toggleVoiceMenu, toggleVoiceState, topbarActionsRef, typingEvents, typingUsers,
-    uiNotice, updateVoiceSetting, uploadingAttachments, voiceDevices, voiceMenu, voiceSessions, voiceState,
-    voiceUserIds, workspace
+    uiNotice, updateVoiceSetting, uploadingAttachments, voiceDevices, voiceInputLevel, voiceInputStatus,
+    voiceMenu, voiceSessions, voiceState, voiceUserIds, workspace
   };
 }

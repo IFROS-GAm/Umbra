@@ -13,6 +13,10 @@ let mainWindow = null;
 let pendingAuthCallback = null;
 let embeddedServer = null;
 
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function trimTrailingSlash(value) {
   return String(value || "").replace(/\/$/, "");
 }
@@ -168,7 +172,33 @@ async function createWindow() {
   });
 
   if (isDev) {
-    await mainWindow.loadURL("http://localhost:5173");
+    const devUrls = ["http://127.0.0.1:5173", "http://localhost:5173"];
+    let loaded = false;
+    let lastError = null;
+
+    for (let attempt = 0; attempt < 12 && !loaded; attempt += 1) {
+      for (const url of devUrls) {
+        try {
+          await mainWindow.loadURL(url);
+          loaded = true;
+          writeDesktopLog(`Main window loaded from ${url} on attempt ${attempt + 1}.`);
+          break;
+        } catch (error) {
+          lastError = error;
+          writeDesktopLog(
+            `Dev load failed for ${url} on attempt ${attempt + 1}: ${error.message || error}`
+          );
+        }
+      }
+
+      if (!loaded) {
+        await wait(600);
+      }
+    }
+
+    if (!loaded && lastError) {
+      throw lastError;
+    }
   } else {
     const serverHandle = await startEmbeddedServer();
     await mainWindow.loadURL(serverHandle.url);

@@ -351,15 +351,17 @@ export async function startServer(options = {}) {
 
   app.post("/api/channels/:channelId/messages", requireViewer, async (req, res) => {
     try {
-      const message = await store.createMessage({
+      const created = await store.createMessage({
         attachments: Array.isArray(req.body.attachments) ? req.body.attachments : [],
         authorId: req.viewer.id,
         channelId: req.params.channelId,
+        clientNonce: req.body.clientNonce || null,
         content: req.body.content,
         replyMentionUserId: req.body.replyMentionUserId || null,
         replyTo: req.body.replyTo || null
       });
-      const preview = await store.getChannelPreview(req.params.channelId);
+      const message = created?.message || created;
+      const preview = created?.preview || (await store.getChannelPreview(req.params.channelId));
 
       io.to(`channel:${req.params.channelId}`).emit("message:create", {
         message,

@@ -1,7 +1,9 @@
 import { GUILD_CHANNEL_KINDS, PERMISSIONS } from "../constants.js";
 import {
   buildMessagePreview,
+  createId,
   enrichMessages,
+  isGuildVoiceChannel,
   resolveMentionUserIds,
   sortByDateDesc
 } from "./helpers.js";
@@ -41,6 +43,89 @@ async function expectData(queryPromise, fallbackMessage = "Error consultando Sup
 }
 
 export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
+  async buildMessageSnapshot({ channel, message, replyTarget = null, userId }) {
+    if (!channel || !message) {
+      return null;
+    }
+
+    const messageBundle = [message, replyTarget].filter(Boolean);
+    const profileIds = [...new Set(messageBundle.map((item) => item.author_id).filter(Boolean))];
+    const memberIds = [...new Set([userId, ...profileIds].filter(Boolean))];
+
+    const [profiles, guilds, roles, guildMembers, reactions] = await Promise.all([
+      profileIds.length
+        ? expectData(this.client.from("profiles").select("*").in("id", profileIds))
+        : Promise.resolve([]),
+      channel.guild_id
+        ? expectData(this.client.from("guilds").select("*").eq("id", channel.guild_id))
+        : Promise.resolve([]),
+      channel.guild_id
+        ? expectData(this.client.from("roles").select("*").eq("guild_id", channel.guild_id))
+        : Promise.resolve([]),
+      channel.guild_id && memberIds.length
+        ? expectData(
+            this.client
+              .from("guild_members")
+              .select("*")
+              .eq("guild_id", channel.guild_id)
+              .in("user_id", memberIds)
+          )
+        : Promise.resolve([]),
+      expectData(
+        this.client
+          .from("message_reactions")
+          .select("*")
+          .eq("message_id", message.id)
+      )
+    ]);
+
+    const enriched = enrichMessages({
+      channelId: channel.id,
+      db: {
+        profiles,
+        guilds,
+        roles,
+        guild_members: guildMembers,
+        channels: [channel],
+        channel_members: [],
+        messages: messageBundle,
+        message_reactions: reactions
+      },
+      messages: [message],
+      userId
+    });
+
+    return enriched[0] || null;
+  }
+
+  async updateChannelSummary(channelId, message = null) {
+    const preview = {
+      id: channelId,
+      last_message_id: message?.id ?? null,
+      last_message_author_id: message?.author_id ?? null,
+      last_message_preview: message
+        ? buildMessagePreview(message.content, message.attachments || [])
+        : "",
+      last_message_at: message?.created_at ?? null,
+      updated_at: message?.created_at ?? new Date().toISOString()
+    };
+
+    await expectData(
+      this.client
+        .from("channels")
+        .update({
+          last_message_id: preview.last_message_id,
+          last_message_author_id: preview.last_message_author_id,
+          last_message_preview: preview.last_message_preview,
+          last_message_at: preview.last_message_at,
+          updated_at: preview.updated_at
+        })
+        .eq("id", channelId)
+    );
+
+    return preview;
+  }
+
   async listChannelMessages({ before, channelId, limit = 30, userId }) {
     const channel = await this.getChannel(channelId);
     if (!channel) {
@@ -131,6 +216,7 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
     attachments = [],
     authorId,
     channelId,
+    clientNonce = null,
     content,
     replyMentionUserId = null,
     replyTo = null
@@ -170,11 +256,21 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
       }
     }
 
-    const profiles = await expectData(this.client.from("profiles").select("*"));
-    const mentionUserIds = resolveMentionUserIds(trimmed, profiles, {
-      audienceUserIds: await this.listChannelAudienceIds(channelId),
-      authorId
-    });
+    const shouldResolveEveryone = /(^|\s)@everyone\b/i.test(trimmed);
+    const shouldResolveNamedMentions = /(^|\s)@(?!everyone\b)[a-zA-Z0-9_-]+/i.test(trimmed);
+    const [profiles, audienceUserIds] = await Promise.all([
+      shouldResolveNamedMentions
+        ? expectData(this.client.from("profiles").select("id,username"))
+        : Promise.resolve([]),
+      shouldResolveEveryone ? this.listChannelAudienceIds(channelId) : Promise.resolve([])
+    ]);
+    const mentionUserIds =
+      shouldResolveEveryone || shouldResolveNamedMentions
+        ? resolveMentionUserIds(trimmed, profiles, {
+            audienceUserIds,
+            authorId
+          })
+        : [];
 
     if (
       replyTarget &&
@@ -202,14 +298,28 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
     };
 
     await expectData(this.client.from("messages").insert(message));
+    const preview = await this.updateChannelSummary(channelId, message);
     await this.markChannelRead({
       channelId,
       lastReadMessageId: message.id,
       userId: authorId
     });
-    await this.refreshChannelSummary(channelId);
 
-    return this.getChannelSnapshot(channelId, authorId, message.id);
+    const enrichedMessage = await this.buildMessageSnapshot({
+      channel,
+      message,
+      replyTarget,
+      userId: authorId
+    });
+
+    if (enrichedMessage && clientNonce) {
+      enrichedMessage.client_nonce = clientNonce;
+    }
+
+    return {
+      message: enrichedMessage,
+      preview
+    };
   }
 
   async updateMessage({ content, messageId, userId }) {
@@ -852,31 +962,30 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
       throw createError("No puedes acceder a este canal.", 403);
     }
 
-    let messages = [];
     if (messageId) {
       const target = await this.getMessage(messageId);
       if (!target || target.deleted_at) {
         return null;
       }
-      messages = [target];
-      if (target.reply_to) {
-        const replyTarget = await this.getMessage(target.reply_to);
-        if (replyTarget) {
-          messages.push(replyTarget);
-        }
-      }
-    } else {
-      const rows = await expectData(
-        this.client
-          .from("messages")
-          .select("*")
-          .eq("channel_id", channelId)
-          .is("deleted_at", null)
-          .order("created_at", { ascending: false })
-          .limit(1)
-      );
-      messages = rows;
+      const replyTarget = target.reply_to ? await this.getMessage(target.reply_to) : null;
+      return this.buildMessageSnapshot({
+        channel,
+        message: target,
+        replyTarget,
+        userId
+      });
     }
+
+    const rows = await expectData(
+      this.client
+        .from("messages")
+        .select("*")
+        .eq("channel_id", channelId)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .limit(1)
+    );
+    const messages = rows;
 
     if (!messages.length) {
       return null;

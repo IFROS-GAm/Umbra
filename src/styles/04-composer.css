@@ -49,14 +49,14 @@
 
 .composer-frame {
   align-items: center;
-  background: #1f2024;
+  background: #1e1f22;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
+  border-radius: 14px;
   display: grid;
   gap: 0;
   grid-template-columns: auto 1fr;
-  min-height: 56px;
-  padding: 0 10px;
+  min-height: 50px;
+  padding: 0 8px;
   position: relative;
 }
 
@@ -70,14 +70,14 @@
   align-self: center;
   background: transparent;
   border: 0;
-  border-radius: 10px;
+  border-radius: 8px;
   color: var(--text-1);
   display: inline-flex;
-  font-size: 1.25rem;
-  height: 36px;
+  font-size: 1.1rem;
+  height: 32px;
   justify-content: center;
   transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
-  width: 36px;
+  width: 32px;
 }
 
 .composer-icon-button:hover,
@@ -93,8 +93,8 @@
   display: grid;
   gap: 8px;
   grid-template-columns: 1fr auto;
-  min-height: 54px;
-  padding: 0 0 0 8px;
+  min-height: 48px;
+  padding: 0 0 0 6px;
 }
 
 .composer textarea {
@@ -102,7 +102,7 @@
   border-color: transparent;
   min-height: 22px;
   overflow: hidden;
-  padding: 14px 10px 12px 6px;
+  padding: 12px 8px 10px 4px;
   resize: none;
 }
 
@@ -113,7 +113,7 @@
 .composer-actions {
   align-items: center;
   display: flex;
-  gap: 6px;
+  gap: 4px;
   justify-content: flex-end;
   padding-right: 2px;
 }
@@ -121,19 +121,19 @@
 .composer-action-chip {
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 8px;
   color: var(--text-1);
-  min-height: 36px;
-  padding: 8px 12px;
+  min-height: 32px;
+  padding: 7px 10px;
   transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
 }
 
 .composer-action-chip.icon-only {
   align-items: center;
   display: inline-flex;
-  height: 36px;
+  height: 32px;
   justify-content: center;
-  min-width: 36px;
+  min-width: 32px;
   padding: 0;
 }
 
@@ -151,8 +151,8 @@
 .floating-surface {
   background: #111214;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  box-shadow: 0 28px 60px rgba(0, 0, 0, 0.38);
+  border-radius: 14px;
+  box-shadow: 0 22px 46px rgba(0, 0, 0, 0.34);
   z-index: 8;
 }
 

@@ -220,6 +220,7 @@ export class DemoStore {
     attachments = [],
     authorId,
     channelId,
+    clientNonce = null,
     content,
     replyMentionUserId = null,
     replyTo = null
@@ -297,12 +298,21 @@ export class DemoStore {
     refreshChannelSummaries(this.db);
     await this.save();
 
-    return enrichMessages({
+    const enrichedMessage = enrichMessages({
       channelId,
       db: this.db,
       messages: [message],
       userId: authorId
     })[0];
+
+    if (enrichedMessage && clientNonce) {
+      enrichedMessage.client_nonce = clientNonce;
+    }
+
+    return {
+      message: enrichedMessage,
+      preview: this.getChannelPreview(channelId)
+    };
   }
 
   async updateMessage({ content, messageId, userId }) {

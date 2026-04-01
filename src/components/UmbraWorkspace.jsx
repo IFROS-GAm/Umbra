@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useMemo } from "react";
+import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
 
 import { api } from "../api.js";
 import { Icon } from "./Icon.jsx";
@@ -39,19 +39,25 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
     composerPicker, composerRef, currentUserLabel, dialog, directUnreadCount, editingMessage,
     handleAttachmentSelection, handleComposerChange, handleComposerShortcut, handleDeleteMessage,
     handleDialogSubmit, handlePickerInsert, handleProfileUpdate, handleReaction, handleScroll,
-    handleSelectGuildChannel, handleStatusChange, handleSubmitMessage, handleVoiceLeave,
+    handleSelectGuildChannel, handleStatusChange, handleSubmitMessage, handleVoiceDeviceChange, handleVoiceLeave,
     headerActionsRef, headerCopy, headerPanel, headerPanelRef, hoveredVoiceChannelId, inboxTab,
     isVoiceChannel, joinedVoiceChannelId, listRef, loadBootstrap, loadingMessages, messageMenuFor, messages,
-    membersPanelVisible, noiseTestActive, profileCard, reactionPickerFor, removeComposerAttachment,
+    membersPanelVisible, profileCard, reactionPickerFor, removeComposerAttachment,
     replyMentionEnabled, replyTarget, setActiveSelection, setBooting, setComposer,
     setComposerAttachments, setComposerMenuOpen, setComposerPicker, setDialog, setEditingMessage,
     setHeaderPanel, setHoveredVoiceChannelId, setInboxTab, setMembersPanelVisible,
-    setMessageMenuFor, setNoiseTestActive, setProfileCard, setReactionPickerFor, setAppError,
+    setMessageMenuFor, setProfileCard, setReactionPickerFor, setAppError,
     setReplyMentionEnabled, setReplyTarget, setSettingsOpen, setTheme, theme, settingsOpen,
     showUiNotice, toggleHeaderPanel, toggleVoiceMenu, toggleVoiceState, topbarActionsRef,
     typingUsers, uiNotice, updateVoiceSetting, uploadingAttachments, voiceDevices, voiceMenu,
-    voiceSessions, voiceState, voiceUserIds, workspace, cycleVoiceDevice, getSelectedDeviceLabel
+    voiceSessions, voiceState, voiceUserIds, voiceInputLevel, voiceInputStatus, workspace,
+    cycleVoiceDevice, getSelectedDeviceLabel, selectedVoiceDevices
   } = useUmbraWorkspaceCore({ accessToken, onSignOut });
+  const [voiceInputPanel, setVoiceInputPanel] = useState(null);
+
+  const currentUser = workspace?.current_user || null;
+  const currentUserId = currentUser?.id || "";
+
   function buildProfileCardData(targetUser, displayNameOverride = null) {
     if (!workspace || !targetUser?.id) {
       return null;
@@ -202,6 +208,216 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
     }
   }
 
+  const friendUsers = useMemo(
+    () =>
+      (workspace?.friends || [])
+        .filter((user) => user.id !== currentUserId)
+        .sort((a, b) => {
+          const aStatus = isVisibleStatus(a.status) ? 0 : 1;
+          const bStatus = isVisibleStatus(b.status) ? 0 : 1;
+          if (aStatus !== bStatus) {
+            return aStatus - bStatus;
+          }
+
+          return String(a.username || "").localeCompare(String(b.username || ""), "es");
+        }),
+    [currentUserId, workspace?.friends]
+  );
+  const activeNowUsers = useMemo(
+    () => friendUsers.filter((user) => isVisibleStatus(user.status)).slice(0, 3),
+    [friendUsers]
+  );
+  const desktopTitle = activeGuild?.name || activeChannel?.display_name || activeChannel?.name || "Umbra";
+  const inboxItems = useMemo(
+    () => ({
+      for_you: friendUsers.slice(0, 4).map((user, index) => ({
+        id: `for-you-${user.id}`,
+        actionLabel: "Enviar mensaje",
+        tab: "for_you",
+        meta: [`11 d`, `17 d`, `1 mes`, `2 mes`][index] || "Hace poco",
+        text: `${user.display_name || user.username} ha aceptado tu solicitud de amistad.`,
+        user
+      })),
+      unread: (workspace?.dms || [])
+        .filter((dm) => dm.unread_count)
+        .slice(0, 4)
+        .map((dm) => {
+          const user =
+            dm.participants.find((participant) => participant.id !== currentUserId) || null;
+
+          return {
+            actionLabel: "Abrir chat",
+            channelId: dm.id,
+            id: `unread-${dm.id}`,
+            meta: dm.unread_count === 1 ? "1 no leido" : `${dm.unread_count} no leidos`,
+            tab: "unread",
+            text: `${dm.display_name} tiene actividad pendiente para ti.`,
+            user
+          };
+        }),
+      mentions: activeGuild
+        ? [
+            {
+              actionLabel: "Ver canal",
+              channelId: activeSelection.channelId,
+              id: `mention-${activeGuild.id}`,
+              meta: activeChannel?.name ? `#${activeChannel.name}` : "Canal actual",
+              tab: "mentions",
+              text: `Actividad reciente en ${activeGuild.name} puede requerir tu atencion.`,
+              user: currentUser
+            }
+          ]
+        : []
+    }),
+    [
+      activeChannel?.name,
+      activeGuild,
+      activeSelection.channelId,
+      friendUsers,
+      currentUser,
+      currentUserId,
+      workspace?.dms
+    ]
+  );
+  const inboxCount = inboxItems.unread.length + inboxItems.mentions.length;
+  const currentInboxItems = inboxItems[inboxTab] || [];
+  const availableUsersById = useMemo(
+    () => Object.fromEntries((workspace?.available_users || []).map((user) => [user.id, user])),
+    [workspace?.available_users]
+  );
+  const voiceUsers = useMemo(
+    () =>
+      voiceUserIds
+        .map((userId) => {
+          if (currentUserId === userId) {
+            return currentUser;
+          }
+
+          return (
+            activeGuild?.members.find((member) => member.id === userId) ||
+            availableUsersById[userId] ||
+            null
+          );
+        })
+        .filter(Boolean),
+    [activeGuild?.members, availableUsersById, currentUser, currentUserId, voiceUserIds]
+  );
+  const joinedVoiceChannel =
+    (workspace?.guilds || [])
+      .flatMap((guild) => guild.channels)
+      .find((channel) => channel.id === joinedVoiceChannelId) || null;
+  const voiceUsersByChannel = useMemo(
+    () =>
+      Object.fromEntries(
+        activeGuildVoiceChannels.map((channel) => [
+          channel.id,
+          (voiceSessions[channel.id] || [])
+            .map((userId) => {
+              if (currentUserId === userId) {
+                return currentUser;
+              }
+
+              return (
+                activeGuild?.members.find((member) => member.id === userId) ||
+                availableUsersById[userId] ||
+                null
+              );
+            })
+            .filter(Boolean)
+        ])
+      ),
+    [activeGuild?.members, activeGuildVoiceChannels, availableUsersById, currentUser, currentUserId, voiceSessions]
+  );
+  const memberList =
+    activeSelection.kind === "guild"
+      ? isVoiceChannel
+        ? voiceUsers
+        : activeGuild?.members || []
+      : activeChannel?.participants || [];
+  const memberGroups = useMemo(() => buildMemberGroups(memberList), [memberList]);
+  const voiceStageParticipants = useMemo(
+    () =>
+      voiceUsers.map((user) => ({
+        ...user,
+        isStreaming: user.id === currentUserId && voiceState.screenShareEnabled,
+        isCameraOn: user.id === currentUserId && voiceState.cameraEnabled,
+        stageStyle: buildVoiceStageTone(user.avatar_hue || 220)
+      })),
+    [currentUserId, voiceState.cameraEnabled, voiceState.screenShareEnabled, voiceUsers]
+  );
+  const headerSearchPlaceholder = activeGuild
+    ? `Buscar ${activeGuild.name}`
+    : `Buscar ${activeChannel?.display_name || "Umbra"}`;
+  const inputMeterBars = Array.from({ length: 18 }, (_, index) => index);
+  const activeInputBars = Math.max(
+    0,
+    Math.round((voiceInputLevel / 100) * inputMeterBars.length)
+  );
+  const voiceSuppressionLabel =
+    voiceInputStatus.engine === "speex"
+      ? "Speex DSP activo"
+      : voiceInputStatus.engine === "native"
+        ? "Filtro nativo del navegador"
+        : "Sin supresion adicional";
+  const voiceSuppressionCopy = voiceInputStatus.error
+    ? voiceInputStatus.error
+    : voiceState.noiseSuppression
+      ? voiceInputStatus.ready
+        ? "Umbra esta limpiando el ruido del microfono en tiempo real."
+        : "Activa la supresion y Umbra preparara el microfono cuando abras voz."
+      : "La entrada llega sin filtro adicional para mantener la voz natural.";
+  const voiceProfileOptions = [
+    {
+      description: "Filtro fuerte para reducir fondo y ruido continuo.",
+      id: "isolation",
+      label: "Aislamiento de voz",
+      settings: {
+        inputProfile: "isolation",
+        inputVolume: 76,
+        noiseSuppression: true
+      }
+    },
+    {
+      description: "Entrada mas natural para microfonos limpios o estudio.",
+      id: "studio",
+      label: "Estudio",
+      settings: {
+        inputProfile: "studio",
+        inputVolume: 82,
+        noiseSuppression: false
+      }
+    },
+    {
+      description: "Control manual del volumen y del filtro.",
+      id: "custom",
+      label: "Personalizar",
+      settings: {
+        inputProfile: "custom"
+      }
+    }
+  ];
+  const activeInputProfile = voiceState.inputProfile || "custom";
+  const activeInputProfileLabel =
+    voiceProfileOptions.find((option) => option.id === activeInputProfile)?.label || "Personalizar";
+
+  useEffect(() => {
+    if (voiceMenu !== "input" && voiceInputPanel) {
+      setVoiceInputPanel(null);
+    }
+  }, [voiceInputPanel, voiceMenu]);
+
+  function handleApplyVoiceProfile(profile) {
+    updateVoiceSetting("inputProfile", profile.id);
+    if (typeof profile.settings.noiseSuppression === "boolean") {
+      updateVoiceSetting("noiseSuppression", profile.settings.noiseSuppression);
+    }
+    if (typeof profile.settings.inputVolume === "number") {
+      updateVoiceSetting("inputVolume", profile.settings.inputVolume);
+    }
+    setVoiceInputPanel(null);
+    showUiNotice(`Perfil de entrada: ${profile.label}.`);
+  }
+
   if (booting) {
     return <div className="boot-screen">Despertando Umbra...</div>;
   }
@@ -228,156 +444,96 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
     );
   }
 
-  const friendUsers = useMemo(
-    () =>
-      (workspace.friends || [])
-        .filter((user) => user.id !== workspace.current_user.id)
-        .sort((a, b) => {
-          const aStatus = isVisibleStatus(a.status) ? 0 : 1;
-          const bStatus = isVisibleStatus(b.status) ? 0 : 1;
-          if (aStatus !== bStatus) {
-            return aStatus - bStatus;
-          }
-
-          return String(a.username || "").localeCompare(String(b.username || ""), "es");
-        }),
-    [workspace.current_user.id, workspace.friends]
-  );
-  const activeNowUsers = useMemo(
-    () => friendUsers.filter((user) => isVisibleStatus(user.status)).slice(0, 3),
-    [friendUsers]
-  );
-  const desktopTitle = activeGuild?.name || activeChannel?.display_name || activeChannel?.name || "Umbra";
-  const inboxItems = useMemo(
-    () => ({
-      for_you: friendUsers.slice(0, 4).map((user, index) => ({
-        id: `for-you-${user.id}`,
-        actionLabel: "Enviar mensaje",
-        tab: "for_you",
-        meta: [`11 d`, `17 d`, `1 mes`, `2 mes`][index] || "Hace poco",
-        text: `${user.display_name || user.username} ha aceptado tu solicitud de amistad.`,
-        user
-      })),
-      unread: (workspace.dms || [])
-        .filter((dm) => dm.unread_count)
-        .slice(0, 4)
-        .map((dm) => {
-          const user =
-            dm.participants.find((participant) => participant.id !== workspace.current_user.id) || null;
-
-          return {
-            actionLabel: "Abrir chat",
-            channelId: dm.id,
-            id: `unread-${dm.id}`,
-            meta: dm.unread_count === 1 ? "1 no leido" : `${dm.unread_count} no leidos`,
-            tab: "unread",
-            text: `${dm.display_name} tiene actividad pendiente para ti.`,
-            user
-          };
-        }),
-      mentions: activeGuild
-        ? [
-            {
-              actionLabel: "Ver canal",
-              channelId: activeSelection.channelId,
-              id: `mention-${activeGuild.id}`,
-              meta: activeChannel?.name ? `#${activeChannel.name}` : "Canal actual",
-              tab: "mentions",
-              text: `Actividad reciente en ${activeGuild.name} puede requerir tu atencion.`,
-              user: workspace.current_user
-            }
-          ]
-        : []
-    }),
-    [
-      activeChannel?.name,
-      activeGuild,
-      activeSelection.channelId,
-      friendUsers,
-      workspace.current_user,
-      workspace.dms
-    ]
-  );
-  const inboxCount = inboxItems.unread.length + inboxItems.mentions.length;
-  const currentInboxItems = inboxItems[inboxTab] || [];
-  const availableUsersById = useMemo(
-    () => Object.fromEntries((workspace.available_users || []).map((user) => [user.id, user])),
-    [workspace.available_users]
-  );
-  const voiceUsers = useMemo(
-    () =>
-      voiceUserIds
-        .map((userId) => {
-          if (workspace.current_user.id === userId) {
-            return workspace.current_user;
-          }
-
-          return (
-            activeGuild?.members.find((member) => member.id === userId) ||
-            availableUsersById[userId] ||
-            null
-          );
-        })
-        .filter(Boolean),
-    [activeGuild?.members, availableUsersById, voiceUserIds, workspace.current_user]
-  );
-  const joinedVoiceChannel =
-    workspace.guilds
-      .flatMap((guild) => guild.channels)
-      .find((channel) => channel.id === joinedVoiceChannelId) || null;
-  const voiceUsersByChannel = useMemo(
-    () =>
-      Object.fromEntries(
-        activeGuildVoiceChannels.map((channel) => [
-          channel.id,
-          (voiceSessions[channel.id] || [])
-            .map((userId) => {
-              if (workspace.current_user.id === userId) {
-                return workspace.current_user;
-              }
-
-              return (
-                activeGuild?.members.find((member) => member.id === userId) ||
-                availableUsersById[userId] ||
-                null
-              );
-            })
-            .filter(Boolean)
-        ])
-      ),
-    [activeGuild?.members, activeGuildVoiceChannels, availableUsersById, voiceSessions, workspace.current_user]
-  );
-  const memberList =
-    activeSelection.kind === "guild"
-      ? isVoiceChannel
-        ? voiceUsers
-        : activeGuild?.members || []
-      : activeChannel?.participants || [];
-  const memberGroups = useMemo(() => buildMemberGroups(memberList), [memberList]);
-  const voiceStageParticipants = useMemo(
-    () =>
-      voiceUsers.map((user) => ({
-        ...user,
-        isStreaming: user.id === workspace.current_user.id && voiceState.screenShareEnabled,
-        isCameraOn: user.id === workspace.current_user.id && voiceState.cameraEnabled,
-        stageStyle: buildVoiceStageTone(user.avatar_hue || 220)
-      })),
-    [voiceState.cameraEnabled, voiceState.screenShareEnabled, voiceUsers, workspace.current_user.id]
-  );
-  const headerSearchPlaceholder = activeGuild
-    ? `Buscar ${activeGuild.name}`
-    : `Buscar ${activeChannel?.display_name || "Umbra"}`;
-  const inputMeterBars = Array.from({ length: 18 }, (_, index) => index);
-  const activeInputBars = Math.round((voiceState.inputVolume / 100) * inputMeterBars.length);
-  const activeNoiseTestBars = noiseTestActive
-    ? Math.max(6, Math.round((voiceState.inputVolume / 100) * inputMeterBars.length))
-    : 0;
-
   function renderInputMenu() {
+    const inputDevices = voiceDevices.audioinput || [];
+
+    function renderInputSubmenu() {
+      if (voiceInputPanel === "device") {
+        return (
+          <div className="floating-surface voice-control-menu voice-control-submenu">
+            <div className="voice-control-submenu-header">
+              <div className="voice-control-heading">
+                <strong>Dispositivo de entrada</strong>
+                <small>{getSelectedDeviceLabel("audioinput")}</small>
+              </div>
+            </div>
+
+            <div className="voice-control-option-list">
+              {inputDevices.length ? (
+                inputDevices.map((device, index) => {
+                  const label = device.label || `Microfono ${index + 1}`;
+                  const selected = selectedVoiceDevices.audioinput === device.deviceId;
+
+                  return (
+                    <button
+                      className={`voice-control-option ${selected ? "selected" : ""}`.trim()}
+                      key={device.deviceId || `${label}-${index}`}
+                      onClick={() => {
+                        handleVoiceDeviceChange("audioinput", device.deviceId);
+                        setVoiceInputPanel(null);
+                        showUiNotice(`Ahora usando ${label}.`);
+                      }}
+                      type="button"
+                    >
+                      <span>
+                        <strong>{label}</strong>
+                      </span>
+                      <i className={`voice-control-radio ${selected ? "selected" : ""}`.trim()} />
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="voice-control-empty">No hay microfonos disponibles.</div>
+              )}
+            </div>
+          </div>
+        );
+      }
+
+      if (voiceInputPanel === "profile") {
+        return (
+          <div className="floating-surface voice-control-menu voice-control-submenu">
+            <div className="voice-control-submenu-header">
+              <div className="voice-control-heading">
+                <strong>Perfil de entrada</strong>
+                <small>{activeInputProfileLabel}</small>
+              </div>
+            </div>
+
+            <div className="voice-control-option-list">
+              {voiceProfileOptions.map((profile) => {
+                const selected = activeInputProfile === profile.id;
+
+                return (
+                  <button
+                    className={`voice-control-option ${selected ? "selected" : ""}`.trim()}
+                    key={profile.id}
+                    onClick={() => handleApplyVoiceProfile(profile)}
+                    type="button"
+                  >
+                    <span>
+                      <strong>{profile.label}</strong>
+                      <small>{profile.description}</small>
+                    </span>
+                    <i className={`voice-control-radio ${selected ? "selected" : ""}`.trim()} />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      }
+
+      return null;
+    }
+
     return (
       <div className="floating-surface voice-control-menu input-menu">
         <div className="voice-control-menu-header">
-          <strong>Supresion de ruido</strong>
+          <div className="voice-control-heading">
+            <strong>Supresion de ruido</strong>
+            <small>{voiceSuppressionLabel}</small>
+          </div>
           <div className="voice-control-menu-actions">
             <button
               aria-label={
@@ -401,73 +557,39 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
           </div>
         </div>
 
-        <p className="voice-noise-copy">
-          {voiceState.noiseSuppression
-            ? "Activa la supresion de ruido de Krisp. Haz un poco de ruido y Umbra intentara limpiar el fondo mientras hablas."
-            : "La supresion esta apagada. Escucharas y enviaras el ambiente tal como entra al microfono."}
+        <p className={`voice-noise-copy ${voiceInputStatus.error ? "error" : ""}`.trim()}>
+          {voiceSuppressionCopy}
         </p>
-
-        <div className="voice-noise-test">
-          <strong>Prueba de microfono</strong>
-          <div className="voice-noise-test-row">
-            <button
-              className="ghost-button small"
-              onClick={() => setNoiseTestActive((previous) => !previous)}
-              type="button"
-            >
-              {noiseTestActive ? "Detener" : "Probar"}
-            </button>
-            <div className="voice-input-meter compact">
-              {inputMeterBars.map((bar) => (
-                <i className={bar < activeNoiseTestBars ? "active" : ""} key={`noise-${bar}`} />
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="voice-noise-footer">
-          <div>
-            <small>Con tecnologia de</small>
-            <strong>krisp</strong>
-          </div>
-          <button
-            className="ghost-button small"
-            onClick={() =>
-              showUiNotice("La integracion real de Krisp llegara cuando conectemos audio WebRTC.")
-            }
-            type="button"
-          >
-            Mas informacion
-          </button>
-        </div>
 
         <div className="voice-control-divider" />
 
-        <button className="voice-control-link" onClick={() => cycleVoiceDevice("audioinput")} type="button">
+        <button
+          className={`voice-control-link ${voiceInputPanel === "device" ? "panel-open" : ""}`.trim()}
+          onClick={() =>
+            setVoiceInputPanel((previous) => (previous === "device" ? null : "device"))
+          }
+          type="button"
+        >
           <span>
-            <strong>Configuracion predeterminada</strong>
+            <strong>Dispositivo de entrada</strong>
             <small>{getSelectedDeviceLabel("audioinput")}</small>
           </span>
           <Icon name="arrowRight" size={15} />
         </button>
 
-        <button className="voice-control-link" onClick={() => cycleVoiceDevice("audiooutput")} type="button">
+        <button
+          className={`voice-control-link ${voiceInputPanel === "profile" ? "panel-open" : ""}`.trim()}
+          onClick={() =>
+            setVoiceInputPanel((previous) => (previous === "profile" ? null : "profile"))
+          }
+          type="button"
+        >
           <span>
             <strong>Perfil de entrada</strong>
-            <small>Personalizar</small>
+            <small>{activeInputProfileLabel}</small>
           </span>
           <Icon name="arrowRight" size={15} />
         </button>
-
-        <button className="voice-control-link" onClick={() => cycleVoiceDevice("videoinput")} type="button">
-          <span>
-            <strong>Dispositivo de salida</strong>
-            <small>{getSelectedDeviceLabel("audiooutput")}</small>
-          </span>
-          <Icon name="arrowRight" size={15} />
-        </button>
-
-        <div className="voice-control-divider" />
 
         <div className="voice-control-slider-block">
           <div className="voice-control-title-row">
@@ -477,7 +599,10 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
           <input
             max="100"
             min="0"
-            onChange={(event) => updateVoiceSetting("inputVolume", Number(event.target.value))}
+            onChange={(event) => {
+              updateVoiceSetting("inputProfile", "custom");
+              updateVoiceSetting("inputVolume", Number(event.target.value));
+            }}
             type="range"
             value={voiceState.inputVolume}
           />
@@ -486,49 +611,39 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
               <i className={bar < activeInputBars ? "active" : ""} key={`input-${bar}`} />
             ))}
           </div>
+          <small className="voice-control-slider-caption">
+            {voiceState.micMuted
+              ? "El microfono esta silenciado."
+              : voiceInputStatus.ready
+                ? "Nivel en vivo del microfono."
+                : "Abre este panel o entra a una sala para activar el analizador."}
+          </small>
         </div>
-
-        <div className="voice-control-slider-block">
-          <div className="voice-control-title-row">
-            <strong>Volumen de salida</strong>
-            <small>{voiceState.outputVolume}%</small>
-          </div>
-          <input
-            max="100"
-            min="0"
-            onChange={(event) => updateVoiceSetting("outputVolume", Number(event.target.value))}
-            type="range"
-            value={voiceState.outputVolume}
-          />
-        </div>
-
-        <div className="voice-control-divider" />
-
-        <label className="voice-control-check">
-          <span>Pulsar para hablar</span>
-          <input
-            checked={voiceState.pushToTalk}
-            onChange={() => toggleVoiceState("pushToTalk")}
-            type="checkbox"
-          />
-        </label>
-
-        <label className="voice-control-check">
-          <span>Ensordecer</span>
-          <input
-            checked={voiceState.deafen}
-            onChange={() => toggleVoiceState("deafen")}
-            type="checkbox"
-          />
-        </label>
 
         <div className="voice-control-divider" />
 
         <div className="voice-control-footer">
-          <button className="ghost-button icon-only" onClick={() => setSettingsOpen(true)} type="button">
-            <Icon name="settings" />
+          <button className="ghost-button small" onClick={() => setSettingsOpen(true)} type="button">
+            Ajustes de voz
+          </button>
+          <button
+            className="ghost-button small"
+            onClick={() =>
+              showUiNotice(
+                voiceInputStatus.engine === "speex"
+                  ? "Speex DSP esta activo sobre tu microfono."
+                  : voiceInputStatus.engine === "native"
+                    ? "Umbra esta usando la supresion nativa del navegador."
+                    : "La supresion esta desactivada."
+              )
+            }
+            type="button"
+          >
+            Ver estado
           </button>
         </div>
+
+        {renderInputSubmenu()}
       </div>
     );
   }

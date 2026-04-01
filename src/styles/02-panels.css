@@ -54,7 +54,7 @@
   display: flex;
   gap: 16px;
   justify-content: space-between;
-  padding: 20px 22px 18px;
+  padding: 14px 16px 12px;
 }
 
 .friends-title,
@@ -80,7 +80,7 @@
   display: flex;
   gap: 16px;
   justify-content: space-between;
-  padding: 16px 20px;
+  padding: 12px 16px;
 }
 
 .requests-title {
@@ -105,18 +105,18 @@
   flex-direction: column;
   gap: 10px;
   overflow: auto;
-  padding: 20px;
+  padding: 14px 16px 18px;
 }
 
 .request-row {
   align-items: center;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 16px;
+  border-radius: 14px;
   display: flex;
-  gap: 16px;
+  gap: 14px;
   justify-content: space-between;
-  padding: 16px;
+  padding: 12px 14px;
 }
 
 .request-row-main {
@@ -386,8 +386,8 @@
   align-items: center;
   display: flex;
   justify-content: space-between;
-  min-height: 56px;
-  padding: 10px 18px;
+  min-height: 48px;
+  padding: 8px 14px;
 }
 
 .chat-header h1,
@@ -403,7 +403,7 @@
   border-radius: 999px;
   display: inline-flex;
   gap: 10px;
-  padding: 10px 14px;
+  padding: 8px 12px;
 }
 
 .message-feed-host {
@@ -422,15 +422,15 @@
   gap: 2px;
   min-height: 0;
   overflow: auto;
-  padding: 18px 22px 10px;
+  padding: 12px 16px 8px;
 }
 
 .message-card {
   border-radius: var(--radius-md);
   display: grid;
-  gap: 14px;
-  grid-template-columns: 44px 1fr;
-  padding: 10px 12px;
+  gap: 12px;
+  grid-template-columns: 40px 1fr;
+  padding: 8px 10px;
   transition: background 160ms ease;
 }
 
@@ -447,13 +447,13 @@
 }
 
 .message-gutter {
-  width: 44px;
+  width: 40px;
 }
 
 .message-headline {
   align-items: center;
   display: flex;
-  gap: 10px;
+  gap: 8px;
 }
 
 .message-avatar-trigger,
@@ -478,7 +478,7 @@
 .message-author-trigger {
   background: transparent;
   color: var(--text-0);
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 700;
   padding: 0;
 }
@@ -499,8 +499,8 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  margin-bottom: 8px;
-  padding: 8px 10px;
+  margin-bottom: 6px;
+  padding: 7px 9px;
   width: fit-content;
 }
 

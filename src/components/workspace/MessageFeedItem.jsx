@@ -197,28 +197,30 @@ export const MessageFeedItem = memo(function MessageFeedItem({
           ) : null}
         </div>
 
-        <div className="reactions-row">
-          {reactions.map((reaction) => (
+        {reactions.length ? (
+          <div className="reactions-row">
+            {reactions.map((reaction) => (
+              <button
+                className={`reaction-chip ${reaction.selected ? "selected" : ""}`}
+                key={`${message.id}-${reaction.emoji}`}
+                onClick={() => onHandleReaction(message.id, reaction.emoji)}
+                type="button"
+              >
+                <span>{reaction.emoji}</span>
+                <b>{reaction.count}</b>
+              </button>
+            ))}
             <button
-              className={`reaction-chip ${reaction.selected ? "selected" : ""}`}
-              key={`${message.id}-${reaction.emoji}`}
-              onClick={() => onHandleReaction(message.id, reaction.emoji)}
+              className="reaction-chip add"
+              onClick={() =>
+                onSetReactionPickerFor((previous) => (previous === message.id ? null : message.id))
+              }
               type="button"
             >
-              <span>{reaction.emoji}</span>
-              <b>{reaction.count}</b>
+              <Icon name="add" size={14} />
             </button>
-          ))}
-          <button
-            className="reaction-chip add"
-            onClick={() =>
-              onSetReactionPickerFor((previous) => (previous === message.id ? null : message.id))
-            }
-            type="button"
-          >
-            <Icon name="add" size={14} />
-          </button>
-        </div>
+          </div>
+        ) : null}
 
         {isReactionPickerOpen ? (
           <div className="reaction-picker-inline">

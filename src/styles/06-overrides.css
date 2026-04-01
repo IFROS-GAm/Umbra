@@ -191,12 +191,18 @@
 
 .server-rail {
   align-items: stretch;
-  background: #0f1013;
+  background: #111214;
   justify-content: flex-start;
   overflow: visible;
-  padding: 12px;
+  padding: 10px 8px;
   position: relative;
-  z-index: 12;
+  z-index: 24;
+}
+
+.navigator-panel {
+  position: relative;
+  overflow: visible;
+  z-index: 10;
 }
 
 .server-rail-header {
@@ -205,17 +211,17 @@
 
 .server-rail-stack {
   align-items: center;
-  background: #090a0d;
+  background: #0b0c10;
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 28px;
+  border-radius: 24px;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   justify-content: flex-start;
   overflow: visible;
-  padding: 12px 10px;
+  padding: 10px 8px;
   width: 100%;
 }
 
@@ -229,20 +235,20 @@
 .server-stack {
   align-items: center;
   flex: none;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
 }
 
 .server-pill {
   background: #181a1f;
   border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 16px;
-  height: 52px;
+  border-radius: 14px;
+  height: 48px;
   margin: 0 auto;
   overflow: visible;
   position: relative;
-  width: 52px;
-  z-index: 1;
+  width: 48px;
+  z-index: 2;
 }
 
 .server-pill.home {
@@ -252,11 +258,11 @@
 .server-pill:hover,
 .server-pill.active,
 .server-pill:focus-visible {
-  background: #111318;
+  background: #141518;
   border-color: rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
+  border-radius: 14px;
   transform: translateY(-1px);
-  z-index: 22;
+  z-index: 30;
 }
 
 .server-pill.home:hover,
@@ -268,15 +274,15 @@
 .server-pill.has-image {
   background: transparent;
   border-color: transparent;
-  padding: 2px;
+  padding: 1px;
 }
 
 .server-pill.has-image:hover,
 .server-pill.has-image.active,
 .server-pill.has-image:focus-visible {
   background: transparent;
-  border-color: rgba(88, 101, 242, 0.72);
-  box-shadow: 0 0 0 1px rgba(88, 101, 242, 0.24);
+  border-color: rgba(88, 101, 242, 0.58);
+  box-shadow: 0 0 0 1px rgba(88, 101, 242, 0.18);
 }
 
 .server-pill.add {
@@ -290,12 +296,12 @@
 }
 
 .server-pill-logo {
-  border-radius: 12px;
+  border-radius: 11px;
   box-shadow: none;
 }
 
 .server-pill-image {
-  border-radius: 12px;
+  border-radius: 11px;
   display: block;
   height: 100%;
   object-fit: cover;
@@ -372,15 +378,17 @@
   border-color: rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
-  font-size: 0.98rem;
+  font-size: 0.9rem;
   font-weight: 700;
-  padding: 10px 14px;
+  padding: 8px 12px;
+  z-index: 90;
 }
 
 .server-pill.tooltip-anchor::before {
   background: #17181c;
   border-left-color: rgba(255, 255, 255, 0.1);
   border-top-color: rgba(255, 255, 255, 0.1);
+  z-index: 89;
 }
 
 .tooltip-anchor:hover::after,
@@ -402,18 +410,29 @@
 
 .navigator-footer {
   margin-top: auto;
-  padding-top: 14px;
+  background: #111214;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: -12px;
+  margin-left: -70px;
+  margin-right: -12px;
+  overflow: visible;
+  padding: 8px 8px 10px 66px;
+  position: relative;
+  z-index: 70;
 }
 
 .user-dock {
   align-items: center;
-  background: #111214;
+  background: rgba(22, 23, 27, 0.96);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
+  border-radius: 10px;
   display: grid;
   gap: 8px;
   grid-template-columns: minmax(0, 1fr) auto;
-  padding: 8px;
+  min-height: 54px;
+  padding: 7px 8px;
+  width: 100%;
+  z-index: 2;
 }
 
 .profile-card.user-dock-profile {
@@ -422,10 +441,10 @@
   border: 0;
   box-shadow: none;
   display: flex;
-  gap: 10px;
+  gap: 8px;
   justify-content: flex-start;
   min-width: 0;
-  padding: 4px 6px;
+  padding: 2px 4px;
   width: auto;
 }
 
@@ -441,7 +460,7 @@
 }
 
 .user-dock-profile .profile-meta span {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -452,20 +471,77 @@
 }
 
 .footer-actions.footer-voice-actions {
+  align-items: center;
   flex-shrink: 0;
-  gap: 4px;
+  gap: 3px;
 }
 
 .footer-actions.footer-voice-actions .ghost-button.icon-only {
-  background: #23252c;
-  min-height: 34px;
-  min-width: 34px;
-  padding: 8px;
+  background: transparent;
+  min-height: 30px;
+  min-width: 30px;
+  padding: 6px;
 }
 
-.footer-actions.footer-voice-actions .dock-caret {
-  min-width: 24px;
-  padding: 8px 4px;
+.dock-split-control {
+  align-items: stretch;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  display: inline-flex;
+  min-height: 30px;
+  overflow: hidden;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.dock-split-control:hover,
+.dock-split-control.active {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.dock-split-control.danger.active {
+  background: rgba(237, 66, 69, 0.2);
+  border-color: rgba(237, 66, 69, 0.24);
+}
+
+.dock-split-main,
+.dock-split-caret {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--text-0);
+  display: inline-flex;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.dock-split-main {
+  min-width: 30px;
+  padding: 0 8px;
+}
+
+.dock-split-caret {
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  min-width: 18px;
+  padding: 0 4px;
+}
+
+.dock-split-main:hover,
+.dock-split-caret:hover,
+.dock-split-main.active,
+.dock-split-caret.active {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.dock-split-main.danger.active {
+  color: #ff8a91;
+}
+
+.dock-split-caret.active {
+  color: var(--text-0);
 }
 
 .voice-panel {

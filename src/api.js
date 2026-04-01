@@ -84,6 +84,7 @@ export const api = {
   createMessage({
     attachments = [],
     channelId,
+    clientNonce = null,
     content,
     replyMentionUserId = null,
     replyTo
@@ -92,6 +93,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify({
         attachments,
+        clientNonce,
         content,
         replyMentionUserId,
         replyTo

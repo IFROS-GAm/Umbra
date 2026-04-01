@@ -35,6 +35,9 @@ export function WorkspaceNavigation({
   voiceUsersByChannel,
   workspace
 }) {
+  const truncatedCurrentUserLabel =
+    currentUserLabel.length > 16 ? `${currentUserLabel.slice(0, 13)}...` : currentUserLabel;
+
   return (
     <>
       <aside className="server-rail">
@@ -367,52 +370,64 @@ export function WorkspaceNavigation({
                 status={workspace.current_user.status}
               />
               <div className="profile-meta">
-                <strong>{currentUserLabel}</strong>
+                <strong title={currentUserLabel}>{truncatedCurrentUserLabel}</strong>
                 <span>{workspace.current_user.status || "Offline"}</span>
               </div>
             </button>
 
             <div className="footer-actions footer-voice-actions">
-              <button
-                aria-label={voiceState.micMuted ? "Activar microfono" : "Silenciar microfono"}
-                className={`ghost-button icon-only tooltip-anchor ${voiceState.micMuted ? "danger active" : ""}`}
-                data-tooltip={voiceState.micMuted ? "Activar microfono" : "Silenciar"}
-                data-tooltip-position="top"
-                onClick={() => onToggleVoiceState("micMuted")}
-                type="button"
+              <div
+                className={`dock-split-control ${
+                  voiceState.micMuted ? "danger active" : voiceMenu === "input" ? "active" : ""
+                }`}
               >
-                <Icon name={voiceState.micMuted ? "micOff" : "mic"} />
-              </button>
-              <button
-                aria-label="Opciones del microfono"
-                className={`ghost-button icon-only dock-caret tooltip-anchor ${voiceMenu === "input" ? "active" : ""}`}
-                data-tooltip="Ajustes de voz"
-                data-tooltip-position="top"
-                onClick={() => onToggleVoiceMenu("input")}
-                type="button"
+                <button
+                  aria-label={voiceState.micMuted ? "Activar microfono" : "Silenciar microfono"}
+                  className={`dock-split-main tooltip-anchor ${voiceState.micMuted ? "danger active" : ""}`}
+                  data-tooltip={voiceState.micMuted ? "Activar microfono" : "Silenciar"}
+                  data-tooltip-position="top"
+                  onClick={() => onToggleVoiceState("micMuted")}
+                  type="button"
+                >
+                  <Icon name={voiceState.micMuted ? "micOff" : "mic"} />
+                </button>
+                <button
+                  aria-label="Opciones del microfono"
+                  className={`dock-split-caret tooltip-anchor ${voiceMenu === "input" ? "active" : ""}`}
+                  data-tooltip="Opciones de entrada"
+                  data-tooltip-position="top"
+                  onClick={() => onToggleVoiceMenu("input")}
+                  type="button"
+                >
+                  <Icon name="chevronDown" size={14} />
+                </button>
+              </div>
+              <div
+                className={`dock-split-control ${
+                  voiceState.deafen ? "active" : voiceMenu === "input" ? "active" : ""
+                }`}
               >
-                <Icon name="chevronDown" size={14} />
-              </button>
-              <button
-                aria-label={voiceState.deafen ? "Activar audio" : "Ensordecer"}
-                className={`ghost-button icon-only tooltip-anchor ${voiceState.deafen ? "active" : ""}`}
-                data-tooltip={voiceState.deafen ? "Activar audio" : "Ensordecer"}
-                data-tooltip-position="top"
-                onClick={() => onToggleVoiceState("deafen")}
-                type="button"
-              >
-                <Icon name={voiceState.deafen ? "deafen" : "headphones"} />
-              </button>
-              <button
-                aria-label="Opciones de audio"
-                className={`ghost-button icon-only dock-caret tooltip-anchor ${voiceMenu === "input" ? "active" : ""}`}
-                data-tooltip="Salida de audio"
-                data-tooltip-position="top"
-                onClick={() => onToggleVoiceMenu("input")}
-                type="button"
-              >
-                <Icon name="chevronDown" size={14} />
-              </button>
+                <button
+                  aria-label={voiceState.deafen ? "Activar audio" : "Ensordecer"}
+                  className={`dock-split-main tooltip-anchor ${voiceState.deafen ? "active" : ""}`}
+                  data-tooltip={voiceState.deafen ? "Activar audio" : "Ensordecer"}
+                  data-tooltip-position="top"
+                  onClick={() => onToggleVoiceState("deafen")}
+                  type="button"
+                >
+                  <Icon name={voiceState.deafen ? "deafen" : "headphones"} />
+                </button>
+                <button
+                  aria-label="Opciones de audio"
+                  className={`dock-split-caret tooltip-anchor ${voiceMenu === "input" ? "active" : ""}`}
+                  data-tooltip="Opciones de salida"
+                  data-tooltip-position="top"
+                  onClick={() => onToggleVoiceMenu("input")}
+                  type="button"
+                >
+                  <Icon name="chevronDown" size={14} />
+                </button>
+              </div>
               <button
                 aria-label="Abrir ajustes"
                 className="ghost-button icon-only tooltip-anchor"
