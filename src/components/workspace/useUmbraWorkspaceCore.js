@@ -1,13 +1,20 @@
-import { useEffect, useRef, useState } from "react";
+import { startTransition, useEffect, useRef, useState } from "react";
 
 import { api, configureApiAuth } from "../../api.js";
 import { getSocket } from "../../socket.js";
 import { findChannelInSession, resolveSelection } from "../../utils.js";
 import {
   applyChannelPreviewToWorkspace,
+  isChannelCacheFresh,
+  listLikelyChannelIds,
   fallbackDeviceLabel,
+  mergeLocalReadStateIntoWorkspace,
+  mergeChannelMessages,
   markChannelReadInWorkspace,
-  renderHeaderCopy
+  removeChannelMessage,
+  renderHeaderCopy,
+  toggleReactionBucket,
+  upsertChannelMessage
 } from "./workspaceHelpers.js";
 import { createVoiceInputProcessingSession } from "./voiceInputProcessing.js";
 
@@ -89,6 +96,10 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
   const accessTokenRef = useRef(accessToken);
   const joinedVoiceChannelIdRef = useRef(joinedVoiceChannelId);
   const voiceInputSessionRef = useRef(null);
+  const messageCacheRef = useRef(new Map());
+  const messageRequestIdRef = useRef(0);
+  const messageAbortRef = useRef(null);
+  const localReadStateRef = useRef(new Map());
 
   activeSelectionRef.current = activeSelection;
   accessTokenRef.current = accessToken;
@@ -113,13 +124,96 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
   );
   const voiceUserIds = activeChannel?.id ? voiceSessions[activeChannel.id] || [] : [];
 
+  function readChannelCache(channelId) {
+    return channelId ? messageCacheRef.current.get(channelId) || null : null;
+  }
+
+  function pruneChannelCache(nextWorkspace) {
+    if (!nextWorkspace) {
+      messageCacheRef.current.clear();
+      return;
+    }
+
+    const allowedIds = new Set([
+      ...(nextWorkspace.dms || []).map((channel) => channel.id),
+      ...nextWorkspace.guilds.flatMap((guild) => (guild.channels || []).map((channel) => channel.id))
+    ]);
+
+    [...messageCacheRef.current.keys()].forEach((channelId) => {
+      if (!allowedIds.has(channelId)) {
+        messageCacheRef.current.delete(channelId);
+      }
+    });
+  }
+
+  function commitChannelMessages(channelId, nextMessages, nextHasMore, fetchedAt = Date.now()) {
+    if (!channelId) {
+      return;
+    }
+
+    const nextEntry = {
+      fetchedAt,
+      hasMore: nextHasMore,
+      messages: nextMessages
+    };
+    messageCacheRef.current.set(channelId, nextEntry);
+
+    if (activeSelectionRef.current.channelId === channelId) {
+      startTransition(() => {
+        setMessages(nextMessages);
+        setHasMore(nextHasMore);
+      });
+    }
+  }
+
+  function patchChannelMessages(channelId, updateMessages, nextHasMore) {
+    if (!channelId) {
+      return;
+    }
+
+    const previousEntry = readChannelCache(channelId) || {
+      fetchedAt: 0,
+      hasMore: true,
+      messages: []
+    };
+    const nextMessages = updateMessages(previousEntry.messages || []);
+    const resolvedHasMore = nextHasMore ?? previousEntry.hasMore ?? true;
+    commitChannelMessages(channelId, nextMessages, resolvedHasMore, Date.now());
+  }
+
+  function rememberLocalRead(channelId, lastReadAt, lastReadMessageId) {
+    if (!channelId || !lastReadMessageId) {
+      return;
+    }
+
+    const previous = localReadStateRef.current.get(channelId);
+    const previousTime = previous?.lastReadAt ? new Date(previous.lastReadAt).getTime() : 0;
+    const nextTime = lastReadAt ? new Date(lastReadAt).getTime() : 0;
+
+    if (previous && previousTime > nextTime) {
+      return;
+    }
+
+    localReadStateRef.current.set(channelId, {
+      lastReadAt,
+      lastReadMessageId
+    });
+  }
+
   async function loadBootstrap(preferredSelection = activeSelectionRef.current) {
     configureApiAuth(() => accessTokenRef.current);
 
     try {
       const payload = await api.bootstrap();
-      setWorkspace(payload);
-      setActiveSelection(resolveSelection(payload, preferredSelection));
+      pruneChannelCache(payload);
+      const resolvedSelection = resolveSelection(payload, preferredSelection);
+      const normalizedWorkspace = mergeLocalReadStateIntoWorkspace(
+        payload,
+        localReadStateRef.current,
+        resolvedSelection.channelId
+      );
+      setWorkspace(normalizedWorkspace);
+      setActiveSelection(resolvedSelection);
       setAppError("");
     } catch (error) {
       if (String(error.message || "").toLowerCase().includes("unauthorized")) {
@@ -139,11 +233,17 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
       return;
     }
 
+    rememberLocalRead(channelId, lastReadAt, lastReadMessageId);
+
     setWorkspace((previous) =>
-      markChannelReadInWorkspace(previous, {
-        channelId,
-        lastReadAt
-      })
+      mergeLocalReadStateIntoWorkspace(
+        markChannelReadInWorkspace(previous, {
+          channelId,
+          lastReadAt
+        }),
+        localReadStateRef.current,
+        activeSelectionRef.current.channelId
+      )
     );
 
     pendingReadRef.current = {
@@ -250,7 +350,15 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
     };
   }
 
-  async function loadMessages({ before = null, channelId = activeSelection.channelId, prepend = false } = {}) {
+  async function loadMessages({
+    background = false,
+    before = null,
+    channelId = activeSelection.channelId,
+    force = false,
+    limit,
+    prepend = false,
+    silent = false
+  } = {}) {
     const targetChannel = findChannelInSession(workspace, channelId)?.channel;
     if (!channelId || targetChannel?.is_voice) {
       setMessages([]);
@@ -258,55 +366,96 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
       return;
     }
 
-    setLoadingMessages(true);
+    const isInitialPage = !before && !prepend;
+    const cachedEntry = isInitialPage ? readChannelCache(channelId) : null;
+
+    if (cachedEntry && isInitialPage) {
+      commitChannelMessages(channelId, cachedEntry.messages || [], cachedEntry.hasMore, cachedEntry.fetchedAt);
+      if (!force && isChannelCacheFresh(cachedEntry)) {
+        return cachedEntry;
+      }
+      silent = true;
+    }
+
+    if (!silent && !background && activeSelectionRef.current.channelId === channelId) {
+      setLoadingMessages(true);
+    }
+
+    if (isInitialPage && messageAbortRef.current) {
+      messageAbortRef.current.abort();
+    }
+
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const requestId = messageRequestIdRef.current + 1;
+    messageRequestIdRef.current = requestId;
+
+    if (isInitialPage) {
+      messageAbortRef.current = controller;
+    }
+
     const previousHeight = listRef.current?.scrollHeight || 0;
 
     try {
       const payload = await api.fetchMessages({
         before,
         channelId,
-        limit: 30
+        limit: limit || (prepend ? 28 : 24),
+        signal: controller?.signal
       });
 
-      setHasMore(payload.has_more);
-
       if (prepend) {
-        setMessages((previous) => {
-          const next = [...payload.messages, ...previous];
-          return next.filter(
-            (message, index, collection) =>
-              collection.findIndex((item) => item.id === message.id) === index
-          );
+        const currentMessages = readChannelCache(channelId)?.messages || [];
+        const nextMessages = mergeChannelMessages(currentMessages, payload.messages, {
+          prepend: true
         });
+        commitChannelMessages(channelId, nextMessages, payload.has_more);
 
-        requestAnimationFrame(() => {
-          const element = listRef.current;
-          if (element) {
-            element.scrollTop = element.scrollHeight - previousHeight;
-          }
-        });
+        if (activeSelectionRef.current.channelId === channelId) {
+          requestAnimationFrame(() => {
+            const element = listRef.current;
+            if (element) {
+              element.scrollTop = element.scrollHeight - previousHeight;
+            }
+          });
+        }
       } else {
-        setMessages(payload.messages);
-        requestAnimationFrame(() => {
-          const element = listRef.current;
-          if (element) {
-            element.scrollTop = element.scrollHeight;
-          }
-        });
+        commitChannelMessages(channelId, payload.messages, payload.has_more);
+        if (activeSelectionRef.current.channelId === channelId) {
+          requestAnimationFrame(() => {
+            const element = listRef.current;
+            if (element) {
+              element.scrollTop = element.scrollHeight;
+            }
+          });
+        }
       }
 
       const latest = payload.messages[payload.messages.length - 1];
-      if (latest) {
+      if (latest && activeSelectionRef.current.channelId === channelId) {
         queueMarkRead({
           channelId,
           lastReadAt: latest.created_at,
           lastReadMessageId: latest.id
         });
       }
+
+      return payload;
     } catch (error) {
-      setAppError(error.message);
+      if (error?.name !== "AbortError" && !background) {
+        setAppError(error.message);
+      }
     } finally {
-      setLoadingMessages(false);
+      if (
+        activeSelectionRef.current.channelId === channelId &&
+        (!background || !silent) &&
+        (!isInitialPage || messageRequestIdRef.current === requestId)
+      ) {
+        setLoadingMessages(false);
+      }
+
+      if (messageAbortRef.current === controller) {
+        messageAbortRef.current = null;
+      }
     }
   }
 
@@ -344,8 +493,31 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
     setTypingEvents([]);
 
     if (activeSelection.channelId && !activeChannel?.is_voice) {
+      const cachedEntry = readChannelCache(activeSelection.channelId);
+      if (cachedEntry) {
+        startTransition(() => {
+          setMessages(cachedEntry.messages || []);
+          setHasMore(cachedEntry.hasMore ?? true);
+        });
+        setLoadingMessages(false);
+
+        const latestCached = cachedEntry.messages?.[cachedEntry.messages.length - 1];
+        if (latestCached?.id) {
+          queueMarkRead({
+            channelId: activeSelection.channelId,
+            lastReadAt: latestCached.created_at,
+            lastReadMessageId: latestCached.id
+          });
+        }
+      } else {
+        setMessages([]);
+        setHasMore(true);
+      }
+
       loadMessages({
-        channelId: activeSelection.channelId
+        channelId: activeSelection.channelId,
+        force: !cachedEntry,
+        silent: Boolean(cachedEntry)
       });
     } else {
       setMessages([]);
@@ -376,28 +548,21 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
 
     const onMessageCreate = async ({ message, preview }) => {
       if (preview) {
-        setWorkspace((previous) => applyChannelPreviewToWorkspace(previous, preview));
+        setWorkspace((previous) =>
+          applyChannelPreviewToWorkspace(previous, preview, {
+            localReadStateByChannel: localReadStateRef.current,
+            openChannelId: activeSelectionRef.current.channelId
+          })
+        );
+      }
+
+      if (message?.channel_id) {
+        patchChannelMessages(message.channel_id, (previous) =>
+          upsertChannelMessage(previous, message)
+        );
       }
 
       if (message?.channel_id === activeSelectionRef.current.channelId) {
-        setMessages((previous) => {
-          const optimisticIndex = message.client_nonce
-            ? previous.findIndex(
-                (item) =>
-                  item.client_nonce === message.client_nonce &&
-                  item.author?.id === message.author?.id
-              )
-            : -1;
-
-          if (optimisticIndex >= 0) {
-            const next = [...previous];
-            next[optimisticIndex] = message;
-            return next;
-          }
-
-          return previous.some((item) => item.id === message.id) ? previous : [...previous, message];
-        });
-
         requestAnimationFrame(() => {
           const element = listRef.current;
           if (!element) {
@@ -422,11 +587,16 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
 
     const onMessageUpdate = ({ message, preview }) => {
       if (preview) {
-        setWorkspace((previous) => applyChannelPreviewToWorkspace(previous, preview));
+        setWorkspace((previous) =>
+          applyChannelPreviewToWorkspace(previous, preview, {
+            localReadStateByChannel: localReadStateRef.current,
+            openChannelId: activeSelectionRef.current.channelId
+          })
+        );
       }
 
-      if (message?.channel_id === activeSelectionRef.current.channelId) {
-        setMessages((previous) =>
+      if (message?.channel_id) {
+        patchChannelMessages(message.channel_id, (previous) =>
           previous.map((item) => (item.id === message.id ? message : item))
         );
       }
@@ -434,17 +604,22 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
 
     const onMessageDelete = ({ channel_id, id, preview }) => {
       if (preview) {
-        setWorkspace((previous) => applyChannelPreviewToWorkspace(previous, preview));
+        setWorkspace((previous) =>
+          applyChannelPreviewToWorkspace(previous, preview, {
+            localReadStateByChannel: localReadStateRef.current,
+            openChannelId: activeSelectionRef.current.channelId
+          })
+        );
       }
 
-      if (channel_id === activeSelectionRef.current.channelId) {
-        setMessages((previous) => previous.filter((item) => item.id !== id));
+      if (channel_id) {
+        patchChannelMessages(channel_id, (previous) => removeChannelMessage(previous, id));
       }
     };
 
     const onReactionUpdate = ({ message }) => {
-      if (message?.channel_id === activeSelectionRef.current.channelId) {
-        setMessages((previous) =>
+      if (message?.channel_id) {
+        patchChannelMessages(message.channel_id, (previous) =>
           previous.map((item) => (item.id === message.id ? message : item))
         );
       }
@@ -522,7 +697,12 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
         return;
       }
 
-      setWorkspace((previous) => applyChannelPreviewToWorkspace(previous, preview));
+      setWorkspace((previous) =>
+        applyChannelPreviewToWorkspace(previous, preview, {
+          localReadStateByChannel: localReadStateRef.current,
+          openChannelId: activeSelectionRef.current.channelId
+        })
+      );
     };
 
     const onRoomError = (payload) => {
@@ -580,6 +760,50 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
       getSocket(accessToken).emit("room:join", { channelId: activeSelection.channelId });
     }
   }, [accessToken, activeSelection.channelId]);
+
+  useEffect(() => {
+    if (!workspace || !accessToken) {
+      return undefined;
+    }
+
+    const candidateIds = listLikelyChannelIds(workspace, activeSelection, 5).filter(
+      (channelId) => !readChannelCache(channelId)
+    );
+
+    if (!candidateIds.length) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    const scheduleIdle =
+      typeof window.requestIdleCallback === "function"
+        ? (callback) => window.requestIdleCallback(callback, { timeout: 1400 })
+        : (callback) => window.setTimeout(callback, 700);
+    const cancelIdle =
+      typeof window.cancelIdleCallback === "function"
+        ? (handle) => window.cancelIdleCallback(handle)
+        : (handle) => window.clearTimeout(handle);
+
+    const handle = scheduleIdle(async () => {
+      for (const channelId of candidateIds) {
+        if (cancelled || readChannelCache(channelId)) {
+          continue;
+        }
+
+        await loadMessages({
+          background: true,
+          channelId,
+          limit: 18,
+          silent: true
+        });
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      cancelIdle(handle);
+    };
+  }, [accessToken, activeSelection.channelId, activeSelection.guildId, activeSelection.kind, workspace]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -841,8 +1065,15 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
           last_message_at: createdAt
         };
 
-        setMessages((previous) => [...previous, optimisticMessage]);
-        setWorkspace((previous) => applyChannelPreviewToWorkspace(previous, optimisticPreview));
+        patchChannelMessages(activeSelection.channelId, (previous) =>
+          upsertChannelMessage(previous, optimisticMessage)
+        );
+        setWorkspace((previous) =>
+          applyChannelPreviewToWorkspace(previous, optimisticPreview, {
+            localReadStateByChannel: localReadStateRef.current,
+            openChannelId: activeSelectionRef.current.channelId
+          })
+        );
         requestAnimationFrame(() => {
           const element = listRef.current;
           if (element) {
@@ -869,11 +1100,16 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
         });
 
         if (payload?.preview) {
-          setWorkspace((previous) => applyChannelPreviewToWorkspace(previous, payload.preview));
+          setWorkspace((previous) =>
+            applyChannelPreviewToWorkspace(previous, payload.preview, {
+              localReadStateByChannel: localReadStateRef.current,
+              openChannelId: activeSelectionRef.current.channelId
+            })
+          );
         }
 
         if (payload?.message) {
-          setMessages((previous) =>
+          patchChannelMessages(activeSelection.channelId, (previous) =>
             previous.map((item) =>
               item.client_nonce === clientNonce ? payload.message : item
             )
@@ -891,7 +1127,7 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
       setAppError("");
     } catch (error) {
       if (!editingMessage) {
-        setMessages((previous) =>
+        patchChannelMessages(activeSelection.channelId, (previous) =>
           previous.filter((item) => item.client_nonce !== pendingClientNonce)
         );
         setComposer(draftComposer);
@@ -919,12 +1155,39 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
   }
 
   async function handleReaction(messageId, emoji) {
+    const channelId = activeSelectionRef.current.channelId;
+    const currentUserId = workspace?.current_user?.id;
+    const cachedMessage = (readChannelCache(channelId)?.messages || []).find(
+      (message) => message.id === messageId
+    );
+
+    if (channelId && currentUserId) {
+      patchChannelMessages(channelId, (previous) =>
+        toggleReactionBucket(previous, {
+          emoji,
+          messageId,
+          userId: currentUserId
+        })
+      );
+    }
+
     try {
-      await api.toggleReaction({
+      const payload = await api.toggleReaction({
         emoji,
         messageId
       });
+
+      if (payload?.message?.channel_id) {
+        patchChannelMessages(payload.message.channel_id, (previous) =>
+          previous.map((item) => (item.id === payload.message.id ? payload.message : item))
+        );
+      }
     } catch (error) {
+      if (channelId && cachedMessage) {
+        patchChannelMessages(channelId, (previous) =>
+          previous.map((message) => (message.id === messageId ? cachedMessage : message))
+        );
+      }
       setAppError(error.message);
     }
   }

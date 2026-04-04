@@ -6,7 +6,12 @@ import { ChatHeader } from "./workspace/ChatHeader.jsx";
 import { DesktopTopbar } from "./workspace/DesktopTopbar.jsx";
 import { MembersPanel } from "./workspace/MembersPanel.jsx";
 import { WorkspaceNavigation } from "./workspace/WorkspaceNavigation.jsx";
-import { buildMemberGroups, buildVoiceStageTone, isVisibleStatus } from "./workspace/workspaceHelpers.js";
+import {
+  buildMemberGroups,
+  buildVoiceStageTone,
+  fallbackDeviceLabel,
+  isVisibleStatus
+} from "./workspace/workspaceHelpers.js";
 import { useUmbraWorkspaceCore } from "./workspace/useUmbraWorkspaceCore.js";
 
 const lazyNamed = (loader, exportName) =>
@@ -54,6 +59,7 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
     cycleVoiceDevice, getSelectedDeviceLabel, selectedVoiceDevices
   } = useUmbraWorkspaceCore({ accessToken, onSignOut });
   const [voiceInputPanel, setVoiceInputPanel] = useState(null);
+  const [voiceOutputPanel, setVoiceOutputPanel] = useState(null);
 
   const currentUser = workspace?.current_user || null;
   const currentUserId = currentUser?.id || "";
@@ -406,6 +412,38 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
     }
   }, [voiceInputPanel, voiceMenu]);
 
+  useEffect(() => {
+    if (voiceMenu !== "output" && voiceOutputPanel) {
+      setVoiceOutputPanel(null);
+    }
+  }, [voiceOutputPanel, voiceMenu]);
+
+  useEffect(() => {
+    if (!voiceMenu && !voiceInputPanel && !voiceOutputPanel) {
+      return undefined;
+    }
+
+    function handlePointerDown(event) {
+      const target = event.target;
+      if (
+        target?.closest?.(".voice-control-menu") ||
+        target?.closest?.(".dock-split-control") ||
+        target?.closest?.(".voice-stage-menu-shell")
+      ) {
+        return;
+      }
+
+      setVoiceInputPanel(null);
+      setVoiceOutputPanel(null);
+      if (voiceMenu) {
+        toggleVoiceMenu(voiceMenu);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [toggleVoiceMenu, voiceInputPanel, voiceMenu, voiceOutputPanel]);
+
   function handleApplyVoiceProfile(profile) {
     updateVoiceSetting("inputProfile", profile.id);
     if (typeof profile.settings.noiseSuppression === "boolean") {
@@ -416,6 +454,19 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
     }
     setVoiceInputPanel(null);
     showUiNotice(`Perfil de entrada: ${profile.label}.`);
+  }
+
+  function buildUniqueDevices(devices, kind) {
+    const seen = new Set();
+
+    return devices.filter((device, index) => {
+      const label = String(device.label || fallbackDeviceLabel(kind, index)).trim().toLowerCase();
+      if (seen.has(label)) {
+        return false;
+      }
+      seen.add(label);
+      return true;
+    });
   }
 
   if (booting) {
@@ -684,6 +735,188 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
     );
   }
 
+  function renderOutputMenu() {
+    const outputDevices = buildUniqueDevices(voiceDevices.audiooutput || [], "audiooutput");
+    const currentOutputLabel = getSelectedDeviceLabel("audiooutput");
+    const isDefaultOutputSelected =
+      selectedVoiceDevices.audiooutput === "default" ||
+      !outputDevices.some((device) => device.deviceId === selectedVoiceDevices.audiooutput);
+
+    function describeOutputRoute(label, { isDefault = false } = {}) {
+      const normalized = String(label || "").toLowerCase();
+
+      if (isDefault) {
+        return {
+          badge: "Windows",
+          description: "Umbra sigue la salida predeterminada del sistema en tiempo real.",
+          tone: "system"
+        };
+      }
+
+      if (/vb-audio|voicemeeter|virtual|cable/.test(normalized)) {
+        return {
+          badge: "Virtual",
+          description: "Ideal para mezclar escenas, streams y rutas sonoras alternativas.",
+          tone: "virtual"
+        };
+      }
+
+      if (/bluetooth|airpods|buds|wireless/.test(normalized)) {
+        return {
+          badge: "Inalambrico",
+          description: "Salida ligera para moverte por Umbra sin cables de por medio.",
+          tone: "wireless"
+        };
+      }
+
+      if (/usb|headset|audif|auric|webcam/.test(normalized)) {
+        return {
+          badge: "USB",
+          description: "Ruta estable para monitoreo directo, llamadas y sesiones largas.",
+          tone: "usb"
+        };
+      }
+
+      if (/speaker|altavoc|realtek|high definition|hd audio/.test(normalized)) {
+        return {
+          badge: "Sistema",
+          description: "Salida principal del equipo, limpia y lista para escuchar el canal.",
+          tone: "system"
+        };
+      }
+
+      return {
+        badge: "Ruta",
+        description: "Una salida disponible para dejar pasar la voz y el ambiente de Umbra.",
+        tone: "umbra"
+      };
+    }
+
+    const currentOutputRoute = describeOutputRoute(currentOutputLabel, {
+      isDefault: isDefaultOutputSelected
+    });
+
+    function renderOutputSubmenu() {
+      if (voiceOutputPanel !== "device") {
+        return null;
+      }
+
+      return (
+        <div className="floating-surface voice-control-menu voice-control-submenu">
+          <div className="voice-control-submenu-header">
+            <div className="voice-control-heading">
+              <strong>Ruta de salida</strong>
+              <small>Escoge por donde Umbra deja caer la voz del canal.</small>
+            </div>
+          </div>
+
+          <div className="voice-control-option-list voice-output-choice-list">
+            <button
+              className={`voice-control-option voice-output-choice ${
+                isDefaultOutputSelected ? "selected" : ""
+              }`.trim()}
+              onClick={() => {
+                handleVoiceDeviceChange("audiooutput", "default");
+                setVoiceOutputPanel(null);
+                showUiNotice("Salida en configuracion predeterminada de Windows.");
+              }}
+              type="button"
+            >
+              <span className="voice-output-choice-copy">
+                <strong>Configuracion predeterminada de Windows</strong>
+                <small>{describeOutputRoute(currentOutputLabel, { isDefault: true }).description}</small>
+              </span>
+              <span className="voice-output-choice-meta">
+                <em className="voice-route-badge system">Windows</em>
+                <i className={`voice-control-radio ${isDefaultOutputSelected ? "selected" : ""}`.trim()} />
+              </span>
+            </button>
+
+            {outputDevices.map((device, index) => {
+              const label = device.label || fallbackDeviceLabel("audiooutput", index);
+              const selected = selectedVoiceDevices.audiooutput === device.deviceId;
+              const route = describeOutputRoute(label);
+
+              return (
+                <button
+                  className={`voice-control-option voice-output-choice ${selected ? "selected" : ""}`.trim()}
+                  key={device.deviceId || `${label}-${index}`}
+                  onClick={() => {
+                    handleVoiceDeviceChange("audiooutput", device.deviceId);
+                    setVoiceOutputPanel(null);
+                    showUiNotice(`Salida: ${label}.`);
+                  }}
+                  type="button"
+                >
+                  <span className="voice-output-choice-copy">
+                    <strong>{label}</strong>
+                    <small>{route.description}</small>
+                  </span>
+                  <span className="voice-output-choice-meta">
+                    <em className={`voice-route-badge ${route.tone}`.trim()}>{route.badge}</em>
+                    <i className={`voice-control-radio ${selected ? "selected" : ""}`.trim()} />
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="floating-surface voice-control-menu output-menu">
+        <button
+          className={`voice-control-link voice-route-card ${
+            voiceOutputPanel === "device" ? "panel-open" : ""
+          }`.trim()}
+          onClick={() =>
+            setVoiceOutputPanel((previous) => (previous === "device" ? null : "device"))
+          }
+          type="button"
+        >
+          <span className="voice-route-card-copy">
+            <small className="voice-route-eyebrow">Ruta sonora</small>
+            <strong>{currentOutputLabel}</strong>
+            <small>{currentOutputRoute.description}</small>
+          </span>
+          <span className="voice-route-card-meta">
+            <em className={`voice-route-badge ${currentOutputRoute.tone}`.trim()}>
+              {currentOutputRoute.badge}
+            </em>
+            <Icon name="arrowRight" size={15} />
+          </span>
+        </button>
+
+        <div className="voice-control-divider" />
+
+        <div className="voice-control-slider-block">
+          <div className="voice-control-title-row">
+            <strong>Volumen de salida</strong>
+            <small>{voiceState.outputVolume}%</small>
+          </div>
+          <input
+            max="100"
+            min="0"
+            onChange={(event) => updateVoiceSetting("outputVolume", Number(event.target.value))}
+            type="range"
+            value={voiceState.outputVolume}
+          />
+        </div>
+
+        <div className="voice-control-divider" />
+
+        <div className="voice-control-footer">
+          <button className="ghost-button small" onClick={() => setSettingsOpen(true)} type="button">
+            Ajustes de voz
+          </button>
+        </div>
+
+        {renderOutputSubmenu()}
+      </div>
+    );
+  }
+
   function renderShareMenu() {
     return (
       <div className="floating-surface voice-control-menu share-menu">
@@ -910,6 +1143,7 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
           directUnreadCount={directUnreadCount}
           hoveredVoiceChannelId={hoveredVoiceChannelId}
           inputMenuNode={voiceMenu === "input" && !isVoiceChannel ? renderInputMenu() : null}
+          outputMenuNode={voiceMenu === "output" && !isVoiceChannel ? renderOutputMenu() : null}
           isVoiceChannel={isVoiceChannel}
           joinedVoiceChannel={joinedVoiceChannel}
           joinedVoiceChannelId={joinedVoiceChannelId}
@@ -968,6 +1202,7 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
                 onOpenDialog={openDialog}
                 onToggleHeaderPanel={toggleHeaderPanel}
                 onToggleMembersPanel={() => setMembersPanelVisible((previous) => !previous)}
+                subtitle={activeGuild?.name || headerCopy.eyebrow}
                 title={headerCopy.title}
               />
 

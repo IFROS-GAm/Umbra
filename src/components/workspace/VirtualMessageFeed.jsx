@@ -88,6 +88,18 @@ export const VirtualMessageFeed = memo(function VirtualMessageFeed({
     });
   }
 
+  if (!rows.length && loadingMessages) {
+    return (
+      <section className="message-feed">
+        <div className="workspace-panel-fallback compact">
+          <span className="workspace-panel-pulse" />
+          <span className="workspace-panel-pulse short" />
+          <span className="workspace-panel-pulse" />
+        </div>
+      </section>
+    );
+  }
+
   if (!rows.length && !loadingMessages) {
     return (
       <section className="message-feed">

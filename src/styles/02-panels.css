@@ -26,7 +26,9 @@
 }
 
 .chat-stage {
-  background: #313338;
+  background:
+    linear-gradient(180deg, rgba(18, 20, 25, 0.98), rgba(14, 16, 20, 0.98)),
+    radial-gradient(circle at top, rgba(107, 124, 255, 0.05), transparent 28%);
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -386,8 +388,8 @@
   align-items: center;
   display: flex;
   justify-content: space-between;
-  min-height: 48px;
-  padding: 8px 14px;
+  min-height: 58px;
+  padding: 10px 16px;
 }
 
 .chat-header h1,
@@ -406,6 +408,36 @@
   padding: 8px 12px;
 }
 
+.chat-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.chat-title-eyebrow {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+}
+
+.chat-title-eyebrow small {
+  color: rgba(123, 212, 255, 0.74);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+}
+
+.chat-title-sigil {
+  background:
+    radial-gradient(circle, rgba(123, 212, 255, 0.92) 0 24%, transparent 30%),
+    radial-gradient(circle, rgba(107, 124, 255, 0.18) 0 58%, transparent 64%);
+  border-radius: 999px;
+  box-shadow: 0 0 18px rgba(107, 124, 255, 0.18);
+  height: 12px;
+  width: 12px;
+}
+
 .message-feed-host {
   flex: 1;
   min-height: 0;
@@ -422,11 +454,13 @@
   gap: 2px;
   min-height: 0;
   overflow: auto;
-  padding: 12px 16px 8px;
+  padding: 14px 18px 10px;
 }
 
 .message-card {
   border-radius: var(--radius-md);
+  contain-intrinsic-size: 96px;
+  content-visibility: auto;
   display: grid;
   gap: 12px;
   grid-template-columns: 40px 1fr;
@@ -435,7 +469,7 @@
 }
 
 .message-card:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .message-card.grouped {
@@ -443,7 +477,7 @@
 }
 
 .message-card.mention-hit {
-  background: linear-gradient(90deg, rgba(107, 120, 255, 0.14), transparent 65%);
+  background: linear-gradient(90deg, rgba(217, 163, 95, 0.16), transparent 68%);
 }
 
 .message-gutter {
@@ -736,6 +770,7 @@
 }
 
 .avatar-shell {
+  isolation: isolate;
   position: relative;
 }
 
@@ -763,11 +798,38 @@
   position: relative;
 }
 
+.avatar-shell.has-pending-media .avatar::after {
+  animation: workspacePulse 1.3s ease-in-out infinite;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.08),
+    rgba(255, 255, 255, 0.18),
+    rgba(255, 255, 255, 0.08)
+  );
+  background-size: 200% 100%;
+  content: "";
+  inset: 0;
+  position: absolute;
+  z-index: 0;
+}
+
 .avatar-media {
   display: block;
+  filter: blur(18px);
   height: 100%;
   object-fit: cover;
+  opacity: 0.38;
+  position: relative;
+  transform: scale(1.08);
+  transition: filter 180ms ease, opacity 180ms ease, transform 180ms ease;
   width: 100%;
+  z-index: 1;
+}
+
+.avatar-media.is-loaded {
+  filter: blur(0);
+  opacity: 1;
+  transform: scale(1);
 }
 
 .status-dot {

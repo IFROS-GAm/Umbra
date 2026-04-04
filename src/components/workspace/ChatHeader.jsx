@@ -11,11 +11,16 @@ export function ChatHeader({
   onOpenDialog,
   onToggleHeaderPanel,
   onToggleMembersPanel,
+  subtitle,
   title
 }) {
   return (
     <header className="chat-header">
       <div className="chat-title-block">
+        <div className="chat-title-eyebrow">
+          <span className="chat-title-sigil" />
+          <small>{subtitle || "UMBRA CHANNEL"}</small>
+        </div>
         <div className="chat-title-line">
           <h1>{title}</h1>
         </div>

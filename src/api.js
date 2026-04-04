@@ -70,7 +70,7 @@ export const api = {
   bootstrap() {
     return request("/api/bootstrap");
   },
-  fetchMessages({ before, channelId, limit = 30 }) {
+  fetchMessages({ before, channelId, limit = 30, signal } = {}) {
     const params = new URLSearchParams({
       limit: String(limit)
     });
@@ -79,7 +79,9 @@ export const api = {
       params.set("before", before);
     }
 
-    return request(`/api/channels/${channelId}/messages?${params.toString()}`);
+    return request(`/api/channels/${channelId}/messages?${params.toString()}`, {
+      signal
+    });
   },
   createMessage({
     attachments = [],

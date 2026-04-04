@@ -8,6 +8,22 @@ import {
   sortByDateDesc
 } from "./helpers.js";
 
+const PROFILE_MESSAGE_SELECT = [
+  "id",
+  "username",
+  "discriminator",
+  "avatar_hue",
+  "avatar_url",
+  "profile_banner_url",
+  "profile_color",
+  "status"
+].join(",");
+
+const GUILD_PERMISSION_SELECT = ["id", "owner_id"].join(",");
+const GUILD_MEMBER_MESSAGE_SELECT = ["guild_id", "user_id", "nickname", "role_ids"].join(",");
+const ROLE_PERMISSION_SELECT = ["id", "guild_id", "name", "permissions", "position", "color"].join(",");
+const REACTION_SELECT = ["message_id", "user_id", "emoji"].join(",");
+
 function createError(message, statusCode = 400) {
   const error = new Error(message);
   error.statusCode = statusCode;
@@ -54,19 +70,25 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
 
     const [profiles, guilds, roles, guildMembers, reactions] = await Promise.all([
       profileIds.length
-        ? expectData(this.client.from("profiles").select("*").in("id", profileIds))
+        ? expectData(
+            this.client.from("profiles").select(PROFILE_MESSAGE_SELECT).in("id", profileIds)
+          )
         : Promise.resolve([]),
       channel.guild_id
-        ? expectData(this.client.from("guilds").select("*").eq("id", channel.guild_id))
+        ? expectData(
+            this.client.from("guilds").select(GUILD_PERMISSION_SELECT).eq("id", channel.guild_id)
+          )
         : Promise.resolve([]),
       channel.guild_id
-        ? expectData(this.client.from("roles").select("*").eq("guild_id", channel.guild_id))
+        ? expectData(
+            this.client.from("roles").select(ROLE_PERMISSION_SELECT).eq("guild_id", channel.guild_id)
+          )
         : Promise.resolve([]),
       channel.guild_id && memberIds.length
         ? expectData(
             this.client
               .from("guild_members")
-              .select("*")
+              .select(GUILD_MEMBER_MESSAGE_SELECT)
               .eq("guild_id", channel.guild_id)
               .in("user_id", memberIds)
           )
@@ -74,7 +96,7 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
       expectData(
         this.client
           .from("message_reactions")
-          .select("*")
+          .select(REACTION_SELECT)
           .eq("message_id", message.id)
       )
     ]);
@@ -157,39 +179,58 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
     const messages = await expectData(query);
     const pageMessageIds = messages.map((message) => message.id);
     const replyIds = messages.map((message) => message.reply_to).filter(Boolean);
-    const [reactions, profiles, guildMembers, roles, replyMessages] = await Promise.all([
+    const [reactions, replyMessages, roles, guilds] = await Promise.all([
       pageMessageIds.length
         ? expectData(
             this.client
               .from("message_reactions")
-              .select("*")
+              .select(REACTION_SELECT)
               .in("message_id", pageMessageIds)
           )
-        : Promise.resolve([]),
-      expectData(this.client.from("profiles").select("*")),
-      channel.guild_id
-        ? expectData(
-            this.client
-              .from("guild_members")
-              .select("*")
-              .eq("guild_id", channel.guild_id)
-          )
-        : Promise.resolve([]),
-      channel.guild_id
-        ? expectData(this.client.from("roles").select("*").eq("guild_id", channel.guild_id))
         : Promise.resolve([]),
       replyIds.length
         ? expectData(
             this.client.from("messages").select("*").in("id", replyIds)
+          )
+        : Promise.resolve([]),
+      channel.guild_id
+        ? expectData(
+            this.client.from("roles").select(ROLE_PERMISSION_SELECT).eq("guild_id", channel.guild_id)
+          )
+        : Promise.resolve([]),
+      channel.guild_id
+        ? expectData(
+            this.client.from("guilds").select(GUILD_PERMISSION_SELECT).eq("id", channel.guild_id)
+          )
+        : Promise.resolve([])
+    ]);
+
+    const relatedProfileIds = [
+      ...new Set(
+        [userId, ...messages.map((message) => message.author_id), ...replyMessages.map((message) => message.author_id)]
+          .filter(Boolean)
+      )
+    ];
+    const [profiles, guildMembers] = await Promise.all([
+      relatedProfileIds.length
+        ? expectData(
+            this.client.from("profiles").select(PROFILE_MESSAGE_SELECT).in("id", relatedProfileIds)
+          )
+        : Promise.resolve([]),
+      channel.guild_id && relatedProfileIds.length
+        ? expectData(
+            this.client
+              .from("guild_members")
+              .select(GUILD_MEMBER_MESSAGE_SELECT)
+              .eq("guild_id", channel.guild_id)
+              .in("user_id", relatedProfileIds)
           )
         : Promise.resolve([])
     ]);
 
     const snapshot = {
       profiles,
-      guilds: channel.guild_id
-        ? await expectData(this.client.from("guilds").select("*").eq("id", channel.guild_id))
-        : [],
+      guilds,
       roles,
       guild_members: guildMembers,
       channels: [channel],
@@ -990,57 +1031,15 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
     if (!messages.length) {
       return null;
     }
+    const targetMessage = [...messages].sort(sortByDateDesc)[0];
+    const replyTarget = targetMessage.reply_to ? await this.getMessage(targetMessage.reply_to) : null;
 
-    const targetMessages = messageId
-      ? messages.filter((message) => message.id === messageId)
-      : [...messages].sort(sortByDateDesc).slice(0, 1);
-    const reactionMessageIds = targetMessages.map((message) => message.id);
-
-    const [profiles, guilds, roles, guildMembers, reactions] = await Promise.all([
-      expectData(this.client.from("profiles").select("*")),
-      channel.guild_id
-        ? expectData(this.client.from("guilds").select("*").eq("id", channel.guild_id))
-        : Promise.resolve([]),
-      channel.guild_id
-        ? expectData(this.client.from("roles").select("*").eq("guild_id", channel.guild_id))
-        : Promise.resolve([]),
-      channel.guild_id
-        ? expectData(
-            this.client
-              .from("guild_members")
-              .select("*")
-              .eq("guild_id", channel.guild_id)
-          )
-        : Promise.resolve([]),
-      reactionMessageIds.length
-        ? expectData(
-            this.client
-              .from("message_reactions")
-              .select("*")
-              .in("message_id", reactionMessageIds)
-          )
-        : Promise.resolve([])
-    ]);
-
-    const snapshot = {
-      profiles,
-      guilds,
-      roles,
-      guild_members: guildMembers,
-      channels: [channel],
-      channel_members: [],
-      messages,
-      message_reactions: reactions
-    };
-
-    const enriched = enrichMessages({
-      channelId,
-      db: snapshot,
-      messages: targetMessages,
+    return this.buildMessageSnapshot({
+      channel,
+      message: targetMessage,
+      replyTarget,
       userId
     });
-
-    return enriched[0] || null;
   }
 
   async getChannelPreview(channelId) {

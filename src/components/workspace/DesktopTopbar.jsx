@@ -2,6 +2,7 @@ import React from "react";
 
 import { Avatar } from "../Avatar.jsx";
 import { Icon } from "../Icon.jsx";
+import { UmbraLogo } from "../UmbraLogo.jsx";
 
 export function DesktopTopbar({
   activeGuild,
@@ -41,10 +42,18 @@ export function DesktopTopbar({
       </div>
 
       <div className="desktop-topbar-title">
-        <span className="desktop-topbar-badge">
-          {activeGuild?.icon_text || desktopTitle.slice(0, 1).toUpperCase()}
-        </span>
-        <strong>{desktopTitle}</strong>
+        <div className="desktop-topbar-brand">
+          <UmbraLogo alt="Umbra" className="desktop-topbar-logo" size={18} />
+          <div className="desktop-topbar-copy">
+            <small>{activeGuild ? "UMBRA VEIL" : "UMBRA CLOUD"}</small>
+            <strong>{desktopTitle}</strong>
+          </div>
+        </div>
+        {activeGuild ? (
+          <span className="desktop-topbar-badge">
+            {activeGuild?.icon_text || desktopTitle.slice(0, 1).toUpperCase()}
+          </span>
+        ) : null}
       </div>
 
       <div className="desktop-topbar-actions" ref={topbarActionsRef}>

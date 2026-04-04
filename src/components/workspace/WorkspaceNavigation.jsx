@@ -14,6 +14,7 @@ export function WorkspaceNavigation({
   directUnreadCount,
   hoveredVoiceChannelId,
   inputMenuNode,
+  outputMenuNode,
   isVoiceChannel,
   joinedVoiceChannel,
   joinedVoiceChannelId,
@@ -104,14 +105,20 @@ export function WorkspaceNavigation({
         <div className="navigator-top">
           {activeGuild ? (
             <>
-              <button
-                className="navigator-server-trigger"
-                onClick={() => onShowNotice("Menu del servidor listo para una siguiente iteracion.")}
-                type="button"
-              >
-                <strong>{activeGuild.name}</strong>
-                <Icon name="chevronDown" size={15} />
-              </button>
+              <div className="navigator-crest">
+                <span className="navigator-crest-ring" />
+                <div className="navigator-crest-copy">
+                  <small>UMBRA CIRCLE</small>
+                  <button
+                    className="navigator-server-trigger"
+                    onClick={() => onShowNotice("Menu del servidor listo para una siguiente iteracion.")}
+                    type="button"
+                  >
+                    <strong>{activeGuild.name}</strong>
+                    <Icon name="chevronDown" size={15} />
+                  </button>
+                </div>
+              </div>
               <div className="navigator-top-actions">
                 <button
                   className="ghost-button icon-only tooltip-anchor"
@@ -126,9 +133,13 @@ export function WorkspaceNavigation({
             </>
           ) : (
             <>
-              <div className="navigator-title-block compact">
-                <h2>{activeSelection.kind === "home" ? "Amigos" : "Mensajes directos"}</h2>
-                <p className="subcopy">Accesos directos, charlas privadas y grupos oscuros.</p>
+              <div className="navigator-title-block compact navigator-title-brand">
+                <UmbraLogo alt="Umbra" className="navigator-title-logo" size={34} />
+                <div className="navigator-title-copy">
+                  <small>UMBRA DIRECT</small>
+                  <h2>{activeSelection.kind === "home" ? "Sombras" : "Mensajes directos"}</h2>
+                  <p className="subcopy">Accesos directos, ecos privados y grupos del borde.</p>
+                </div>
               </div>
               <button
                 className="ghost-button navigator-create-button"
@@ -355,6 +366,7 @@ export function WorkspaceNavigation({
           ) : null}
 
           {inputMenuNode}
+          {outputMenuNode}
 
           <div className="user-dock">
             <button
@@ -404,12 +416,12 @@ export function WorkspaceNavigation({
               </div>
               <div
                 className={`dock-split-control ${
-                  voiceState.deafen ? "active" : voiceMenu === "input" ? "active" : ""
+                  voiceState.deafen ? "danger active" : voiceMenu === "output" ? "active" : ""
                 }`}
               >
                 <button
                   aria-label={voiceState.deafen ? "Activar audio" : "Ensordecer"}
-                  className={`dock-split-main tooltip-anchor ${voiceState.deafen ? "active" : ""}`}
+                  className={`dock-split-main tooltip-anchor ${voiceState.deafen ? "danger active" : ""}`}
                   data-tooltip={voiceState.deafen ? "Activar audio" : "Ensordecer"}
                   data-tooltip-position="top"
                   onClick={() => onToggleVoiceState("deafen")}
@@ -419,10 +431,10 @@ export function WorkspaceNavigation({
                 </button>
                 <button
                   aria-label="Opciones de audio"
-                  className={`dock-split-caret tooltip-anchor ${voiceMenu === "input" ? "active" : ""}`}
+                  className={`dock-split-caret tooltip-anchor ${voiceMenu === "output" ? "active" : ""}`}
                   data-tooltip="Opciones de salida"
                   data-tooltip-position="top"
-                  onClick={() => onToggleVoiceMenu("input")}
+                  onClick={() => onToggleVoiceMenu("output")}
                   type="button"
                 >
                   <Icon name="chevronDown" size={14} />

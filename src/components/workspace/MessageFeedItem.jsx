@@ -105,6 +105,8 @@ export const MessageFeedItem = memo(function MessageFeedItem({
                 >
                   <img
                     alt={attachment.name || "Adjunto"}
+                    decoding="async"
+                    fetchPriority="low"
                     loading="lazy"
                     src={resolveAssetUrl(attachment.url)}
                   />

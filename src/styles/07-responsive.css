@@ -446,10 +446,14 @@
 }
 
 .navigator-footer > .voice-control-menu {
-  bottom: calc(100% + 16px);
+  bottom: calc(100% + 26px);
   left: 66px;
   top: auto;
   z-index: 95;
+}
+
+.navigator-footer > .voice-control-menu .voice-control-submenu {
+  top: -14px;
 }
 
 .voice-stage-menu-shell > .voice-control-menu {
@@ -468,6 +472,10 @@
 
 .voice-control-menu.camera-menu {
   min-width: 250px;
+}
+
+.voice-control-menu.output-menu {
+  min-width: 304px;
 }
 
 .voice-control-menu.share-menu {
@@ -621,6 +629,109 @@
   background: rgba(255, 255, 255, 0.1);
 }
 
+.voice-route-card {
+  align-items: stretch;
+  background:
+    linear-gradient(180deg, rgba(28, 31, 40, 0.96), rgba(20, 22, 29, 0.98)),
+    radial-gradient(circle at top left, rgba(102, 121, 255, 0.12), transparent 38%);
+  border: 1px solid rgba(119, 136, 255, 0.14);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 8px 20px rgba(0, 0, 0, 0.2);
+  gap: 14px;
+  min-height: 72px;
+  padding: 12px 12px 12px 14px;
+}
+
+.voice-route-card:hover,
+.voice-route-card.panel-open {
+  background:
+    linear-gradient(180deg, rgba(31, 34, 44, 0.98), rgba(22, 24, 32, 0.99)),
+    radial-gradient(circle at top left, rgba(102, 121, 255, 0.16), transparent 42%);
+  border-color: rgba(119, 136, 255, 0.24);
+}
+
+.voice-route-card-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.voice-route-eyebrow {
+  color: rgba(171, 184, 255, 0.78);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin-top: 0;
+  text-transform: uppercase;
+}
+
+.voice-route-card-copy strong {
+  font-size: 0.96rem;
+  letter-spacing: -0.02em;
+}
+
+.voice-route-card-copy small:last-child {
+  line-height: 1.45;
+  margin-top: 1px;
+}
+
+.voice-route-card-meta {
+  align-items: flex-end;
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.voice-route-badge {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  color: #d7dcf8;
+  display: inline-flex;
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  padding: 5px 8px;
+  text-transform: uppercase;
+}
+
+.voice-route-badge.system {
+  background: rgba(104, 123, 255, 0.12);
+  border-color: rgba(119, 136, 255, 0.18);
+  color: #c9d0ff;
+}
+
+.voice-route-badge.virtual {
+  background: rgba(73, 209, 168, 0.12);
+  border-color: rgba(73, 209, 168, 0.18);
+  color: #9ce9d3;
+}
+
+.voice-route-badge.usb {
+  background: rgba(255, 182, 90, 0.12);
+  border-color: rgba(255, 182, 90, 0.18);
+  color: #ffd18b;
+}
+
+.voice-route-badge.wireless {
+  background: rgba(98, 176, 255, 0.12);
+  border-color: rgba(98, 176, 255, 0.18);
+  color: #b7ddff;
+}
+
+.voice-route-badge.umbra {
+  background: rgba(206, 115, 255, 0.12);
+  border-color: rgba(206, 115, 255, 0.18);
+  color: #e4b7ff;
+}
+
 .voice-control-link span,
 .voice-control-check span {
   min-width: 0;
@@ -714,7 +825,8 @@
 }
 
 .voice-control-option.selected {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(71, 84, 138, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(119, 136, 255, 0.14);
 }
 
 .voice-control-option span {
@@ -745,6 +857,58 @@
 .voice-control-empty {
   color: var(--text-2);
   padding: 10px 8px;
+}
+
+.voice-output-choice-list {
+  gap: 6px;
+}
+
+.voice-output-choice {
+  align-items: stretch;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid transparent;
+  min-height: 58px;
+  padding: 11px 10px;
+}
+
+.voice-output-choice:hover {
+  background: rgba(255, 255, 255, 0.045);
+  border-color: rgba(255, 255, 255, 0.04);
+}
+
+.voice-output-choice.selected {
+  background:
+    linear-gradient(180deg, rgba(32, 36, 50, 0.92), rgba(21, 24, 34, 0.98)),
+    radial-gradient(circle at top left, rgba(102, 121, 255, 0.14), transparent 40%);
+  border-color: rgba(119, 136, 255, 0.18);
+}
+
+.voice-output-choice-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.voice-output-choice-copy strong,
+.voice-output-choice-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.voice-output-choice-copy small {
+  color: var(--text-2);
+  margin-top: 0;
+}
+
+.voice-output-choice-meta {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 10px;
+  padding-left: 12px;
 }
 
 .voice-room-card {

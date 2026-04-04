@@ -12,18 +12,20 @@
 
 :root[data-theme="dark"] {
   --bg-0: #111214;
-  --bg-1: #18191c;
-  --bg-2: #1f2126;
-  --bg-3: #2b2d31;
-  --bg-soft: rgba(255, 255, 255, 0.045);
-  --line: rgba(255, 255, 255, 0.06);
+  --bg-1: #141519;
+  --bg-2: #191b20;
+  --bg-3: #23262d;
+  --bg-soft: rgba(182, 202, 255, 0.052);
+  --line: rgba(174, 194, 255, 0.08);
   --text-0: #f2f3f5;
-  --text-1: #dbdee1;
-  --text-2: #949ba4;
-  --accent: #5865f2;
-  --accent-2: #f0b132;
+  --text-1: #d4d8de;
+  --text-2: #8c95a3;
+  --accent: #6b7cff;
+  --accent-2: #d9a35f;
+  --accent-cold: #7bd4ff;
   --danger: #f23f43;
   --success: #23a55a;
+  --shadow-brand: 0 26px 60px rgba(4, 7, 14, 0.52);
 }
 
 :root[data-theme="light"] {
@@ -59,8 +61,10 @@ body {
   margin: 0;
   font-family: var(--font-sans);
   background:
-    radial-gradient(circle at top left, rgba(88, 101, 242, 0.05), transparent 18%),
-    linear-gradient(180deg, #1e1f22, #18191c 34%, #131417 100%);
+    radial-gradient(circle at 12% 8%, rgba(107, 124, 255, 0.1), transparent 20%),
+    radial-gradient(circle at 86% 14%, rgba(123, 212, 255, 0.06), transparent 24%),
+    radial-gradient(circle at 50% 120%, rgba(217, 163, 95, 0.08), transparent 28%),
+    linear-gradient(180deg, #0f1013, #13151a 34%, #101114 100%);
   color: var(--text-0);
   overflow: hidden;
 }
@@ -327,13 +331,16 @@ button {
 
 .desktop-topbar {
   align-items: center;
-  background: #06070a;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background:
+    linear-gradient(180deg, rgba(16, 17, 22, 0.98), rgba(11, 12, 17, 0.98)),
+    radial-gradient(circle at center, rgba(107, 124, 255, 0.08), transparent 52%);
+  border-bottom: 1px solid rgba(174, 194, 255, 0.08);
   display: grid;
   gap: 12px;
   grid-template-columns: auto 1fr auto;
-  min-height: 26px;
+  min-height: 34px;
   padding: 0 10px 0 6px;
+  position: relative;
 }
 
 .desktop-topbar-nav,
@@ -357,17 +364,45 @@ button {
   min-width: 0;
 }
 
+.desktop-topbar-brand {
+  align-items: center;
+  display: inline-flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.desktop-topbar-logo {
+  border-radius: 7px;
+  box-shadow: 0 0 0 1px rgba(174, 194, 255, 0.08);
+}
+
+.desktop-topbar-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.desktop-topbar-copy small {
+  color: rgba(123, 212, 255, 0.74);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+}
+
 .desktop-topbar-title strong {
   font-size: 0.84rem;
   font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-shadow: 0 0 18px rgba(107, 124, 255, 0.12);
   white-space: nowrap;
 }
 
 .desktop-topbar-badge {
   align-items: center;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(174, 194, 255, 0.12);
   border-radius: 999px;
   color: var(--text-0);
   display: inline-flex;
@@ -407,6 +442,7 @@ button {
   grid-template-columns: 78px 272px 1fr 236px;
   height: 100%;
   padding: 0;
+  position: relative;
 }
 
 .app-shell.members-collapsed {
@@ -419,11 +455,13 @@ button {
 .members-panel {
   backdrop-filter: blur(12px);
   border: 1px solid var(--line);
-  box-shadow: none;
+  box-shadow: var(--shadow-brand);
 }
 
 .server-rail {
-  background: #1b1d22;
+  background:
+    linear-gradient(180deg, rgba(14, 15, 19, 0.98), rgba(11, 12, 16, 0.98)),
+    radial-gradient(circle at 50% 0%, rgba(107, 124, 255, 0.08), transparent 32%);
   align-items: center;
   display: flex;
   flex-direction: column;
@@ -462,9 +500,10 @@ button {
 
 .navigator-search input,
 .chat-search input {
-  background: #1e1f22;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 8px;
+  background: #12141a;
+  border: 1px solid rgba(174, 194, 255, 0.1);
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
   color: var(--text-1);
   min-width: 0;
   outline: none;
@@ -478,7 +517,7 @@ button {
   display: flex;
   font-size: 0.7rem;
   justify-content: space-between;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.16em;
   margin-bottom: 6px;
   text-transform: uppercase;
 }
@@ -493,17 +532,19 @@ button {
 }
 
 .direct-home-link {
-  background: transparent;
-  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0.01));
+  border: 1px solid transparent;
+  border-radius: 12px;
   color: var(--text-2);
   padding: 8px 10px;
   text-align: left;
-  transition: background 160ms ease, color 160ms ease;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
 }
 
 .direct-home-link:hover,
 .direct-home-link.active {
-  background: rgba(255, 255, 255, 0.07);
+  background: linear-gradient(180deg, rgba(107, 124, 255, 0.12), rgba(123, 212, 255, 0.06));
+  border-color: rgba(123, 212, 255, 0.14);
   color: var(--text-0);
 }
 
@@ -558,7 +599,9 @@ button {
 
 .navigator-panel,
 .members-panel {
-  background: #232428;
+  background:
+    linear-gradient(180deg, rgba(24, 26, 31, 0.98), rgba(19, 21, 26, 0.98)),
+    radial-gradient(circle at top, rgba(123, 212, 255, 0.04), transparent 34%);
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -577,6 +620,39 @@ button {
   display: flex;
   gap: 12px;
   justify-content: space-between;
+}
+
+.navigator-crest {
+  align-items: center;
+  display: inline-flex;
+  gap: 12px;
+  min-width: 0;
+}
+
+.navigator-crest-ring {
+  background:
+    radial-gradient(circle, rgba(123, 212, 255, 0.78) 0 14%, transparent 18%),
+    radial-gradient(circle, rgba(107, 124, 255, 0.14) 0 52%, transparent 56%);
+  border: 1px solid rgba(123, 212, 255, 0.14);
+  border-radius: 999px;
+  box-shadow: 0 0 28px rgba(107, 124, 255, 0.14);
+  height: 28px;
+  width: 28px;
+}
+
+.navigator-crest-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.navigator-crest-copy small,
+.navigator-title-copy small {
+  color: rgba(123, 212, 255, 0.72);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
 }
 
 .navigator-top-actions {
@@ -607,6 +683,21 @@ button {
 
 .navigator-title-block.compact h2 {
   font-size: 1rem;
+}
+
+.navigator-title-brand {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.navigator-title-logo {
+  border-radius: 12px;
+  box-shadow: 0 0 0 1px rgba(174, 194, 255, 0.08), 0 14px 30px rgba(0, 0, 0, 0.22);
+}
+
+.navigator-title-copy {
+  min-width: 0;
 }
 
 .eyebrow {
@@ -658,7 +749,7 @@ button {
 .channel-row.active,
 .dm-row.active,
 .member-row:hover {
-  background: var(--bg-soft);
+  background: linear-gradient(180deg, rgba(107, 124, 255, 0.12), rgba(255, 255, 255, 0.02));
   color: var(--text-0);
   transform: translateX(1px);
 }
@@ -669,8 +760,8 @@ button {
 
 .channel-row.has-unread,
 .dm-row.has-unread {
-  background: rgba(255, 255, 255, 0.05);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+  background: linear-gradient(90deg, rgba(123, 212, 255, 0.08), rgba(255, 255, 255, 0.04));
+  box-shadow: inset 0 0 0 1px rgba(174, 194, 255, 0.06);
   color: var(--text-0);
 }
 

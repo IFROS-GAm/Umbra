@@ -60,6 +60,8 @@ export const HOME_LINKS = [
   }
 ];
 
+export const CHANNEL_CACHE_TTL_MS = 18_000;
+
 export function isVisibleStatus(status) {
   return status && status !== "offline" && status !== "invisible";
 }
@@ -150,11 +152,184 @@ export function fallbackDeviceLabel(kind, index) {
   }
 }
 
+function messageIdentity(message) {
+  if (!message) {
+    return "";
+  }
+
+  return String(message.id || message.client_nonce || "");
+}
+
+export function isChannelCacheFresh(entry, ttl = CHANNEL_CACHE_TTL_MS) {
+  if (!entry?.fetchedAt) {
+    return false;
+  }
+
+  return Date.now() - Number(entry.fetchedAt) < ttl;
+}
+
+export function mergeChannelMessages(existing = [], incoming = [], { prepend = false } = {}) {
+  const ordered = prepend ? [...incoming, ...existing] : [...existing, ...incoming];
+  const result = [];
+  const indexById = new Map();
+  const indexByNonce = new Map();
+
+  ordered.forEach((message) => {
+    const existingIndex =
+      (message?.id ? indexById.get(String(message.id)) : undefined) ??
+      (message?.client_nonce ? indexByNonce.get(String(message.client_nonce)) : undefined);
+
+    if (existingIndex !== undefined) {
+      const nextMessage = {
+        ...result[existingIndex],
+        ...message
+      };
+      result[existingIndex] = nextMessage;
+
+      if (nextMessage.id) {
+        indexById.set(String(nextMessage.id), existingIndex);
+      }
+
+      if (nextMessage.client_nonce) {
+        indexByNonce.set(String(nextMessage.client_nonce), existingIndex);
+      }
+
+      return;
+    }
+
+    const nextIndex = result.length;
+    result.push(message);
+
+    if (message?.id) {
+      indexById.set(String(message.id), nextIndex);
+    }
+
+    if (message?.client_nonce) {
+      indexByNonce.set(String(message.client_nonce), nextIndex);
+    }
+  });
+
+  return result;
+}
+
+export function upsertChannelMessage(messages = [], message) {
+  return mergeChannelMessages(messages, [message]);
+}
+
+export function removeChannelMessage(messages = [], messageId) {
+  const targetId = String(messageId || "");
+  return messages.filter((message) => messageIdentity(message) !== targetId);
+}
+
+export function toggleReactionBucket(messages = [], { emoji, messageId, userId }) {
+  const targetId = String(messageId || "");
+
+  return messages.map((message) => {
+    if (String(message.id || "") !== targetId) {
+      return message;
+    }
+
+    const buckets = [...(message.reactions || [])];
+    const index = buckets.findIndex((reaction) => reaction.emoji === emoji);
+
+    if (index === -1) {
+      return {
+        ...message,
+        reactions: [...buckets, { emoji, count: 1, selected: true }]
+      };
+    }
+
+    const current = buckets[index];
+    const nextSelected = !current.selected;
+    const nextCount = Math.max(0, Number(current.count || 0) + (nextSelected ? 1 : -1));
+
+    if (!nextCount) {
+      return {
+        ...message,
+        reactions: buckets.filter((reaction) => reaction.emoji !== emoji)
+      };
+    }
+
+    buckets[index] = {
+      ...current,
+      count: nextCount,
+      selected: userId ? nextSelected : current.selected
+    };
+
+    return {
+      ...message,
+      reactions: buckets
+    };
+  });
+}
+
+export function listLikelyChannelIds(workspace, activeSelection, limit = 6) {
+  if (!workspace) {
+    return [];
+  }
+
+  const sortByRecent = (left, right) => {
+    const leftUnread = Number(left.unread_count || 0);
+    const rightUnread = Number(right.unread_count || 0);
+    if (leftUnread !== rightUnread) {
+      return rightUnread - leftUnread;
+    }
+
+    const leftTime = left.last_message_at ? new Date(left.last_message_at).getTime() : 0;
+    const rightTime = right.last_message_at ? new Date(right.last_message_at).getTime() : 0;
+    return rightTime - leftTime;
+  };
+
+  const guildCandidates =
+    workspace.guilds
+      .flatMap((guild) => guild.channels || [])
+      .filter(
+        (channel) =>
+          !channel.is_voice &&
+          channel.id !== activeSelection.channelId &&
+          (!activeSelection.guildId || channel.guild_id === activeSelection.guildId)
+      )
+      .sort(sortByRecent)
+      .slice(0, 4) || [];
+
+  const dmCandidates =
+    [...(workspace.dms || [])]
+      .filter((dm) => dm.id !== activeSelection.channelId)
+      .sort(sortByRecent)
+      .slice(0, 3) || [];
+
+  return [...guildCandidates, ...dmCandidates]
+    .map((channel) => channel.id)
+    .filter(Boolean)
+    .slice(0, limit);
+}
+
 export function resolveGuildIcon(guild) {
   return guild?.icon_url || guild?.image_url || guild?.avatar_url || "";
 }
 
-function computeChannelUnread(channel, currentUserId) {
+function resolveLatestReadAt(...candidates) {
+  let latest = null;
+  let latestTime = 0;
+
+  candidates.forEach((candidate) => {
+    if (!candidate) {
+      return;
+    }
+
+    const time = new Date(candidate).getTime();
+    if (!Number.isFinite(time) || time < latestTime) {
+      return;
+    }
+
+    latest = candidate;
+    latestTime = time;
+  });
+
+  return latest;
+}
+
+function computeChannelUnread(channel, currentUserId, lastReadAt = channel?.last_read_at, { forceRead = false } = {}) {
   if (
     !channel?.last_message_at ||
     channel.last_message_author_id === currentUserId ||
@@ -163,11 +338,30 @@ function computeChannelUnread(channel, currentUserId) {
     return 0;
   }
 
-  const lastReadTime = channel.last_read_at
-    ? new Date(channel.last_read_at).getTime()
-    : 0;
+  if (forceRead) {
+    return 0;
+  }
+
+  const lastReadTime = lastReadAt ? new Date(lastReadAt).getTime() : 0;
   const lastMessageTime = new Date(channel.last_message_at).getTime();
   return lastReadTime < lastMessageTime ? 1 : 0;
+}
+
+function applyReadStateToChannel(channel, currentUserId, localReadState = null, { forceRead = false } = {}) {
+  const localLastReadAt = localReadState?.lastReadAt || localReadState || null;
+  const nextLastReadAt = resolveLatestReadAt(
+    channel.last_read_at,
+    localLastReadAt,
+    forceRead ? channel.last_message_at : null
+  );
+
+  return {
+    ...channel,
+    last_read_at: nextLastReadAt,
+    unread_count: computeChannelUnread(channel, currentUserId, nextLastReadAt, {
+      forceRead
+    })
+  };
 }
 
 function sortDmsByRecent(dms = []) {
@@ -178,7 +372,11 @@ function sortDmsByRecent(dms = []) {
   });
 }
 
-export function applyChannelPreviewToWorkspace(workspace, preview) {
+export function applyChannelPreviewToWorkspace(
+  workspace,
+  preview,
+  { localReadStateByChannel = null, openChannelId = null } = {}
+) {
   if (!workspace || !preview?.id) {
     return workspace;
   }
@@ -195,12 +393,15 @@ export function applyChannelPreviewToWorkspace(workspace, preview) {
 
       guildTouched = true;
       changed = true;
-      const nextChannel = {
+      const mergedChannel = {
         ...channel,
         ...preview
       };
-      nextChannel.unread_count = computeChannelUnread(nextChannel, currentUserId);
-      return nextChannel;
+      const localReadState = localReadStateByChannel?.get?.(mergedChannel.id) || null;
+
+      return applyReadStateToChannel(mergedChannel, currentUserId, localReadState, {
+        forceRead: mergedChannel.id === openChannelId
+      });
     });
 
     if (!guildTouched) {
@@ -224,11 +425,102 @@ export function applyChannelPreviewToWorkspace(workspace, preview) {
       }
 
       changed = true;
-      const nextDm = {
+      const mergedDm = {
         ...dm,
         ...preview
       };
-      nextDm.unread_count = computeChannelUnread(nextDm, currentUserId);
+      const localReadState = localReadStateByChannel?.get?.(mergedDm.id) || null;
+
+      return applyReadStateToChannel(mergedDm, currentUserId, localReadState, {
+        forceRead: mergedDm.id === openChannelId
+      });
+    })
+  );
+
+  if (!changed) {
+    return workspace;
+  }
+
+  return {
+    ...workspace,
+    guilds,
+    dms
+  };
+}
+
+export function mergeLocalReadStateIntoWorkspace(
+  workspace,
+  localReadStateByChannel = null,
+  openChannelId = null
+) {
+  if (!workspace) {
+    return workspace;
+  }
+
+  const currentUserId = workspace.current_user?.id;
+  let changed = false;
+
+  const guilds = workspace.guilds.map((guild) => {
+    let guildTouched = false;
+    const channels = guild.channels.map((channel) => {
+      const localReadState = localReadStateByChannel?.get?.(channel.id) || null;
+      const forceRead = channel.id === openChannelId;
+
+      if (!localReadState && !forceRead) {
+        return channel;
+      }
+
+      const nextChannel = applyReadStateToChannel(channel, currentUserId, localReadState, {
+        forceRead
+      });
+
+      if (
+        nextChannel.last_read_at === channel.last_read_at &&
+        nextChannel.unread_count === channel.unread_count
+      ) {
+        return channel;
+      }
+
+      changed = true;
+      guildTouched = true;
+      return nextChannel;
+    });
+
+    if (!guildTouched) {
+      return guild;
+    }
+
+    return {
+      ...guild,
+      channels,
+      unread_count: channels.reduce(
+        (sum, channel) => sum + Number(channel.unread_count || 0),
+        0
+      )
+    };
+  });
+
+  const dms = sortDmsByRecent(
+    workspace.dms.map((dm) => {
+      const localReadState = localReadStateByChannel?.get?.(dm.id) || null;
+      const forceRead = dm.id === openChannelId;
+
+      if (!localReadState && !forceRead) {
+        return dm;
+      }
+
+      const nextDm = applyReadStateToChannel(dm, currentUserId, localReadState, {
+        forceRead
+      });
+
+      if (
+        nextDm.last_read_at === dm.last_read_at &&
+        nextDm.unread_count === dm.unread_count
+      ) {
+        return dm;
+      }
+
+      changed = true;
       return nextDm;
     })
   );
