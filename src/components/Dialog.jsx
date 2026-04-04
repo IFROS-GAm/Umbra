@@ -41,7 +41,8 @@ function getDialogMeta(type) {
 export function Dialog({ dialog, onClose, onSubmit, users }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [kind, setKind] = useState("text");
+  const [selectedTemplateId, setSelectedTemplateId] = useState("friends");
+  const [kind, setKind] = useState(dialog.initialKind || "text");
   const [topic, setTopic] = useState("");
   const [recipientId, setRecipientId] = useState(
     users.find((user) => user.id !== dialog.currentUserId)?.id || ""
@@ -67,7 +68,8 @@ export function Dialog({ dialog, onClose, onSubmit, users }) {
   useEffect(() => {
     setName("");
     setDescription("");
-    setKind("text");
+    setSelectedTemplateId("friends");
+    setKind(dialog.initialKind || "text");
     setTopic("");
     setError("");
     setBusy(false);
@@ -100,6 +102,7 @@ export function Dialog({ dialog, onClose, onSubmit, users }) {
         name,
         recipientId,
         recipientIds,
+        templateId: selectedTemplateId,
         topic
       });
     } catch (submitError) {
@@ -134,9 +137,12 @@ export function Dialog({ dialog, onClose, onSubmit, users }) {
           <div className="dialog-template-list">
             {GUILD_TEMPLATES.map((template) => (
               <button
-                className="dialog-template-card"
+                className={`dialog-template-card ${
+                  selectedTemplateId === template.id ? "selected" : ""
+                }`.trim()}
                 key={template.id}
                 onClick={() => {
+                  setSelectedTemplateId(template.id);
                   setName((previous) => previous || `Servidor de ${template.label}`);
                   setDescription((previous) => previous || template.description);
                 }}

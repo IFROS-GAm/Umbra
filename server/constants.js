@@ -1,5 +1,6 @@
 export const CHANNEL_TYPES = Object.freeze({
   TEXT: "text",
+  VOICE: "voice",
   DM: "dm",
   GROUP_DM: "group_dm"
 });
@@ -38,6 +39,34 @@ export const DEFAULT_REACTIONS = Object.freeze([
   "\u2728",
   "\uD83D\uDE80"
 ]);
+
+export const GUILD_TEMPLATES = Object.freeze({
+  games: {
+    description: "Raids, squads y noches de party.",
+    textChannels: ["general", "clips", "buscando-grupo"],
+    voiceChannels: ["lobby", "squad-1", "squad-2"]
+  },
+  friends: {
+    description: "Servidor social pequeno y directo.",
+    textChannels: ["general", "memes", "planes"],
+    voiceChannels: ["lounge"]
+  },
+  study: {
+    description: "Clases, tareas y seguimiento.",
+    textChannels: ["general", "tareas", "recursos"],
+    voiceChannels: ["sala-de-estudio-1", "sala-de-estudio-2"]
+  },
+  community: {
+    description: "Eventos, anuncios y equipo.",
+    textChannels: ["anuncios", "general", "soporte"],
+    voiceChannels: ["town-hall", "lounge"]
+  },
+  default: {
+    description: "Canales iniciales de Umbra.",
+    textChannels: ["general"],
+    voiceChannels: ["lounge"]
+  }
+});
 
 export const DEMO_IDS = Object.freeze({
   users: {

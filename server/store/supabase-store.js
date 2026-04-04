@@ -185,7 +185,7 @@ export class SupabaseStore {
           this.client.from("channels").insert({
             id: createId(),
             guild_id: guild.id,
-            type: CHANNEL_TYPES.GROUP_DM,
+            type: CHANNEL_TYPES.VOICE,
             name: sanitizeUsername(name).replace(/_/g, "-"),
             topic: "Canal de voz de Umbra",
             position: nextPosition,

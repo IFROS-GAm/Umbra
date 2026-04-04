@@ -52,7 +52,10 @@ export function safePreview(text = "", maxLength = 84) {
 }
 
 export function isGuildVoiceChannel(channel) {
-  return Boolean(channel?.guild_id) && channel.type === CHANNEL_TYPES.GROUP_DM;
+  return (
+    Boolean(channel?.guild_id) &&
+    (channel.type === CHANNEL_TYPES.VOICE || channel.type === CHANNEL_TYPES.GROUP_DM)
+  );
 }
 
 export function buildMessagePreview(content = "", attachments = []) {
@@ -313,16 +316,14 @@ export function buildBootstrapState(db, userId) {
         ),
         permissions: {
           bits: permissionBits,
-          can_manage_channels: hasPermission(
-            permissionBits,
-            PERMISSIONS.MANAGE_CHANNELS
-          ),
+          is_admin: hasPermission(permissionBits, PERMISSIONS.ADMINISTRATOR),
+          can_manage_channels: hasPermission(permissionBits, PERMISSIONS.ADMINISTRATOR),
           can_manage_messages: hasPermission(
             permissionBits,
             PERMISSIONS.MANAGE_MESSAGES
           ),
-          can_manage_roles: hasPermission(permissionBits, PERMISSIONS.MANAGE_ROLES),
-          can_manage_guild: hasPermission(permissionBits, PERMISSIONS.MANAGE_GUILD)
+          can_manage_roles: hasPermission(permissionBits, PERMISSIONS.ADMINISTRATOR),
+          can_manage_guild: hasPermission(permissionBits, PERMISSIONS.ADMINISTRATOR)
         },
         channels,
         members

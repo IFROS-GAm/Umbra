@@ -134,12 +134,13 @@ export const api = {
       })
     });
   },
-  createGuild({ description, name }) {
+  createGuild({ description, name, templateId }) {
     return request("/api/guilds", {
       method: "POST",
       body: JSON.stringify({
         description,
-        name
+        name,
+        templateId
       })
     });
   },

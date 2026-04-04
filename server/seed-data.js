@@ -262,7 +262,7 @@ export function createSeedData() {
     {
       id: DEMO_IDS.channels.ifrosLounge,
       guild_id: DEMO_IDS.guilds.ifros,
-      type: CHANNEL_TYPES.GROUP_DM,
+      type: CHANNEL_TYPES.VOICE,
       name: "lounge",
       topic: "Canal de voz principal.",
       position: 3,
@@ -278,7 +278,7 @@ export function createSeedData() {
     {
       id: DEMO_IDS.channels.ifrosStudyOne,
       guild_id: DEMO_IDS.guilds.ifros,
-      type: CHANNEL_TYPES.GROUP_DM,
+      type: CHANNEL_TYPES.VOICE,
       name: "sala-de-estudio-1",
       topic: "Canal de voz enfocado para sesiones cortas.",
       position: 4,
@@ -294,7 +294,7 @@ export function createSeedData() {
     {
       id: DEMO_IDS.channels.ifrosStudyTwo,
       guild_id: DEMO_IDS.guilds.ifros,
-      type: CHANNEL_TYPES.GROUP_DM,
+      type: CHANNEL_TYPES.VOICE,
       name: "sala-de-estudio-2",
       topic: "Canal de voz secundario para equipo y soporte.",
       position: 5,

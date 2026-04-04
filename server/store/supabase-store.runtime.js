@@ -1,4 +1,9 @@
-import { GUILD_CHANNEL_KINDS, PERMISSIONS } from "../constants.js";
+import {
+  CHANNEL_TYPES,
+  GUILD_CHANNEL_KINDS,
+  GUILD_TEMPLATES,
+  PERMISSIONS
+} from "../constants.js";
 import {
   buildMessagePreview,
   createId,
@@ -475,23 +480,23 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
     return this.getChannelSnapshot(message.channel_id, userId, messageId);
   }
 
-  async createGuild({ description = "", name, ownerId }) {
+  async createGuild({ description = "", name, ownerId, templateId = "default" }) {
     const trimmed = name?.trim();
     if (!trimmed) {
       throw createError("El servidor necesita un nombre.", 400);
     }
 
+    const template = GUILD_TEMPLATES[templateId] || GUILD_TEMPLATES.default;
     const guildId = createId();
     const everyoneRoleId = createId();
     const ownerRoleId = createId();
-    const channelId = createId();
     const now = new Date().toISOString();
 
     await expectData(
       this.client.from("guilds").insert({
         id: guildId,
         name: trimmed,
-        description: description.trim(),
+        description: description.trim() || template.description,
         icon_text: trimmed
           .split(/\s+/)
           .slice(0, 2)
@@ -548,14 +553,18 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
       })
     );
 
-    await expectData(
-      this.client.from("channels").insert({
-        id: channelId,
+    const textChannels =
+      template.textChannels?.length ? template.textChannels : GUILD_TEMPLATES.default.textChannels;
+    const voiceChannels = template.voiceChannels || [];
+    const createdChannels = [...textChannels, ...voiceChannels].map((channelName, index) => {
+      const isVoice = index >= textChannels.length;
+      return {
+        id: createId(),
         guild_id: guildId,
-        type: CHANNEL_TYPES.TEXT,
-        name: "general",
-        topic: "Canal inicial del servidor.",
-        position: 0,
+        type: isVoice ? CHANNEL_TYPES.VOICE : CHANNEL_TYPES.TEXT,
+        name: channelName,
+        topic: isVoice ? "Canal de voz de Umbra." : "Canal inicial del servidor.",
+        position: index,
         parent_id: null,
         created_by: ownerId,
         last_message_id: null,
@@ -564,26 +573,30 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
         last_message_at: null,
         created_at: now,
         updated_at: now
-      })
-    );
+      };
+    });
+
+    await expectData(this.client.from("channels").insert(createdChannels));
 
     await expectData(
       this.client.from("channel_members").upsert(
-        {
-          channel_id: channelId,
+        createdChannels.map((channel) => ({
+          channel_id: channel.id,
           user_id: ownerId,
           last_read_message_id: null,
           last_read_at: null,
           hidden: false,
           joined_at: now
-        },
+        })),
         { onConflict: "channel_id,user_id" }
       )
     );
 
     return {
       guild_id: guildId,
-      channel_id: channelId
+      channel_id:
+        createdChannels.find((channel) => channel.type === CHANNEL_TYPES.TEXT)?.id ||
+        createdChannels[0]?.id
     };
   }
 
@@ -596,11 +609,8 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
     }
 
     const permissionBits = await this.getPermissionBits(guildId, createdBy);
-    if (
-      (permissionBits & PERMISSIONS.MANAGE_CHANNELS) !==
-      PERMISSIONS.MANAGE_CHANNELS
-    ) {
-      throw createError("No tienes permisos para crear canales.", 403);
+    if ((permissionBits & PERMISSIONS.ADMINISTRATOR) !== PERMISSIONS.ADMINISTRATOR) {
+      throw createError("Solo el administrador puede cambiar la estructura del servidor.", 403);
     }
 
     const trimmed = name?.trim().toLowerCase().replace(/\s+/g, "-");
@@ -624,7 +634,7 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
     const channel = {
       id: createId(),
       guild_id: guildId,
-      type: kind === GUILD_CHANNEL_KINDS.VOICE ? CHANNEL_TYPES.GROUP_DM : CHANNEL_TYPES.TEXT,
+      type: kind === GUILD_CHANNEL_KINDS.VOICE ? CHANNEL_TYPES.VOICE : CHANNEL_TYPES.TEXT,
       name: trimmed,
       topic: topic.trim(),
       position: nextPosition,

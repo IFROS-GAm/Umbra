@@ -1281,7 +1281,8 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
       if (dialog.type === "guild") {
         const payload = await api.createGuild({
           description: values.description,
-          name: values.name
+          name: values.name,
+          templateId: values.templateId
         });
         await loadBootstrap({
           channelId: payload.channel_id,
@@ -1291,6 +1292,10 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
       }
 
       if (dialog.type === "channel") {
+        if (!activeGuild?.permissions?.can_manage_channels) {
+          throw new Error("Solo el administrador puede cambiar la estructura del servidor.");
+        }
+
         const payload = await api.createChannel({
           guildId: activeGuild.id,
           kind: values.kind,

@@ -458,7 +458,8 @@ export async function startServer(options = {}) {
       const payload = await store.createGuild({
         description: req.body.description || "",
         name: req.body.name,
-        ownerId: req.viewer.id
+        ownerId: req.viewer.id,
+        templateId: req.body.templateId || "default"
       });
 
       emitNavigationUpdate({

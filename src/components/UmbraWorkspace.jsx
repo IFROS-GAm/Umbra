@@ -987,8 +987,9 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
     setComposer(message.content);
   }
 
-  function openDialog(type) {
+  function openDialog(type, meta = {}) {
     setDialog({
+      ...meta,
       type,
       currentUserId: workspace.current_user.id
     });

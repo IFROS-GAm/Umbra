@@ -38,6 +38,8 @@ export function WorkspaceNavigation({
 }) {
   const truncatedCurrentUserLabel =
     currentUserLabel.length > 16 ? `${currentUserLabel.slice(0, 13)}...` : currentUserLabel;
+  const canManageStructure = Boolean(activeGuild?.permissions?.can_manage_channels);
+  const canManageGuild = Boolean(activeGuild?.permissions?.can_manage_guild);
 
   return (
     <>
@@ -111,11 +113,17 @@ export function WorkspaceNavigation({
                   <small>UMBRA CIRCLE</small>
                   <button
                     className="navigator-server-trigger"
-                    onClick={() => onShowNotice("Menu del servidor listo para una siguiente iteracion.")}
+                    onClick={() =>
+                      onShowNotice(
+                        canManageGuild
+                          ? "Menu del servidor listo para la siguiente capa administrativa."
+                          : "Solo el administrador puede cambiar la configuracion del servidor."
+                      )
+                    }
                     type="button"
                   >
                     <strong>{activeGuild.name}</strong>
-                    <Icon name="chevronDown" size={15} />
+                    {canManageGuild ? <Icon name="chevronDown" size={15} /> : null}
                   </button>
                 </div>
               </div>
@@ -171,9 +179,15 @@ export function WorkspaceNavigation({
           <div className="channel-list">
             <div className="panel-section-label">
               <span>Canales de texto</span>
-              <button className="ghost-button icon-only" onClick={() => onOpenDialog("channel")} type="button">
-                <Icon name="add" />
-              </button>
+              {canManageStructure ? (
+                <button
+                  className="ghost-button icon-only"
+                  onClick={() => onOpenDialog("channel", { initialKind: "text" })}
+                  type="button"
+                >
+                  <Icon name="add" />
+                </button>
+              ) : null}
             </div>
             {activeGuildTextChannels.map((channel) => (
               <button
@@ -194,9 +208,15 @@ export function WorkspaceNavigation({
 
             <div className="panel-section-label voice">
               <span>Canales de voz</span>
-              <button className="ghost-button icon-only" onClick={() => onOpenDialog("channel")} type="button">
-                <Icon name="add" />
-              </button>
+              {canManageStructure ? (
+                <button
+                  className="ghost-button icon-only"
+                  onClick={() => onOpenDialog("channel", { initialKind: "voice" })}
+                  type="button"
+                >
+                  <Icon name="add" />
+                </button>
+              ) : null}
             </div>
             {activeGuildVoiceChannels.map((channel) => (
               <div
