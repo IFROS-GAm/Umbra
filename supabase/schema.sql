@@ -44,13 +44,17 @@ create table if not exists public.guilds (
   name text not null,
   description text not null default '',
   icon_text text not null default '',
+  icon_url text not null default '',
   banner_color text not null default '#5865F2',
+  banner_image_url text not null default '',
   owner_id uuid not null references public.profiles(id) on delete cascade,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 alter table public.guilds add column if not exists is_default boolean not null default false;
+alter table public.guilds add column if not exists icon_url text not null default '';
+alter table public.guilds add column if not exists banner_image_url text not null default '';
 
 create table if not exists public.roles (
   id uuid primary key default gen_random_uuid(),
@@ -76,7 +80,7 @@ create table if not exists public.guild_members (
 create table if not exists public.channels (
   id uuid primary key default gen_random_uuid(),
   guild_id uuid references public.guilds(id) on delete cascade,
-  type text not null check (type in ('text', 'dm', 'group_dm')),
+  type text not null check (type in ('category', 'text', 'voice', 'dm', 'group_dm')),
   name text not null default '',
   topic text not null default '',
   position integer not null default 0,
@@ -89,6 +93,13 @@ create table if not exists public.channels (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.channels
+  drop constraint if exists channels_type_check;
+
+alter table public.channels
+  add constraint channels_type_check
+  check (type in ('category', 'text', 'voice', 'dm', 'group_dm'));
 
 create table if not exists public.channel_members (
   channel_id uuid not null references public.channels(id) on delete cascade,

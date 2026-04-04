@@ -58,6 +58,10 @@ export function isGuildVoiceChannel(channel) {
   );
 }
 
+export function isGuildCategoryChannel(channel) {
+  return Boolean(channel?.guild_id) && channel.type === CHANNEL_TYPES.CATEGORY;
+}
+
 export function buildMessagePreview(content = "", attachments = []) {
   const textPreview = safePreview(content);
   if (textPreview) {
@@ -254,6 +258,7 @@ export function buildBootstrapState(db, userId) {
           const membership = userChannelMembershipById.get(channel.id);
           const unread =
             !isGuildVoiceChannel(channel) &&
+            !isGuildCategoryChannel(channel) &&
             Boolean(channel.last_message_at) &&
             channel.last_message_author_id !== viewerId &&
             (!membership?.last_read_at ||
@@ -264,6 +269,7 @@ export function buildBootstrapState(db, userId) {
 
           return {
             ...channel,
+            is_category: isGuildCategoryChannel(channel),
             is_voice: isGuildVoiceChannel(channel),
             unread_count: unread,
             last_read_at: membership?.last_read_at ?? null

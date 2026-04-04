@@ -3,7 +3,14 @@ import React from "react";
 import { Avatar } from "../Avatar.jsx";
 import { Icon } from "../Icon.jsx";
 import { UmbraLogo } from "../UmbraLogo.jsx";
-import { HOME_LINKS, formatVoiceCount, getDmSummary, resolveGuildIcon } from "./workspaceHelpers.js";
+import { ServerAdminMenu } from "./ServerAdminMenu.jsx";
+import {
+  HOME_LINKS,
+  buildGuildStructureEntries,
+  formatVoiceCount,
+  getDmSummary,
+  resolveGuildIcon
+} from "./workspaceHelpers.js";
 
 export function WorkspaceNavigation({
   activeGuild,
@@ -22,6 +29,9 @@ export function WorkspaceNavigation({
   onOpenDialog,
   onOpenProfileCard,
   onOpenSettings,
+  onOpenGuildSettings,
+  onOpenInviteModal,
+  onCopyGuildId,
   onSelectDirectLink,
   onSelectGuild,
   onSelectGuildChannel,
@@ -40,6 +50,114 @@ export function WorkspaceNavigation({
     currentUserLabel.length > 16 ? `${currentUserLabel.slice(0, 13)}...` : currentUserLabel;
   const canManageStructure = Boolean(activeGuild?.permissions?.can_manage_channels);
   const canManageGuild = Boolean(activeGuild?.permissions?.can_manage_guild);
+  const guildStructureEntries = buildGuildStructureEntries(activeGuild);
+  const categoryEntries = guildStructureEntries.filter((entry) => entry.type === "category");
+  const uncategorizedTextChannels = guildStructureEntries
+    .filter((entry) => entry.type === "channel" && !entry.channel.is_voice)
+    .map((entry) => entry.channel);
+  const uncategorizedVoiceChannels = guildStructureEntries
+    .filter((entry) => entry.type === "channel" && entry.channel.is_voice)
+    .map((entry) => entry.channel);
+
+  function renderTextChannelRow(channel, { nested = false } = {}) {
+    return (
+      <button
+        className={`channel-row ${nested ? "nested" : ""} ${
+          activeSelection.channelId === channel.id ? "active" : ""
+        } ${channel.unread_count ? "has-unread" : "is-read"}`.trim()}
+        key={channel.id}
+        onClick={() => onSelectGuildChannel(channel)}
+        type="button"
+      >
+        <span className="channel-label">
+          <Icon name="channel" size={16} />
+          <span>{channel.name}</span>
+        </span>
+        {channel.unread_count ? <b>Nuevo</b> : null}
+      </button>
+    );
+  }
+
+  function renderVoiceChannel(channel, { nested = false } = {}) {
+    return (
+      <div
+        className={`voice-channel-block ${nested ? "nested" : ""}`.trim()}
+        key={channel.id}
+        onMouseEnter={() => onSetHoveredVoiceChannelId(channel.id)}
+        onMouseLeave={() =>
+          onSetHoveredVoiceChannelId((previous) => (previous === channel.id ? null : previous))
+        }
+      >
+        <button
+          className={`channel-row voice ${nested ? "nested" : ""} ${
+            activeSelection.channelId === channel.id ? "active" : ""
+          } ${joinedVoiceChannelId === channel.id ? "connected" : ""}`.trim()}
+          onClick={() => onSelectGuildChannel(channel)}
+          type="button"
+        >
+          <span className="channel-label">
+            <Icon name="headphones" size={16} />
+            <span>{channel.name}</span>
+          </span>
+          <span className="voice-channel-meta">
+            <b>{formatVoiceCount((voiceSessions[channel.id] || []).length)} / 15</b>
+          </span>
+        </button>
+
+        {(voiceUsersByChannel[channel.id] || []).length ? (
+          <div className="voice-channel-occupants">
+            {(voiceUsersByChannel[channel.id] || []).map((user) => (
+              <button
+                className="voice-channel-occupant"
+                key={`${channel.id}-${user.id}`}
+                onClick={(event) => onOpenProfileCard(event, user, user.display_name)}
+                type="button"
+              >
+                <Avatar
+                  hue={user.avatar_hue}
+                  label={user.display_name || user.username}
+                  size={24}
+                  src={user.avatar_url}
+                  status={user.status}
+                />
+                <span title={user.display_name || user.username}>
+                  {user.display_name || user.username}
+                </span>
+                {user.id === workspace.current_user.id && voiceState.screenShareEnabled ? (
+                  <em>EN VIVO</em>
+                ) : null}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        {hoveredVoiceChannelId === channel.id ? (
+          <div className="voice-channel-preview floating-surface">
+            <strong>{channel.name}</strong>
+            <span>
+              {(voiceUsersByChannel[channel.id] || []).length
+                ? `${(voiceUsersByChannel[channel.id] || []).length} persona(s) dentro`
+                : "Nadie dentro todavia"}
+            </span>
+            {(voiceUsersByChannel[channel.id] || []).length ? (
+              <div className="voice-channel-preview-avatars">
+                {(voiceUsersByChannel[channel.id] || []).slice(0, 4).map((user) => (
+                  <Avatar
+                    hue={user.avatar_hue}
+                    key={`${channel.id}-preview-${user.id}`}
+                    label={user.display_name || user.username}
+                    size={28}
+                    src={user.avatar_url}
+                    status={user.status}
+                  />
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <>
@@ -111,32 +229,29 @@ export function WorkspaceNavigation({
                 <span className="navigator-crest-ring" />
                 <div className="navigator-crest-copy">
                   <small>UMBRA CIRCLE</small>
-                  <button
-                    className="navigator-server-trigger"
-                    onClick={() =>
-                      onShowNotice(
-                        canManageGuild
-                          ? "Menu del servidor listo para la siguiente capa administrativa."
-                          : "Solo el administrador puede cambiar la configuracion del servidor."
-                      )
-                    }
-                    type="button"
-                  >
-                    <strong>{activeGuild.name}</strong>
-                    {canManageGuild ? <Icon name="chevronDown" size={15} /> : null}
-                  </button>
+                  <ServerAdminMenu
+                    canManageGuild={canManageGuild}
+                    guild={activeGuild}
+                    onCopyId={onCopyGuildId}
+                    onCreateCategory={() => onOpenDialog("category")}
+                    onCreateChannel={() => onOpenDialog("channel", { initialKind: "text" })}
+                    onInvite={onOpenInviteModal}
+                    onOpenSettings={onOpenGuildSettings}
+                  />
                 </div>
               </div>
               <div className="navigator-top-actions">
-                <button
-                  className="ghost-button icon-only tooltip-anchor"
-                  data-tooltip="Invitar personas"
-                  data-tooltip-position="bottom"
-                  onClick={() => onOpenDialog("dm")}
-                  type="button"
-                >
-                  <Icon name="userAdd" />
-                </button>
+                {canManageGuild ? (
+                  <button
+                    className="ghost-button icon-only tooltip-anchor"
+                    data-tooltip="Invitar al servidor"
+                    data-tooltip-position="bottom"
+                    onClick={onOpenInviteModal}
+                    type="button"
+                  >
+                    <Icon name="userAdd" />
+                  </button>
+                ) : null}
               </div>
             </>
           ) : (
@@ -177,125 +292,72 @@ export function WorkspaceNavigation({
 
         {activeGuild ? (
           <div className="channel-list">
-            <div className="panel-section-label">
-              <span>Canales de texto</span>
-              {canManageStructure ? (
-                <button
-                  className="ghost-button icon-only"
-                  onClick={() => onOpenDialog("channel", { initialKind: "text" })}
-                  type="button"
-                >
-                  <Icon name="add" />
-                </button>
-              ) : null}
-            </div>
-            {activeGuildTextChannels.map((channel) => (
-              <button
-                className={`channel-row ${activeSelection.channelId === channel.id ? "active" : ""} ${
-                  channel.unread_count ? "has-unread" : "is-read"
-                }`}
-                key={channel.id}
-                onClick={() => onSelectGuildChannel(channel)}
-                type="button"
-              >
-                <span className="channel-label">
-                  <Icon name="channel" size={16} />
-                  <span>{channel.name}</span>
-                </span>
-                {channel.unread_count ? <b>Nuevo</b> : null}
-              </button>
-            ))}
-
-            <div className="panel-section-label voice">
-              <span>Canales de voz</span>
-              {canManageStructure ? (
-                <button
-                  className="ghost-button icon-only"
-                  onClick={() => onOpenDialog("channel", { initialKind: "voice" })}
-                  type="button"
-                >
-                  <Icon name="add" />
-                </button>
-              ) : null}
-            </div>
-            {activeGuildVoiceChannels.map((channel) => (
-              <div
-                className="voice-channel-block"
-                key={channel.id}
-                onMouseEnter={() => onSetHoveredVoiceChannelId(channel.id)}
-                onMouseLeave={() =>
-                  onSetHoveredVoiceChannelId((previous) => (previous === channel.id ? null : previous))
-                }
-              >
-                <button
-                  className={`channel-row voice ${
-                    activeSelection.channelId === channel.id ? "active" : ""
-                  } ${joinedVoiceChannelId === channel.id ? "connected" : ""}`}
-                  onClick={() => onSelectGuildChannel(channel)}
-                  type="button"
-                >
-                  <span className="channel-label">
-                    <Icon name="headphones" size={16} />
-                    <span>{channel.name}</span>
-                  </span>
-                  <span className="voice-channel-meta">
-                    <b>{formatVoiceCount((voiceSessions[channel.id] || []).length)} / 15</b>
-                  </span>
-                </button>
-
-                {(voiceUsersByChannel[channel.id] || []).length ? (
-                  <div className="voice-channel-occupants">
-                    {(voiceUsersByChannel[channel.id] || []).map((user) => (
-                      <button
-                        className="voice-channel-occupant"
-                        key={`${channel.id}-${user.id}`}
-                        onClick={(event) => onOpenProfileCard(event, user, user.display_name)}
-                        type="button"
-                      >
-                        <Avatar
-                          hue={user.avatar_hue}
-                          label={user.display_name || user.username}
-                          size={24}
-                          src={user.avatar_url}
-                          status={user.status}
-                        />
-                        <span title={user.display_name || user.username}>
-                          {user.display_name || user.username}
-                        </span>
-                        {user.id === workspace.current_user.id && voiceState.screenShareEnabled ? (
-                          <em>EN VIVO</em>
-                        ) : null}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-
-                {hoveredVoiceChannelId === channel.id ? (
-                  <div className="voice-channel-preview floating-surface">
-                    <strong>{channel.name}</strong>
-                    <span>
-                      {(voiceUsersByChannel[channel.id] || []).length
-                        ? `${(voiceUsersByChannel[channel.id] || []).length} persona(s) dentro`
-                        : "Nadie dentro todavia"}
-                    </span>
-                    {(voiceUsersByChannel[channel.id] || []).length ? (
-                      <div className="voice-channel-preview-avatars">
-                        {(voiceUsersByChannel[channel.id] || []).slice(0, 4).map((user) => (
-                          <Avatar
-                            hue={user.avatar_hue}
-                            key={`${channel.id}-preview-${user.id}`}
-                            label={user.display_name || user.username}
-                            size={28}
-                            src={user.avatar_url}
-                            status={user.status}
-                          />
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
+            {categoryEntries.map((entry) => (
+              <div className="channel-category-group" key={entry.id}>
+                <div className="panel-section-label category">
+                  <span>{entry.category.name}</span>
+                  {canManageStructure ? (
+                    <button
+                      className="ghost-button icon-only"
+                      onClick={() =>
+                        onOpenDialog("channel", {
+                          initialKind: "text",
+                          initialParentId: entry.category.id
+                        })
+                      }
+                      type="button"
+                    >
+                      <Icon name="add" />
+                    </button>
+                  ) : null}
+                </div>
+                {entry.channels.length ? (
+                  entry.channels.map((channel) =>
+                    channel.is_voice
+                      ? renderVoiceChannel(channel, { nested: true })
+                      : renderTextChannelRow(channel, { nested: true })
+                  )
+                ) : (
+                  <div className="category-empty">Sin canales por ahora.</div>
+                )}
               </div>
             ))}
+
+            {uncategorizedTextChannels.length ? (
+              <>
+                <div className="panel-section-label">
+                  <span>Canales de texto</span>
+                  {canManageStructure ? (
+                    <button
+                      className="ghost-button icon-only"
+                      onClick={() => onOpenDialog("channel", { initialKind: "text" })}
+                      type="button"
+                    >
+                      <Icon name="add" />
+                    </button>
+                  ) : null}
+                </div>
+                {uncategorizedTextChannels.map((channel) => renderTextChannelRow(channel))}
+              </>
+            ) : null}
+
+            {uncategorizedVoiceChannels.length ? (
+              <>
+                <div className="panel-section-label voice">
+                  <span>Canales de voz</span>
+                  {canManageStructure ? (
+                    <button
+                      className="ghost-button icon-only"
+                      onClick={() => onOpenDialog("channel", { initialKind: "voice" })}
+                      type="button"
+                    >
+                      <Icon name="add" />
+                    </button>
+                  ) : null}
+                </div>
+                {uncategorizedVoiceChannels.map((channel) => renderVoiceChannel(channel))}
+              </>
+            ) : null}
           </div>
         ) : (
           <>

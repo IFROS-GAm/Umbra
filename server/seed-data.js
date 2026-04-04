@@ -84,7 +84,9 @@ export function createSeedData() {
       name: "Umbra Core",
       description: "Servidor base para producto, soporte y operaciones de Umbra.",
       icon_text: "UC",
+      icon_url: "",
       banner_color: "#7F74FF",
+      banner_image_url: "",
       is_default: true,
       owner_id: DEMO_IDS.users.ana,
       created_at: isoMinutesAgo(2400),
@@ -95,7 +97,9 @@ export function createSeedData() {
       name: "Noctis Lab",
       description: "Exploraciones visuales, motion y pruebas de interfaz.",
       icon_text: "NL",
+      icon_url: "",
       banner_color: "#FF9F67",
+      banner_image_url: "",
       is_default: true,
       owner_id: DEMO_IDS.users.bruno,
       created_at: isoMinutesAgo(2200),
@@ -723,6 +727,7 @@ export function createSeedData() {
     channel_members,
     messages,
     message_reactions,
+    invites: [],
     metadata: {
       created_at: isoMinutesAfter(0)
     }

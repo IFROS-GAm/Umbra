@@ -474,6 +474,29 @@ export async function startServer(options = {}) {
     }
   });
 
+  app.patch("/api/guilds/:guildId", requireViewer, async (req, res) => {
+    try {
+      const guild = await store.updateGuild({
+        bannerColor: req.body.bannerColor,
+        bannerImageUrl: req.body.bannerImageUrl,
+        description: req.body.description || "",
+        guildId: req.params.guildId,
+        iconUrl: req.body.iconUrl,
+        name: req.body.name,
+        userId: req.viewer.id
+      });
+
+      emitNavigationUpdate({
+        guildId: req.params.guildId,
+        type: "guild:update"
+      });
+
+      res.json({ guild });
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
   app.post("/api/guilds/:guildId/channels", requireViewer, async (req, res) => {
     try {
       const channel = await store.createChannel({
@@ -481,6 +504,7 @@ export async function startServer(options = {}) {
         guildId: req.params.guildId,
         kind: req.body.kind || "text",
         name: req.body.name,
+        parentId: req.body.parentId || null,
         topic: req.body.topic || ""
       });
 
@@ -491,6 +515,39 @@ export async function startServer(options = {}) {
       });
 
       res.status(201).json({ channel });
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.post("/api/guilds/:guildId/categories", requireViewer, async (req, res) => {
+    try {
+      const category = await store.createCategory({
+        createdBy: req.viewer.id,
+        guildId: req.params.guildId,
+        name: req.body.name
+      });
+
+      emitNavigationUpdate({
+        channelId: category.id,
+        guildId: req.params.guildId,
+        type: "channel:create"
+      });
+
+      res.status(201).json({ category });
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.post("/api/guilds/:guildId/invites", requireViewer, async (req, res) => {
+    try {
+      const invite = await store.createInvite({
+        guildId: req.params.guildId,
+        userId: req.viewer.id
+      });
+
+      res.status(201).json({ invite });
     } catch (error) {
       sendError(res, error);
     }

@@ -19,9 +19,14 @@ const lazyNamed = (loader, exportName) =>
 
 const Dialog = lazyNamed(() => import("./Dialog.jsx"), "Dialog");
 const FriendsHome = lazyNamed(() => import("./FriendsHome.jsx"), "FriendsHome");
+const InviteServerModal = lazyNamed(() => import("./InviteServerModal.jsx"), "InviteServerModal");
 const MessageRequestsHome = lazyNamed(
   () => import("./MessageRequestsHome.jsx"),
   "MessageRequestsHome"
+);
+const ServerSettingsModal = lazyNamed(
+  () => import("./ServerSettingsModal.jsx"),
+  "ServerSettingsModal"
 );
 const SettingsModal = lazyNamed(() => import("./SettingsModal.jsx"), "SettingsModal");
 const UserProfileCard = lazyNamed(() => import("./UserProfileCard.jsx"), "UserProfileCard");
@@ -60,6 +65,13 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
   } = useUmbraWorkspaceCore({ accessToken, onSignOut });
   const [voiceInputPanel, setVoiceInputPanel] = useState(null);
   const [voiceOutputPanel, setVoiceOutputPanel] = useState(null);
+  const [serverSettingsOpen, setServerSettingsOpen] = useState(false);
+  const [inviteModalState, setInviteModalState] = useState({
+    error: "",
+    invite: null,
+    loading: false,
+    open: false
+  });
 
   const currentUser = workspace?.current_user || null;
   const currentUserId = currentUser?.id || "";
@@ -1004,11 +1016,121 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
   }
 
   function handleSelectGuild(guild) {
+    const defaultChannel =
+      guild.channels.find((channel) => !channel.is_voice && !channel.is_category) ||
+      guild.channels.find((channel) => channel.is_voice) ||
+      guild.channels[0] ||
+      null;
+
     setActiveSelection({
-      channelId: guild.channels.find((channel) => !channel.is_voice)?.id || guild.channels[0]?.id || null,
+      channelId: defaultChannel?.id || null,
       guildId: guild.id,
       kind: "guild"
     });
+  }
+
+  async function handleCopyGuildId() {
+    if (!activeGuild?.id) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(activeGuild.id);
+      showUiNotice("ID del servidor copiado.");
+    } catch {
+      showUiNotice(`ID del servidor: ${activeGuild.id}`);
+    }
+  }
+
+  async function openInviteModal() {
+    if (!activeGuild?.id) {
+      return;
+    }
+
+    setInviteModalState({
+      error: "",
+      invite: null,
+      loading: true,
+      open: true
+    });
+
+    try {
+      const payload = await api.createGuildInvite({
+        guildId: activeGuild.id
+      });
+      setInviteModalState({
+        error: "",
+        invite: payload.invite,
+        loading: false,
+        open: true
+      });
+      setAppError("");
+    } catch (error) {
+      setInviteModalState({
+        error: error.message,
+        invite: null,
+        loading: false,
+        open: true
+      });
+      setAppError(error.message);
+    }
+  }
+
+  async function handleSaveGuildProfile(nextGuild) {
+    if (!activeGuild?.id) {
+      return;
+    }
+
+    try {
+      const {
+        bannerFile,
+        bannerImageUrl: requestedBannerImageUrl,
+        clearBanner,
+        clearIcon,
+        iconFile,
+        iconUrl: requestedIconUrl,
+        ...guildPatch
+      } = nextGuild;
+
+      let iconUrl = requestedIconUrl;
+      let bannerImageUrl = requestedBannerImageUrl;
+
+      if (iconFile) {
+        const uploadPayload = await api.uploadAttachments([iconFile]);
+        iconUrl = uploadPayload.attachments?.[0]?.url;
+
+        if (!iconUrl) {
+          throw new Error("No se pudo subir el icono del servidor.");
+        }
+      } else if (clearIcon) {
+        iconUrl = "";
+      }
+
+      if (bannerFile) {
+        const uploadPayload = await api.uploadAttachments([bannerFile]);
+        bannerImageUrl = uploadPayload.attachments?.[0]?.url;
+
+        if (!bannerImageUrl) {
+          throw new Error("No se pudo subir el cartel del servidor.");
+        }
+      } else if (clearBanner) {
+        bannerImageUrl = "";
+      }
+
+      await api.updateGuild({
+        ...guildPatch,
+        bannerImageUrl,
+        guildId: activeGuild.id,
+        iconUrl
+      });
+
+      await loadBootstrap(activeSelectionRef.current);
+      setAppError("");
+      showUiNotice("Servidor actualizado.");
+    } catch (error) {
+      setAppError(error.message);
+      throw error;
+    }
   }
 
   function handleSelectDirectLink(id, notice = null, channelId = null) {
@@ -1150,8 +1272,11 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
           joinedVoiceChannelId={joinedVoiceChannelId}
           onHandleVoiceLeave={handleVoiceLeave}
           onOpenDialog={openDialog}
+          onOpenGuildSettings={() => setServerSettingsOpen(true)}
+          onOpenInviteModal={openInviteModal}
           onOpenProfileCard={openProfileCard}
           onOpenSettings={() => setSettingsOpen(true)}
+          onCopyGuildId={handleCopyGuildId}
           onSelectDirectLink={handleSelectDirectLink}
           onSelectGuild={handleSelectGuild}
           onSelectGuildChannel={handleSelectGuildChannel}
@@ -1332,9 +1457,39 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
           <Suspense fallback={<WorkspacePanelFallback compact />}>
             <Dialog
               dialog={dialog}
+              guildChannels={activeGuild?.channels || []}
               onClose={() => setDialog(null)}
               onSubmit={handleDialogSubmit}
               users={dialog.type === "dm_group" ? friendUsers : workspace.available_users}
+            />
+          </Suspense>
+        ) : null}
+
+        {serverSettingsOpen && activeGuild ? (
+          <Suspense fallback={<WorkspacePanelFallback compact />}>
+            <ServerSettingsModal
+              guild={activeGuild}
+              memberCount={activeGuild.members?.length || 0}
+              onClose={() => setServerSettingsOpen(false)}
+              onSave={handleSaveGuildProfile}
+            />
+          </Suspense>
+        ) : null}
+
+        {inviteModalState.open && activeGuild ? (
+          <Suspense fallback={<WorkspacePanelFallback compact />}>
+            <InviteServerModal
+              error={inviteModalState.error}
+              guildName={activeGuild.name}
+              invite={inviteModalState.invite}
+              loading={inviteModalState.loading}
+              onClose={() =>
+                setInviteModalState((previous) => ({
+                  ...previous,
+                  open: false
+                }))
+              }
+              onRefresh={openInviteModal}
             />
           </Suspense>
         ) : null}

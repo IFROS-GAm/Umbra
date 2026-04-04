@@ -109,7 +109,8 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
   const activeChannel = activeLookup?.channel || null;
   const activeGuild = activeLookup?.guild || null;
   const isVoiceChannel = Boolean(activeChannel?.is_voice);
-  const activeGuildTextChannels = activeGuild?.channels.filter((channel) => !channel.is_voice) || [];
+  const activeGuildTextChannels =
+    activeGuild?.channels.filter((channel) => !channel.is_voice && !channel.is_category) || [];
   const activeGuildVoiceChannels = activeGuild?.channels.filter((channel) => channel.is_voice) || [];
   const headerCopy = renderHeaderCopy(activeChannel, activeSelection.kind);
   const currentUserLabel =
@@ -533,7 +534,7 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
     const socket = getSocket(accessToken);
 
     const refreshNavigation = async (payload = {}) => {
-      if (!["guild:create", "channel:create", "dm:create", "profile:update"].includes(payload?.type)) {
+      if (!["guild:create", "guild:update", "channel:create", "dm:create", "profile:update"].includes(payload?.type)) {
         return;
       }
 
@@ -1291,23 +1292,40 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
         });
       }
 
-      if (dialog.type === "channel") {
-        if (!activeGuild?.permissions?.can_manage_channels) {
-          throw new Error("Solo el administrador puede cambiar la estructura del servidor.");
+        if (dialog.type === "channel") {
+          if (!activeGuild?.permissions?.can_manage_channels) {
+            throw new Error("Solo el administrador puede cambiar la estructura del servidor.");
+          }
+
+          const payload = await api.createChannel({
+            guildId: activeGuild.id,
+            kind: values.kind,
+            name: values.name,
+            parentId: values.parentId,
+            topic: values.topic
+          });
+          await loadBootstrap({
+            channelId: payload.channel.id,
+            guildId: activeGuild.id,
+            kind: "guild"
+          });
         }
 
-        const payload = await api.createChannel({
-          guildId: activeGuild.id,
-          kind: values.kind,
-          name: values.name,
-          topic: values.topic
-        });
-        await loadBootstrap({
-          channelId: payload.channel.id,
-          guildId: activeGuild.id,
-          kind: "guild"
-        });
-      }
+        if (dialog.type === "category") {
+          if (!activeGuild?.permissions?.can_manage_channels) {
+            throw new Error("Solo el administrador puede cambiar la estructura del servidor.");
+          }
+
+          await api.createCategory({
+            guildId: activeGuild.id,
+            name: values.name
+          });
+          await loadBootstrap({
+            channelId: activeSelectionRef.current.channelId,
+            guildId: activeGuild.id,
+            kind: "guild"
+          });
+        }
 
       if (dialog.type === "dm") {
         const payload = await api.createDm({

@@ -286,6 +286,7 @@ export function listLikelyChannelIds(workspace, activeSelection, limit = 6) {
       .filter(
         (channel) =>
           !channel.is_voice &&
+          !channel.is_category &&
           channel.id !== activeSelection.channelId &&
           (!activeSelection.guildId || channel.guild_id === activeSelection.guildId)
       )
@@ -306,6 +307,46 @@ export function listLikelyChannelIds(workspace, activeSelection, limit = 6) {
 
 export function resolveGuildIcon(guild) {
   return guild?.icon_url || guild?.image_url || guild?.avatar_url || "";
+}
+
+function sortChannelsByPosition(channels = []) {
+  return [...channels].sort((left, right) => Number(left.position || 0) - Number(right.position || 0));
+}
+
+export function buildGuildStructureEntries(guild) {
+  if (!guild?.channels?.length) {
+    return [];
+  }
+
+  const allChannels = sortChannelsByPosition(guild.channels);
+  const childChannelsByParent = new Map();
+
+  allChannels
+    .filter((channel) => channel.parent_id)
+    .forEach((channel) => {
+      const current = childChannelsByParent.get(channel.parent_id) || [];
+      current.push(channel);
+      childChannelsByParent.set(channel.parent_id, current);
+    });
+
+  return allChannels
+    .filter((channel) => !channel.parent_id)
+    .map((channel) => {
+      if (channel.is_category) {
+        return {
+          id: channel.id,
+          type: "category",
+          category: channel,
+          channels: sortChannelsByPosition(childChannelsByParent.get(channel.id) || [])
+        };
+      }
+
+      return {
+        id: channel.id,
+        type: "channel",
+        channel
+      };
+    });
 }
 
 function resolveLatestReadAt(...candidates) {

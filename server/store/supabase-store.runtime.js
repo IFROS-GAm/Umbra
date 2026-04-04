@@ -52,6 +52,21 @@ function normalizeProfileColor(candidate, fallback = "#5865F2") {
   return fallback;
 }
 
+function sanitizeChannelName(candidate = "") {
+  return String(candidate || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-");
+}
+
+function sanitizeCategoryName(candidate = "") {
+  return String(candidate || "").trim();
+}
+
+function buildInviteCode() {
+  return Math.random().toString(36).slice(2, 8).toUpperCase();
+}
+
 async function expectData(queryPromise, fallbackMessage = "Error consultando Supabase.") {
   const { data, error } = await queryPromise;
   if (error) {
@@ -502,7 +517,9 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
           .slice(0, 2)
           .map((word) => word[0]?.toUpperCase())
           .join(""),
+        icon_url: "",
         banner_color: "#5865F2",
+        banner_image_url: "",
         owner_id: ownerId,
         created_at: now,
         updated_at: now
@@ -600,7 +617,14 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
     };
   }
 
-  async createChannel({ createdBy, guildId, kind = GUILD_CHANNEL_KINDS.TEXT, name, topic = "" }) {
+  async createChannel({
+    createdBy,
+    guildId,
+    kind = GUILD_CHANNEL_KINDS.TEXT,
+    name,
+    parentId = null,
+    topic = ""
+  }) {
     const guild = await expectData(
       this.client.from("guilds").select("*").eq("id", guildId).limit(1)
     );
@@ -613,16 +637,23 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
       throw createError("Solo el administrador puede cambiar la estructura del servidor.", 403);
     }
 
-    const trimmed = name?.trim().toLowerCase().replace(/\s+/g, "-");
+    const trimmed = sanitizeChannelName(name);
     if (!trimmed) {
       throw createError("El canal necesita un nombre.", 400);
     }
 
     const existingChannels = await expectData(
-      this.client.from("channels").select("id,name,position").eq("guild_id", guildId)
+      this.client.from("channels").select("id,name,position,type,guild_id").eq("guild_id", guildId)
     );
     if (existingChannels.some((channel) => channel.name === trimmed)) {
       throw createError("Ya existe un canal con ese nombre.", 400);
+    }
+
+    if (parentId) {
+      const parent = existingChannels.find((channel) => channel.id === parentId);
+      if (!parent || parent.type !== CHANNEL_TYPES.CATEGORY) {
+        throw createError("La categoria seleccionada no existe.", 400);
+      }
     }
 
     const nextPosition =
@@ -638,7 +669,7 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
       name: trimmed,
       topic: topic.trim(),
       position: nextPosition,
-      parent_id: null,
+      parent_id: parentId,
       created_by: createdBy,
       last_message_id: null,
       last_message_author_id: null,
@@ -650,6 +681,143 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
 
     await expectData(this.client.from("channels").insert(channel));
     return channel;
+  }
+
+  async createCategory({ createdBy, guildId, name }) {
+    const guild = await expectData(
+      this.client.from("guilds").select("*").eq("id", guildId).limit(1)
+    );
+    if (!guild[0]) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    const permissionBits = await this.getPermissionBits(guildId, createdBy);
+    if ((permissionBits & PERMISSIONS.ADMINISTRATOR) !== PERMISSIONS.ADMINISTRATOR) {
+      throw createError("Solo el administrador puede cambiar la estructura del servidor.", 403);
+    }
+
+    const trimmed = sanitizeCategoryName(name);
+    if (!trimmed) {
+      throw createError("La categoria necesita un nombre.", 400);
+    }
+
+    const existingChannels = await expectData(
+      this.client.from("channels").select("id,name,position").eq("guild_id", guildId)
+    );
+    if (
+      existingChannels.some(
+        (channel) => String(channel.name).toLowerCase() === trimmed.toLowerCase()
+      )
+    ) {
+      throw createError("Ya existe una categoria o canal con ese nombre.", 400);
+    }
+
+    const nextPosition =
+      existingChannels.reduce(
+        (max, channel) => Math.max(max, Number(channel.position)),
+        -1
+      ) + 1;
+
+    const category = {
+      id: createId(),
+      guild_id: guildId,
+      type: CHANNEL_TYPES.CATEGORY,
+      name: trimmed,
+      topic: "",
+      position: nextPosition,
+      parent_id: null,
+      created_by: createdBy,
+      last_message_id: null,
+      last_message_author_id: null,
+      last_message_preview: "",
+      last_message_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    await expectData(this.client.from("channels").insert(category));
+    return category;
+  }
+
+  async updateGuild({
+    bannerColor,
+    bannerImageUrl,
+    description = "",
+    guildId,
+    iconUrl,
+    name,
+    userId
+  }) {
+    const guildRows = await expectData(
+      this.client.from("guilds").select("*").eq("id", guildId).limit(1)
+    );
+    const guild = guildRows[0];
+    if (!guild) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    const permissionBits = await this.getPermissionBits(guildId, userId);
+    if ((permissionBits & PERMISSIONS.ADMINISTRATOR) !== PERMISSIONS.ADMINISTRATOR) {
+      throw createError("Solo el administrador puede editar este servidor.", 403);
+    }
+
+    const trimmed = String(name || "").trim();
+    if (!trimmed) {
+      throw createError("El servidor necesita un nombre.", 400);
+    }
+
+    const updatedRows = await expectData(
+      this.client
+        .from("guilds")
+        .update({
+          name: trimmed,
+          description: String(description || "").trim().slice(0, 180),
+          icon_text: trimmed
+            .split(/\s+/)
+            .slice(0, 2)
+            .map((word) => word[0]?.toUpperCase())
+            .join(""),
+          icon_url: iconUrl !== undefined ? String(iconUrl || "").trim() : guild.icon_url || "",
+          banner_color: normalizeProfileColor(bannerColor, guild.banner_color || "#5865F2"),
+          banner_image_url:
+            bannerImageUrl !== undefined
+              ? String(bannerImageUrl || "").trim()
+              : guild.banner_image_url || "",
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", guildId)
+        .select("*")
+    );
+
+    return updatedRows[0] || guild;
+  }
+
+  async createInvite({ guildId, userId }) {
+    const guildRows = await expectData(
+      this.client.from("guilds").select("*").eq("id", guildId).limit(1)
+    );
+    if (!guildRows[0]) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    const permissionBits = await this.getPermissionBits(guildId, userId);
+    if ((permissionBits & PERMISSIONS.ADMINISTRATOR) !== PERMISSIONS.ADMINISTRATOR) {
+      throw createError("Solo el administrador puede invitar personas desde este menu.", 403);
+    }
+
+    const invite = {
+      id: createId(),
+      code: buildInviteCode(),
+      guild_id: guildId,
+      creator_id: userId,
+      uses: 0,
+      max_uses: null,
+      expires_at: null,
+      created_at: new Date().toISOString()
+    };
+
+    await expectData(this.client.from("invites").insert(invite));
+    return invite;
   }
 
   async createOrGetDm({ ownerId, recipientId }) {

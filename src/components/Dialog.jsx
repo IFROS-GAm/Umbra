@@ -9,6 +9,10 @@ const GUILD_TEMPLATES = [
   { id: "community", icon: "community", label: "Comunidad local", description: "Eventos, anuncios y equipo." }
 ];
 
+function buildTemplateName(template) {
+  return `Servidor de ${template.label}`;
+}
+
 function getDialogMeta(type) {
   switch (type) {
     case "guild":
@@ -22,6 +26,12 @@ function getDialogMeta(type) {
         heroIcon: "channel",
         subtitle: "Abre un nuevo espacio de texto y organiza mejor el flujo del equipo.",
         title: "Nuevo canal"
+      };
+    case "category":
+      return {
+        heroIcon: "channel",
+        subtitle: "Crea una categoria para ordenar mejor tus canales de texto y voz.",
+        title: "Nueva categoria"
       };
     case "dm_group":
       return {
@@ -38,11 +48,12 @@ function getDialogMeta(type) {
   }
 }
 
-export function Dialog({ dialog, onClose, onSubmit, users }) {
+export function Dialog({ dialog, guildChannels = [], onClose, onSubmit, users }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("friends");
   const [kind, setKind] = useState(dialog.initialKind || "text");
+  const [parentId, setParentId] = useState(dialog.initialParentId || "");
   const [topic, setTopic] = useState("");
   const [recipientId, setRecipientId] = useState(
     users.find((user) => user.id !== dialog.currentUserId)?.id || ""
@@ -64,12 +75,17 @@ export function Dialog({ dialog, onClose, onSubmit, users }) {
         .includes(normalizedQuery)
     );
   }, [friendQuery, users]);
+  const categoryOptions = useMemo(
+    () => guildChannels.filter((channel) => channel.is_category),
+    [guildChannels]
+  );
 
   useEffect(() => {
     setName("");
     setDescription("");
     setSelectedTemplateId("friends");
     setKind(dialog.initialKind || "text");
+    setParentId(dialog.initialParentId || "");
     setTopic("");
     setError("");
     setBusy(false);
@@ -100,6 +116,7 @@ export function Dialog({ dialog, onClose, onSubmit, users }) {
         description,
         kind,
         name,
+        parentId: parentId || null,
         recipientId,
         recipientIds,
         templateId: selectedTemplateId,
@@ -143,8 +160,8 @@ export function Dialog({ dialog, onClose, onSubmit, users }) {
                 key={template.id}
                 onClick={() => {
                   setSelectedTemplateId(template.id);
-                  setName((previous) => previous || `Servidor de ${template.label}`);
-                  setDescription((previous) => previous || template.description);
+                  setName(buildTemplateName(template));
+                  setDescription(template.description);
                 }}
                 type="button"
               >
@@ -162,18 +179,30 @@ export function Dialog({ dialog, onClose, onSubmit, users }) {
         ) : null}
 
         <form className="dialog-form" onSubmit={handleSubmit}>
-          {dialog.type === "guild" || dialog.type === "channel" ? (
+          {dialog.type === "guild" || dialog.type === "channel" || dialog.type === "category" ? (
             <>
               <label className="dialog-field">
                 <span className="dialog-field-label">
                   <Icon name={dialog.type === "guild" ? "server" : "channel"} />
-                  <em>{dialog.type === "guild" ? "Nombre del servidor" : "Nombre del canal"}</em>
+                  <em>
+                    {dialog.type === "guild"
+                      ? "Nombre del servidor"
+                      : dialog.type === "category"
+                        ? "Nombre de la categoria"
+                        : "Nombre del canal"}
+                  </em>
                 </span>
                 <input
                   autoFocus
                   maxLength={40}
                   onChange={(event) => setName(event.target.value)}
-                  placeholder={dialog.type === "guild" ? "Umbra Core" : "general"}
+                  placeholder={
+                    dialog.type === "guild"
+                      ? "Umbra Core"
+                      : dialog.type === "category"
+                        ? "Nueva categoria"
+                        : "general"
+                  }
                   required
                   value={name}
                 />
@@ -193,7 +222,7 @@ export function Dialog({ dialog, onClose, onSubmit, users }) {
                     value={description}
                   />
                 </label>
-              ) : (
+              ) : dialog.type === "channel" ? (
                 <>
                   <div className="dialog-field">
                     <span className="dialog-field-label">
@@ -222,6 +251,21 @@ export function Dialog({ dialog, onClose, onSubmit, users }) {
 
                   <label className="dialog-field">
                     <span className="dialog-field-label">
+                      <Icon name="threads" />
+                      <em>Categoria</em>
+                    </span>
+                    <select onChange={(event) => setParentId(event.target.value)} value={parentId}>
+                      <option value="">Sin categoria</option>
+                      {categoryOptions.map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="dialog-field">
+                    <span className="dialog-field-label">
                       <Icon name={kind === "voice" ? "headphones" : "threads"} />
                       <em>{kind === "voice" ? "Descripcion del canal" : "Tema del canal"}</em>
                     </span>
@@ -238,6 +282,20 @@ export function Dialog({ dialog, onClose, onSubmit, users }) {
                     />
                   </label>
                 </>
+              ) : (
+                <label className="dialog-field">
+                  <span className="dialog-field-label">
+                    <Icon name="threads" />
+                    <em>Descripcion</em>
+                  </span>
+                  <textarea
+                    maxLength={180}
+                    onChange={(event) => setDescription(event.target.value)}
+                    placeholder="Describe el tipo de canales que viviran aqui"
+                    rows={3}
+                    value={description}
+                  />
+                </label>
               )}
             </>
           ) : dialog.type === "dm_group" ? (

@@ -144,13 +144,46 @@ export const api = {
       })
     });
   },
-  createChannel({ guildId, kind = "text", name, topic }) {
+  createChannel({ guildId, kind = "text", name, parentId = null, topic }) {
     return request(`/api/guilds/${guildId}/channels`, {
       method: "POST",
       body: JSON.stringify({
         kind,
         name,
+        parentId,
         topic
+      })
+    });
+  },
+  createCategory({ guildId, name }) {
+    return request(`/api/guilds/${guildId}/categories`, {
+      method: "POST",
+      body: JSON.stringify({
+        name
+      })
+    });
+  },
+  createGuildInvite({ guildId }) {
+    return request(`/api/guilds/${guildId}/invites`, {
+      method: "POST"
+    });
+  },
+  updateGuild({
+    bannerColor,
+    bannerImageUrl,
+    description,
+    guildId,
+    iconUrl,
+    name
+  }) {
+    return request(`/api/guilds/${guildId}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        bannerColor,
+        bannerImageUrl,
+        description,
+        iconUrl,
+        name
       })
     });
   },

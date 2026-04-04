@@ -181,7 +181,7 @@ export function findChannelInSession(session, channelId) {
 export function resolveSelection(session, previousSelection) {
   if (previousSelection?.channelId) {
     const previous = findChannelInSession(session, previousSelection.channelId);
-    if (previous) {
+    if (previous && !previous.channel?.is_category) {
       return {
         channelId: previous.channel.id,
         guildId: previous.guild?.id ?? null,
@@ -194,8 +194,10 @@ export function resolveSelection(session, previousSelection) {
     (guild) => guild.id === session.defaults.guild_id
   );
   const defaultChannel =
-    defaultGuild?.channels.find((channel) => channel.id === session.defaults.channel_id) ||
-    defaultGuild?.channels[0];
+    defaultGuild?.channels.find(
+      (channel) => channel.id === session.defaults.channel_id && !channel.is_category
+    ) ||
+    defaultGuild?.channels.find((channel) => !channel.is_category);
 
   if (defaultGuild && defaultChannel) {
     return {

@@ -1,4 +1,5 @@
 export const CHANNEL_TYPES = Object.freeze({
+  CATEGORY: "category",
   TEXT: "text",
   VOICE: "voice",
   DM: "dm",
@@ -6,6 +7,7 @@ export const CHANNEL_TYPES = Object.freeze({
 });
 
 export const GUILD_CHANNEL_KINDS = Object.freeze({
+  CATEGORY: "category",
   TEXT: "text",
   VOICE: "voice"
 });

@@ -1023,4 +1023,41 @@
   .voice-channel-preview {
     display: none;
   }
+
+  .server-settings-body {
+    grid-template-columns: 1fr;
+  }
+
+  .server-settings-preview {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 960px) {
+  .server-settings-shell {
+    grid-template-columns: 1fr;
+    height: min(94vh, 900px);
+  }
+
+  .server-settings-sidebar {
+    border-bottom: 1px solid var(--line);
+    border-right: 0;
+  }
+
+  .server-settings-body {
+    padding: 22px 18px 24px;
+  }
+
+  .server-banner-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .server-asset-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .invite-actions {
+    flex-direction: column-reverse;
+  }
 }
