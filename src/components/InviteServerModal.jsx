@@ -1,32 +1,98 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 
+import { Avatar } from "./Avatar.jsx";
 import { Icon } from "./Icon.jsx";
 
-export function InviteServerModal({ guildName, invite, loading, error, onClose, onRefresh }) {
-  const [copied, setCopied] = useState(false);
-  const inviteCode = invite?.code || "";
+function buildInviteLink(inviteCode) {
+  if (!inviteCode) {
+    return "";
+  }
 
-  async function handleCopy() {
-    if (!inviteCode) {
-      return;
+  if (typeof window === "undefined") {
+    return inviteCode;
+  }
+
+  return `${window.location.origin}/invite/${inviteCode}`;
+}
+
+export function InviteServerModal({
+  channelName,
+  error,
+  friends = [],
+  guildName,
+  invite,
+  loading,
+  onClose,
+  onRefresh,
+  onShowNotice
+}) {
+  const [copied, setCopied] = useState(false);
+  const [invitedIds, setInvitedIds] = useState([]);
+  const [search, setSearch] = useState("");
+
+  const inviteCode = invite?.code || "";
+  const inviteLink = useMemo(() => buildInviteLink(inviteCode), [inviteCode]);
+  const filteredFriends = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) {
+      return friends;
+    }
+
+    return friends.filter((friend) =>
+      [friend.display_name, friend.username]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query))
+    );
+  }, [friends, search]);
+
+  async function copyValue(value, successLabel) {
+    if (!value) {
+      return false;
     }
 
     try {
-      await navigator.clipboard.writeText(inviteCode);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1400);
+      await navigator.clipboard.writeText(value);
+      if (successLabel) {
+        onShowNotice?.(successLabel);
+      }
+      return true;
     } catch {
-      setCopied(false);
+      return false;
+    }
+  }
+
+  async function handleCopyLink() {
+    const copiedOk = await copyValue(inviteLink || inviteCode, "Enlace de invitacion copiado.");
+    setCopied(copiedOk);
+    if (copiedOk) {
+      window.setTimeout(() => setCopied(false), 1400);
+    }
+  }
+
+  async function handleInviteFriend(friend) {
+    const copiedOk = await copyValue(
+      inviteLink || inviteCode,
+      `Invitacion lista para ${friend.display_name || friend.username}.`
+    );
+
+    if (copiedOk) {
+      setInvitedIds((current) =>
+        current.includes(friend.id) ? current : [...current, friend.id]
+      );
     }
   }
 
   return (
     <div className="settings-backdrop" onClick={onClose}>
-      <div className="invite-modal-card" onClick={(event) => event.stopPropagation()}>
+      <div className="invite-modal-card discordish" onClick={(event) => event.stopPropagation()}>
         <div className="invite-modal-header">
           <div>
-            <h3>Invitar al servidor</h3>
-            <p>Comparte un codigo para traer mas sombras a {guildName}.</p>
+            <h3>Invita a tus amigos a {guildName}</h3>
+            <p>
+              {channelName
+                ? `Los destinatarios llegaran a #${channelName}`
+                : "Comparte una invitacion para sumar nuevas sombras al servidor."}
+            </p>
           </div>
           <button className="ghost-button icon-only" onClick={onClose} type="button">
             <Icon name="close" />
@@ -46,21 +112,74 @@ export function InviteServerModal({ guildName, invite, loading, error, onClose, 
             </div>
           ) : inviteCode ? (
             <>
-              <div className="invite-code-block">
-                <small>Codigo de invitacion</small>
-                <strong>{inviteCode}</strong>
-                <span>Comparte este codigo dentro de Umbra para invitar personas.</span>
+              <label className="dialog-friend-search invite-search-bar">
+                <Icon name="search" size={17} />
+                <input
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Buscar amigos"
+                  type="text"
+                  value={search}
+                />
+              </label>
+
+              <div className="invite-friend-list">
+                {filteredFriends.length ? (
+                  filteredFriends.map((friend) => {
+                    const invited = invitedIds.includes(friend.id);
+
+                    return (
+                      <div className="invite-friend-row" key={friend.id}>
+                        <div className="invite-friend-main">
+                          <Avatar
+                            hue={friend.avatar_hue}
+                            label={friend.display_name || friend.username}
+                            size={42}
+                            src={friend.avatar_url}
+                            status={friend.status}
+                          />
+                          <div className="invite-friend-copy">
+                            <strong>{friend.display_name || friend.username}</strong>
+                            <small>{friend.username}</small>
+                          </div>
+                        </div>
+
+                        <button
+                          className={`ghost-button small invite-row-action ${
+                            invited ? "active" : ""
+                          }`.trim()}
+                          onClick={() => handleInviteFriend(friend)}
+                          type="button"
+                        >
+                          {invited ? "Invitado" : "Invitar"}
+                        </button>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="invite-friends-empty-state">
+                    <strong>No hay sombras que coincidan.</strong>
+                    <span>Cambia la busqueda o comparte el enlace manualmente.</span>
+                  </div>
+                )}
               </div>
 
-              <div className="invite-actions">
-                <button className="primary-button" onClick={handleCopy} type="button">
-                  <Icon name="copy" />
-                  <span>{copied ? "Copiado" : "Copiar codigo"}</span>
-                </button>
-                <button className="ghost-button" onClick={onRefresh} type="button">
-                  <Icon name="refresh" />
-                  <span>Generar otro</span>
-                </button>
+              <div className="invite-link-panel">
+                <strong>O envia un enlace de invitacion al servidor a un amigo</strong>
+                <div className="invite-link-copy-row">
+                  <div className="invite-link-field" title={inviteLink || inviteCode}>
+                    {inviteLink || inviteCode}
+                  </div>
+                  <button className="primary-button invite-copy-button" onClick={handleCopyLink} type="button">
+                    {copied ? "Copiado" : "Copiar"}
+                  </button>
+                </div>
+                <div className="invite-link-footer">
+                  <span>El acceso queda listo para compartir desde Umbra.</span>
+                  <button className="ghost-button small" onClick={onRefresh} type="button">
+                    <Icon name="refresh" size={14} />
+                    <span>Editar enlace de invitacion</span>
+                  </button>
+                </div>
               </div>
             </>
           ) : (

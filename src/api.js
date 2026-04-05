@@ -168,6 +168,14 @@ export const api = {
       method: "POST"
     });
   },
+  getInviteByCode(code) {
+    return request(`/api/invites/${encodeURIComponent(code)}`);
+  },
+  acceptInvite(code) {
+    return request(`/api/invites/${encodeURIComponent(code)}/accept`, {
+      method: "POST"
+    });
+  },
   updateGuild({
     bannerColor,
     bannerImageUrl,

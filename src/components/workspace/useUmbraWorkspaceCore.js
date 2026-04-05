@@ -18,12 +18,12 @@ import {
 } from "./workspaceHelpers.js";
 import { createVoiceInputProcessingSession } from "./voiceInputProcessing.js";
 
-export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
+export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, onSignOut }) {
   const [workspace, setWorkspace] = useState(null);
   const [activeSelection, setActiveSelection] = useState({
-    channelId: null,
-    guildId: null,
-    kind: "guild"
+    channelId: initialSelection?.channelId || null,
+    guildId: initialSelection?.guildId || null,
+    kind: initialSelection?.kind || "guild"
   });
   const [messages, setMessages] = useState([]);
   const [hasMore, setHasMore] = useState(true);
@@ -464,8 +464,8 @@ export function useUmbraWorkspaceCore({ accessToken, onSignOut }) {
     if (!accessToken) {
       return;
     }
-    loadBootstrap();
-  }, [accessToken]);
+    loadBootstrap(initialSelection || activeSelectionRef.current);
+  }, [accessToken, initialSelection]);
 
   useEffect(() => {
     if (workspace?.current_user?.id) {

@@ -5,9 +5,11 @@ import {
   PERMISSIONS
 } from "../constants.js";
 import {
+  buildInvitePreview,
   buildMessagePreview,
   createId,
   enrichMessages,
+  getDefaultGuildChannel,
   isGuildVoiceChannel,
   resolveMentionUserIds,
   sortByDateDesc
@@ -65,6 +67,24 @@ function sanitizeCategoryName(candidate = "") {
 
 function buildInviteCode() {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
+}
+
+function assertInviteUsable(invite) {
+  if (!invite) {
+    throw createError("Invitacion no encontrada.", 404);
+  }
+
+  if (invite.expires_at && new Date(invite.expires_at).getTime() <= Date.now()) {
+    throw createError("Esta invitacion ya expiro.", 410);
+  }
+
+  if (
+    invite.max_uses !== null &&
+    invite.max_uses !== undefined &&
+    Number(invite.uses || 0) >= Number(invite.max_uses)
+  ) {
+    throw createError("Esta invitacion ya no esta disponible.", 410);
+  }
 }
 
 async function expectData(queryPromise, fallbackMessage = "Error consultando Supabase.") {
@@ -818,6 +838,127 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
 
     await expectData(this.client.from("invites").insert(invite));
     return invite;
+  }
+
+  async getInviteByCode({ code, userId = null }) {
+    const normalizedCode = String(code || "").trim().toUpperCase();
+    const inviteRows = await expectData(
+      this.client.from("invites").select("*").eq("code", normalizedCode).limit(1)
+    );
+    const invite = inviteRows[0] || null;
+    assertInviteUsable(invite);
+
+    const [guildRows, guildMembers, channels] = await Promise.all([
+      expectData(this.client.from("guilds").select("*").eq("id", invite.guild_id).limit(1)),
+      expectData(this.client.from("guild_members").select("*").eq("guild_id", invite.guild_id)),
+      expectData(
+        this.client
+          .from("channels")
+          .select("id,guild_id,type,name,position,parent_id")
+          .eq("guild_id", invite.guild_id)
+      )
+    ]);
+
+    const guild = guildRows[0] || null;
+    if (!guild) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    const memberIds = [...new Set(guildMembers.map((membership) => membership.user_id))];
+    const profiles = memberIds.length
+      ? await expectData(
+          this.client
+            .from("profiles")
+            .select("id,status")
+            .in("id", memberIds)
+        )
+      : [];
+
+    return buildInvitePreview({
+      channels,
+      guild,
+      guildMembers,
+      invite,
+      profiles,
+      userId
+    });
+  }
+
+  async acceptInvite({ code, userId }) {
+    const normalizedCode = String(code || "").trim().toUpperCase();
+    const inviteRows = await expectData(
+      this.client.from("invites").select("*").eq("code", normalizedCode).limit(1)
+    );
+    const invite = inviteRows[0] || null;
+    assertInviteUsable(invite);
+
+    const [guildRows, guildMembers, channels, roles] = await Promise.all([
+      expectData(this.client.from("guilds").select("*").eq("id", invite.guild_id).limit(1)),
+      expectData(this.client.from("guild_members").select("*").eq("guild_id", invite.guild_id)),
+      expectData(this.client.from("channels").select("*").eq("guild_id", invite.guild_id)),
+      expectData(this.client.from("roles").select("*").eq("guild_id", invite.guild_id))
+    ]);
+
+    const guild = guildRows[0] || null;
+    if (!guild) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    const defaultChannel = getDefaultGuildChannel(channels, guild.id);
+    const alreadyJoined = guildMembers.some((membership) => membership.user_id === userId);
+
+    if (!alreadyJoined) {
+      const everyoneRole = roles.find((role) => role.name === "@everyone");
+      const joinedAt = new Date().toISOString();
+
+      await expectData(
+        this.client.from("guild_members").insert({
+          guild_id: guild.id,
+          user_id: userId,
+          role_ids: everyoneRole ? [everyoneRole.id] : [],
+          nickname: "",
+          joined_at: joinedAt
+        })
+      );
+
+      const membershipRows = channels
+        .filter((channel) => channel.type !== CHANNEL_TYPES.CATEGORY)
+        .map((channel) => ({
+          channel_id: channel.id,
+          user_id: userId,
+          last_read_message_id: null,
+          last_read_at: null,
+          hidden: false,
+          joined_at: joinedAt
+        }));
+
+      if (membershipRows.length) {
+        await expectData(
+          this.client.from("channel_members").upsert(membershipRows, {
+            onConflict: "channel_id,user_id"
+          })
+        );
+      }
+
+      await expectData(
+        this.client
+          .from("invites")
+          .update({
+            uses: Number(invite.uses || 0) + 1
+          })
+          .eq("id", invite.id)
+      );
+    }
+
+    return {
+      already_joined: alreadyJoined,
+      channel_id: defaultChannel?.id || null,
+      guild_id: guild.id,
+      invite: await this.getInviteByCode({
+        code: normalizedCode,
+        userId
+      })
+    };
   }
 
   async createOrGetDm({ ownerId, recipientId }) {

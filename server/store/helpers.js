@@ -192,6 +192,80 @@ export function getHighestRoleColor({ guildId, guildMembers, roles, userId }) {
   return role?.color || "#C7D0DD";
 }
 
+export function getDefaultGuildChannel(channels = [], guildId) {
+  const guildChannels = channels
+    .filter((channel) => channel.guild_id === guildId)
+    .sort((a, b) => Number(a.position || 0) - Number(b.position || 0));
+
+  return (
+    guildChannels.find(
+      (channel) =>
+        channel.type === CHANNEL_TYPES.TEXT && !isGuildCategoryChannel(channel)
+    ) ||
+    guildChannels.find((channel) => !isGuildCategoryChannel(channel)) ||
+    null
+  );
+}
+
+export function buildInvitePreview({
+  channels = [],
+  guild,
+  guildMembers = [],
+  invite,
+  profiles = [],
+  userId = null
+}) {
+  if (!guild || !invite) {
+    return null;
+  }
+
+  const defaultChannel = getDefaultGuildChannel(channels, guild.id);
+  const memberIds = guildMembers
+    .filter((membership) => membership.guild_id === guild.id)
+    .map((membership) => membership.user_id);
+  const memberIdSet = new Set(memberIds);
+  const members = profiles.filter((profile) => memberIdSet.has(profile.id));
+  const onlineCount = members.filter(
+    (profile) => visibleStatus(profile.status) !== "offline"
+  ).length;
+  const memberCount = memberIds.length;
+
+  return {
+    id: invite.id,
+    code: invite.code,
+    uses: Number(invite.uses || 0),
+    max_uses: invite.max_uses ?? null,
+    expires_at: invite.expires_at ?? null,
+    already_joined: Boolean(
+      userId &&
+        guildMembers.some(
+          (membership) =>
+            membership.guild_id === guild.id && membership.user_id === userId
+        )
+    ),
+    guild: {
+      id: guild.id,
+      name: guild.name,
+      description: guild.description || "",
+      icon_text: guild.icon_text || "",
+      icon_url: guild.icon_url || "",
+      banner_color: guild.banner_color || "#5865F2",
+      banner_image_url: guild.banner_image_url || ""
+    },
+    channel: defaultChannel
+      ? {
+          id: defaultChannel.id,
+          name: defaultChannel.name,
+          type: defaultChannel.type
+        }
+      : null,
+    stats: {
+      member_count: memberCount,
+      online_count: onlineCount
+    }
+  };
+}
+
 export function refreshChannelSummaries(db) {
   db.channels.forEach((channel) => {
     const latestMessage = db.messages

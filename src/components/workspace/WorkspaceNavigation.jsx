@@ -46,6 +46,7 @@ export function WorkspaceNavigation({
   voiceUsersByChannel,
   workspace
 }) {
+  const [collapsedSectionIds, setCollapsedSectionIds] = React.useState({});
   const truncatedCurrentUserLabel =
     currentUserLabel.length > 16 ? `${currentUserLabel.slice(0, 13)}...` : currentUserLabel;
   const canManageStructure = Boolean(activeGuild?.permissions?.can_manage_channels);
@@ -58,6 +59,13 @@ export function WorkspaceNavigation({
   const uncategorizedVoiceChannels = guildStructureEntries
     .filter((entry) => entry.type === "channel" && entry.channel.is_voice)
     .map((entry) => entry.channel);
+
+  function toggleSection(sectionId) {
+    setCollapsedSectionIds((previous) => ({
+      ...previous,
+      [sectionId]: !previous[sectionId]
+    }));
+  }
 
   function renderTextChannelRow(channel, { nested = false } = {}) {
     return (
@@ -225,10 +233,9 @@ export function WorkspaceNavigation({
         <div className="navigator-top">
           {activeGuild ? (
             <>
-              <div className="navigator-crest">
-                <span className="navigator-crest-ring" />
-                <div className="navigator-crest-copy">
-                  <small>UMBRA CIRCLE</small>
+              <div className="navigator-server-header">
+                <div className="navigator-server-header-copy">
+                  <small>UMBRA VEIL</small>
                   <ServerAdminMenu
                     canManageGuild={canManageGuild}
                     guild={activeGuild}
@@ -295,10 +302,21 @@ export function WorkspaceNavigation({
             {categoryEntries.map((entry) => (
               <div className="channel-category-group" key={entry.id}>
                 <div className="panel-section-label category">
-                  <span>{entry.category.name}</span>
+                  <button
+                    aria-expanded={!collapsedSectionIds[entry.category.id]}
+                    className="category-toggle"
+                    onClick={() => toggleSection(entry.category.id)}
+                    type="button"
+                  >
+                    <Icon
+                      name={collapsedSectionIds[entry.category.id] ? "arrowRight" : "chevronDown"}
+                      size={14}
+                    />
+                    <span>{entry.category.name}</span>
+                  </button>
                   {canManageStructure ? (
                     <button
-                      className="ghost-button icon-only"
+                      className="ghost-button icon-only category-action"
                       onClick={() =>
                         onOpenDialog("channel", {
                           initialKind: "text",
@@ -311,25 +329,47 @@ export function WorkspaceNavigation({
                     </button>
                   ) : null}
                 </div>
-                {entry.channels.length ? (
-                  entry.channels.map((channel) =>
+                {(() => {
+                  const isCollapsed = Boolean(collapsedSectionIds[entry.category.id]);
+                  const activeNestedChannel =
+                    entry.channels.find((channel) => channel.id === activeSelection.channelId) || null;
+                  const visibleChannels = isCollapsed
+                    ? activeNestedChannel
+                      ? [activeNestedChannel]
+                      : []
+                    : entry.channels;
+
+                  if (!visibleChannels.length) {
+                    return isCollapsed ? null : <div className="category-empty">Sin canales por ahora.</div>;
+                  }
+
+                  return visibleChannels.map((channel) =>
                     channel.is_voice
                       ? renderVoiceChannel(channel, { nested: true })
                       : renderTextChannelRow(channel, { nested: true })
-                  )
-                ) : (
-                  <div className="category-empty">Sin canales por ahora.</div>
-                )}
+                  );
+                })()}
               </div>
             ))}
 
             {uncategorizedTextChannels.length ? (
               <>
                 <div className="panel-section-label">
-                  <span>Canales de texto</span>
+                  <button
+                    aria-expanded={!collapsedSectionIds.__uncategorized_text__}
+                    className="category-toggle"
+                    onClick={() => toggleSection("__uncategorized_text__")}
+                    type="button"
+                  >
+                    <Icon
+                      name={collapsedSectionIds.__uncategorized_text__ ? "arrowRight" : "chevronDown"}
+                      size={14}
+                    />
+                    <span>Canales de texto</span>
+                  </button>
                   {canManageStructure ? (
                     <button
-                      className="ghost-button icon-only"
+                      className="ghost-button icon-only category-action"
                       onClick={() => onOpenDialog("channel", { initialKind: "text" })}
                       type="button"
                     >
@@ -337,17 +377,41 @@ export function WorkspaceNavigation({
                     </button>
                   ) : null}
                 </div>
-                {uncategorizedTextChannels.map((channel) => renderTextChannelRow(channel))}
+                {(() => {
+                  const isCollapsed = Boolean(collapsedSectionIds.__uncategorized_text__);
+                  const activeTextChannel =
+                    uncategorizedTextChannels.find(
+                      (channel) => channel.id === activeSelection.channelId
+                    ) || null;
+                  const visibleChannels = isCollapsed
+                    ? activeTextChannel
+                      ? [activeTextChannel]
+                      : []
+                    : uncategorizedTextChannels;
+
+                  return visibleChannels.map((channel) => renderTextChannelRow(channel));
+                })()}
               </>
             ) : null}
 
             {uncategorizedVoiceChannels.length ? (
               <>
                 <div className="panel-section-label voice">
-                  <span>Canales de voz</span>
+                  <button
+                    aria-expanded={!collapsedSectionIds.__uncategorized_voice__}
+                    className="category-toggle"
+                    onClick={() => toggleSection("__uncategorized_voice__")}
+                    type="button"
+                  >
+                    <Icon
+                      name={collapsedSectionIds.__uncategorized_voice__ ? "arrowRight" : "chevronDown"}
+                      size={14}
+                    />
+                    <span>Canales de voz</span>
+                  </button>
                   {canManageStructure ? (
                     <button
-                      className="ghost-button icon-only"
+                      className="ghost-button icon-only category-action"
                       onClick={() => onOpenDialog("channel", { initialKind: "voice" })}
                       type="button"
                     >
@@ -355,7 +419,20 @@ export function WorkspaceNavigation({
                     </button>
                   ) : null}
                 </div>
-                {uncategorizedVoiceChannels.map((channel) => renderVoiceChannel(channel))}
+                {(() => {
+                  const isCollapsed = Boolean(collapsedSectionIds.__uncategorized_voice__);
+                  const activeVoiceChannel =
+                    uncategorizedVoiceChannels.find(
+                      (channel) => channel.id === activeSelection.channelId
+                    ) || null;
+                  const visibleChannels = isCollapsed
+                    ? activeVoiceChannel
+                      ? [activeVoiceChannel]
+                      : []
+                    : uncategorizedVoiceChannels;
+
+                  return visibleChannels.map((channel) => renderVoiceChannel(channel));
+                })()}
               </>
             ) : null}
           </div>

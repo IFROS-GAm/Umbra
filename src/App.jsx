@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 
 import { AuthScreen } from "./components/AuthScreen.jsx";
+import { InviteJoinScreen } from "./components/InviteJoinScreen.jsx";
 import { UmbraWorkspace } from "./components/UmbraWorkspace.jsx";
 import { hasSupabaseBrowserConfig, supabase } from "./supabase-browser.js";
 
@@ -14,7 +15,26 @@ function getDesktopBridge() {
 
 function getAuthRedirectUrl() {
   const desktop = getDesktopBridge();
-  return desktop?.redirectUri || window.location.origin;
+  return desktop?.redirectUri || window.location.href;
+}
+
+function readInviteCodeFromLocation() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const match = window.location.pathname.match(/^\/invite\/([A-Z0-9_-]+)$/i);
+  return match?.[1]?.trim().toUpperCase() || null;
+}
+
+function pushRoute(path, { replace = false } = {}) {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const method = replace ? "replaceState" : "pushState";
+  window.history[method]({}, "", path);
+  return readInviteCodeFromLocation();
 }
 
 export default function App() {
@@ -23,6 +43,9 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [inviteCode, setInviteCode] = useState(() => readInviteCodeFromLocation());
+  const [inviteBrowserMode, setInviteBrowserMode] = useState(false);
+  const [workspaceInitialSelection, setWorkspaceInitialSelection] = useState(null);
 
   useEffect(() => {
     if (!supabase) {
@@ -50,6 +73,16 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    function handlePopState() {
+      setInviteCode(readInviteCodeFromLocation());
+      setInviteBrowserMode(false);
+    }
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  useEffect(() => {
     const desktop = getDesktopBridge();
     if (!desktop || !supabase) {
       return undefined;
@@ -62,6 +95,17 @@ export default function App() {
 
       try {
         const parsed = new URL(callbackUrl);
+        if (parsed.protocol === "umbra:" && parsed.hostname === "invite") {
+          const nextInviteCode = parsed.pathname.replace(/^\/+/, "").trim().toUpperCase();
+          if (nextInviteCode) {
+            setInviteCode(pushRoute(`/invite/${nextInviteCode}`, { replace: true }));
+            setInviteBrowserMode(false);
+            setMessage("");
+            setError("");
+            return;
+          }
+        }
+
         const authCode = parsed.searchParams.get("code");
         const tokenHash = parsed.searchParams.get("token_hash");
         const authType = parsed.searchParams.get("type");
@@ -259,6 +303,21 @@ export default function App() {
     });
   }
 
+  function handleInviteAccepted(payload) {
+    setWorkspaceInitialSelection({
+      channelId: payload?.channel_id || null,
+      guildId: payload?.guild_id || null,
+      kind: payload?.guild_id ? "guild" : "dm"
+    });
+    setInviteBrowserMode(false);
+    setInviteCode(pushRoute("/", { replace: true }));
+  }
+
+  function handleExitInvite() {
+    setInviteBrowserMode(false);
+    setInviteCode(pushRoute("/", { replace: true }));
+  }
+
   if (!ready) {
     return <div className="boot-screen">Preparando Umbra...</div>;
   }
@@ -268,6 +327,33 @@ export default function App() {
       <div className="boot-screen">
         Configura `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` para usar Umbra.
       </div>
+    );
+  }
+
+  if (inviteCode && !session?.user && inviteBrowserMode) {
+    return (
+      <AuthScreen
+        authMessage={message || "Inicia sesion para unirte al servidor en Umbra."}
+        busy={busy}
+        error={error}
+        onGoogleSignIn={handleGoogleSignIn}
+        onLogin={handleLogin}
+        onOtpSend={handleOtpSend}
+        onOtpVerify={handleOtpVerify}
+        onSignup={handleSignup}
+      />
+    );
+  }
+
+  if (inviteCode) {
+    return (
+      <InviteJoinScreen
+        inviteCode={inviteCode}
+        onAccept={handleInviteAccepted}
+        onBackHome={handleExitInvite}
+        onContinueInBrowser={() => setInviteBrowserMode(true)}
+        session={session}
+      />
     );
   }
 
@@ -286,5 +372,11 @@ export default function App() {
     );
   }
 
-  return <UmbraWorkspace accessToken={accessToken} onSignOut={handleSignOut} />;
+  return (
+    <UmbraWorkspace
+      accessToken={accessToken}
+      initialSelection={workspaceInitialSelection}
+      onSignOut={handleSignOut}
+    />
+  );
 }

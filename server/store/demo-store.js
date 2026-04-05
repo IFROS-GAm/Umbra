@@ -9,10 +9,12 @@ import {
 } from "../constants.js";
 import { createSeedData } from "../seed-data.js";
 import {
+  buildInvitePreview,
   buildBootstrapState,
   computePermissionBits,
   createId,
   enrichMessages,
+  getDefaultGuildChannel,
   isGuildVoiceChannel,
   refreshChannelSummaries,
   resolveMentionUserIds,
@@ -66,6 +68,24 @@ function sanitizeCategoryName(candidate = "") {
 
 function buildInviteCode() {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
+}
+
+function assertInviteUsable(invite) {
+  if (!invite) {
+    throw createError("Invitacion no encontrada.", 404);
+  }
+
+  if (invite.expires_at && new Date(invite.expires_at).getTime() <= Date.now()) {
+    throw createError("Esta invitacion ya expiro.", 410);
+  }
+
+  if (
+    invite.max_uses !== null &&
+    invite.max_uses !== undefined &&
+    Number(invite.uses || 0) >= Number(invite.max_uses)
+  ) {
+    throw createError("Esta invitacion ya no esta disponible.", 410);
+  }
 }
 
 export class DemoStore {
@@ -742,6 +762,87 @@ export class DemoStore {
     this.db.invites.push(invite);
     await this.save();
     return invite;
+  }
+
+  async getInviteByCode({ code, userId = null }) {
+    const normalizedCode = String(code || "").trim().toUpperCase();
+    const invite = this.db.invites.find((item) => item.code === normalizedCode);
+    assertInviteUsable(invite);
+
+    const guild = this.db.guilds.find((item) => item.id === invite.guild_id);
+    if (!guild) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    return buildInvitePreview({
+      channels: this.db.channels,
+      guild,
+      guildMembers: this.db.guild_members,
+      invite,
+      profiles: this.db.profiles,
+      userId
+    });
+  }
+
+  async acceptInvite({ code, userId }) {
+    const normalizedCode = String(code || "").trim().toUpperCase();
+    const invite = this.db.invites.find((item) => item.code === normalizedCode);
+    assertInviteUsable(invite);
+
+    const guild = this.db.guilds.find((item) => item.id === invite.guild_id);
+    if (!guild) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    const defaultChannel = getDefaultGuildChannel(this.db.channels, guild.id);
+    const alreadyJoined = this.db.guild_members.some(
+      (membership) => membership.guild_id === guild.id && membership.user_id === userId
+    );
+
+    if (!alreadyJoined) {
+      const everyoneRole = this.db.roles.find(
+        (role) => role.guild_id === guild.id && role.name === "@everyone"
+      );
+      const joinedAt = new Date().toISOString();
+
+      this.db.guild_members.push({
+        guild_id: guild.id,
+        user_id: userId,
+        role_ids: everyoneRole ? [everyoneRole.id] : [],
+        nickname: "",
+        joined_at: joinedAt
+      });
+
+      this.db.channels
+        .filter(
+          (channel) =>
+            channel.guild_id === guild.id &&
+            channel.type !== CHANNEL_TYPES.CATEGORY
+        )
+        .forEach((channel) => {
+          upsertChannelMembership(this.db, {
+            channel_id: channel.id,
+            user_id: userId,
+            last_read_message_id: null,
+            last_read_at: null,
+            hidden: false,
+            joined_at: joinedAt
+          });
+        });
+
+      invite.uses = Number(invite.uses || 0) + 1;
+      await this.save();
+    }
+
+    return {
+      already_joined: alreadyJoined,
+      channel_id: defaultChannel?.id || null,
+      guild_id: guild.id,
+      invite: await this.getInviteByCode({
+        code: normalizedCode,
+        userId
+      })
+    };
   }
 
   async createOrGetDm({ ownerId, recipientId }) {

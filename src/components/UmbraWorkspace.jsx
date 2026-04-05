@@ -42,7 +42,7 @@ function WorkspacePanelFallback({ compact = false }) {
   );
 }
 
-export function UmbraWorkspace({ accessToken, onSignOut }) {
+export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut }) {
   const {
     activeChannel, activeGuild, activeGuildTextChannels, activeGuildVoiceChannels, activeSelection,
     appError, attachmentInputRef, booting, composer, composerAttachments, composerMenuOpen,
@@ -62,7 +62,7 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
     typingUsers, uiNotice, updateVoiceSetting, uploadingAttachments, voiceDevices, voiceMenu,
     voiceSessions, voiceState, voiceUserIds, voiceInputLevel, voiceInputStatus, workspace,
     cycleVoiceDevice, getSelectedDeviceLabel, selectedVoiceDevices
-  } = useUmbraWorkspaceCore({ accessToken, onSignOut });
+  } = useUmbraWorkspaceCore({ accessToken, initialSelection, onSignOut });
   const [voiceInputPanel, setVoiceInputPanel] = useState(null);
   const [voiceOutputPanel, setVoiceOutputPanel] = useState(null);
   const [serverSettingsOpen, setServerSettingsOpen] = useState(false);
@@ -1124,7 +1124,7 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
         iconUrl
       });
 
-      await loadBootstrap(activeSelectionRef.current);
+      await loadBootstrap(activeSelection);
       setAppError("");
       showUiNotice("Servidor actualizado.");
     } catch (error) {
@@ -1479,7 +1479,9 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
         {inviteModalState.open && activeGuild ? (
           <Suspense fallback={<WorkspacePanelFallback compact />}>
             <InviteServerModal
+              channelName={activeChannel?.name || activeChannel?.display_name || ""}
               error={inviteModalState.error}
+              friends={friendUsers}
               guildName={activeGuild.name}
               invite={inviteModalState.invite}
               loading={inviteModalState.loading}
@@ -1490,6 +1492,7 @@ export function UmbraWorkspace({ accessToken, onSignOut }) {
                 }))
               }
               onRefresh={openInviteModal}
+              onShowNotice={showUiNotice}
             />
           </Suspense>
         ) : null}

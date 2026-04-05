@@ -4,6 +4,14 @@ import { Avatar } from "../Avatar.jsx";
 import { Icon } from "../Icon.jsx";
 import { UmbraLogo } from "../UmbraLogo.jsx";
 
+function truncateDesktopTitle(label) {
+  if (!label) {
+    return "Umbra";
+  }
+
+  return label.length > 30 ? `${label.slice(0, 27)}...` : label;
+}
+
 export function DesktopTopbar({
   activeGuild,
   desktopTitle,
@@ -46,7 +54,7 @@ export function DesktopTopbar({
           <UmbraLogo alt="Umbra" className="desktop-topbar-logo" size={18} />
           <div className="desktop-topbar-copy">
             <small>{activeGuild ? "UMBRA VEIL" : "UMBRA CLOUD"}</small>
-            <strong>{desktopTitle}</strong>
+            <strong title={desktopTitle}>{truncateDesktopTitle(desktopTitle)}</strong>
           </div>
         </div>
         {activeGuild ? (

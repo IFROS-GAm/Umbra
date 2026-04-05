@@ -617,37 +617,28 @@ button {
 }
 
 .navigator-top {
+  align-items: center;
   display: flex;
   gap: 12px;
   justify-content: space-between;
 }
 
-.navigator-crest {
+.navigator-server-header {
   align-items: center;
-  display: inline-flex;
-  gap: 12px;
+  display: flex;
+  flex: 1;
   min-width: 0;
 }
 
-.navigator-crest-ring {
-  background:
-    radial-gradient(circle, rgba(123, 212, 255, 0.78) 0 14%, transparent 18%),
-    radial-gradient(circle, rgba(107, 124, 255, 0.14) 0 52%, transparent 56%);
-  border: 1px solid rgba(123, 212, 255, 0.14);
-  border-radius: 999px;
-  box-shadow: 0 0 28px rgba(107, 124, 255, 0.14);
-  height: 28px;
-  width: 28px;
-}
-
-.navigator-crest-copy {
+.navigator-server-header-copy {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  flex: 1;
+  gap: 2px;
   min-width: 0;
 }
 
-.navigator-crest-copy small,
+.navigator-server-header-copy small,
 .navigator-title-copy small {
   color: rgba(123, 212, 255, 0.72);
   font-size: 0.6rem;
@@ -658,6 +649,7 @@ button {
 .navigator-top-actions {
   align-items: center;
   display: inline-flex;
+  flex-shrink: 0;
   gap: 8px;
 }
 
@@ -667,15 +659,19 @@ button {
   border: 0;
   color: var(--text-0);
   display: inline-flex;
-  font-size: 1.04rem;
+  font-size: 1rem;
   font-weight: 800;
-  gap: 8px;
+  gap: 6px;
   letter-spacing: -0.03em;
+  line-height: 1.1;
+  max-width: 100%;
   min-width: 0;
   padding: 0;
 }
 
 .navigator-server-trigger strong {
+  display: block;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

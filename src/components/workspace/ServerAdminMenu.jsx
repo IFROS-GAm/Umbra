@@ -2,6 +2,14 @@ import React, { useEffect, useRef, useState } from "react";
 
 import { Icon } from "../Icon.jsx";
 
+function truncateServerName(name) {
+  if (!name) {
+    return "Servidor";
+  }
+
+  return name.length > 24 ? `${name.slice(0, 21)}...` : name;
+}
+
 const MENU_ITEMS = [
   { id: "invite", icon: "userAdd", label: "Invitar al servidor" },
   { id: "settings", icon: "settings", label: "Ajustes del servidor" },
@@ -75,7 +83,7 @@ export function ServerAdminMenu({
         }}
         type="button"
       >
-        <strong>{guild.name}</strong>
+        <strong title={guild.name}>{truncateServerName(guild.name)}</strong>
         {canManageGuild ? <Icon name="chevronDown" size={15} /> : null}
       </button>
 

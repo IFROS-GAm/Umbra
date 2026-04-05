@@ -251,6 +251,19 @@ export async function startServer(options = {}) {
     }
   }
 
+  async function resolveOptionalViewer(req) {
+    const token = extractBearerToken(req.get("authorization"));
+    if (!token) {
+      return null;
+    }
+
+    try {
+      return await resolveViewer(store, token, authCache);
+    } catch {
+      return null;
+    }
+  }
+
   function emitPresenceUpdate(user) {
     io.emit("presence:update", { user });
   }
@@ -329,6 +342,39 @@ export async function startServer(options = {}) {
         mode: store.getMode(),
         ...data
       });
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.get("/api/invites/:code", async (req, res) => {
+    try {
+      const auth = await resolveOptionalViewer(req);
+      const invite = await store.getInviteByCode({
+        code: req.params.code,
+        userId: auth?.viewer?.id || null
+      });
+
+      res.json({ invite });
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.post("/api/invites/:code/accept", requireViewer, async (req, res) => {
+    try {
+      const payload = await store.acceptInvite({
+        code: req.params.code,
+        userId: req.viewer.id
+      });
+
+      emitNavigationUpdate({
+        channelId: payload.channel_id,
+        guildId: payload.guild_id,
+        type: "guild:join"
+      });
+
+      res.json(payload);
     } catch (error) {
       sendError(res, error);
     }

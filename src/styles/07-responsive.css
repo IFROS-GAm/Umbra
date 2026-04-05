@@ -1060,4 +1060,14 @@
   .invite-actions {
     flex-direction: column-reverse;
   }
+
+  .invite-link-copy-row,
+  .invite-link-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .invite-copy-button {
+    width: 100%;
+  }
 }
