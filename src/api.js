@@ -249,5 +249,15 @@ export const api = {
         lastReadMessageId
       })
     });
+  },
+  markGuildRead({ guildId }) {
+    return request(`/api/guilds/${guildId}/read`, {
+      method: "POST"
+    });
+  },
+  leaveGuild({ guildId }) {
+    return request(`/api/guilds/${guildId}/members/me`, {
+      method: "DELETE"
+    });
   }
 };

@@ -1146,6 +1146,100 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
     };
   }
 
+  async markGuildRead({ guildId, userId }) {
+    const [guildRows, membershipRows, channels] = await Promise.all([
+      expectData(this.client.from("guilds").select("id").eq("id", guildId).limit(1)),
+      expectData(
+        this.client
+          .from("guild_members")
+          .select("guild_id,user_id")
+          .eq("guild_id", guildId)
+          .eq("user_id", userId)
+          .limit(1)
+      ),
+      expectData(this.client.from("channels").select("*").eq("guild_id", guildId))
+    ]);
+
+    if (!guildRows[0]) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    if (!membershipRows[0]) {
+      throw createError("No perteneces a este servidor.", 403);
+    }
+
+    const rows = channels
+      .filter((channel) => channel.type !== CHANNEL_TYPES.CATEGORY)
+      .map((channel) => ({
+        channel_id: channel.id,
+        user_id: userId,
+        last_read_message_id: channel.last_message_id || null,
+        last_read_at: channel.last_message_at || new Date().toISOString(),
+        hidden: false,
+        joined_at: new Date().toISOString()
+      }));
+
+    if (rows.length) {
+      await expectData(
+        this.client.from("channel_members").upsert(rows, {
+          onConflict: "channel_id,user_id"
+        })
+      );
+    }
+
+    return {
+      guild_id: guildId
+    };
+  }
+
+  async leaveGuild({ guildId, userId }) {
+    const [guildRows, membershipRows, channels] = await Promise.all([
+      expectData(this.client.from("guilds").select("id").eq("id", guildId).limit(1)),
+      expectData(
+        this.client
+          .from("guild_members")
+          .select("guild_id,user_id")
+          .eq("guild_id", guildId)
+          .eq("user_id", userId)
+          .limit(1)
+      ),
+      expectData(this.client.from("channels").select("id").eq("guild_id", guildId))
+    ]);
+
+    if (!guildRows[0]) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    if (!membershipRows[0]) {
+      throw createError("No perteneces a este servidor.", 403);
+    }
+
+    const guildChannelIds = channels.map((channel) => channel.id);
+
+    if (guildChannelIds.length) {
+      await expectData(
+        this.client
+          .from("channel_members")
+          .delete()
+          .eq("user_id", userId)
+          .in("channel_id", guildChannelIds)
+      );
+    }
+
+    await expectData(
+      this.client
+        .from("guild_members")
+        .delete()
+        .eq("guild_id", guildId)
+        .eq("user_id", userId)
+    );
+
+    return {
+      guild_id: guildId,
+      left: true
+    };
+  }
+
   async setPresence({ status, userId }) {
     const rows = await expectData(
       this.client

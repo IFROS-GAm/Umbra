@@ -414,6 +414,23 @@ button {
   padding: 0 6px;
 }
 
+.desktop-topbar-badge.has-image {
+  background: transparent;
+  border-color: rgba(174, 194, 255, 0.16);
+  height: 20px;
+  min-width: 20px;
+  overflow: hidden;
+  padding: 0;
+  width: 20px;
+}
+
+.desktop-topbar-badge.has-image img {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
 .desktop-topbar-button {
   align-items: center;
   background: transparent;
@@ -667,6 +684,34 @@ button {
   max-width: 100%;
   min-width: 0;
   padding: 0;
+}
+
+.navigator-server-glyph {
+  align-items: center;
+  background: linear-gradient(180deg, #1a1d27, #14161d);
+  border: 1px solid rgba(174, 194, 255, 0.12);
+  border-radius: 999px;
+  color: var(--text-0);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 0.68rem;
+  font-weight: 800;
+  height: 18px;
+  justify-content: center;
+  overflow: hidden;
+  width: 18px;
+}
+
+.navigator-server-glyph.has-image {
+  background: transparent;
+  border-color: rgba(174, 194, 255, 0.18);
+}
+
+.navigator-server-glyph img {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
 }
 
 .navigator-server-trigger strong {

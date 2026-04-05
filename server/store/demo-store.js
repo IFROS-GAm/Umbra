@@ -991,6 +991,76 @@ export class DemoStore {
     };
   }
 
+  async markGuildRead({ guildId, userId }) {
+    const guild = this.db.guilds.find((item) => item.id === guildId);
+    if (!guild) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    const isMember = this.db.guild_members.some(
+      (membership) => membership.guild_id === guildId && membership.user_id === userId
+    );
+    if (!isMember) {
+      throw createError("No perteneces a este servidor.", 403);
+    }
+
+    const joinedAt = new Date().toISOString();
+
+    this.db.channels
+      .filter((channel) => channel.guild_id === guildId && channel.type !== CHANNEL_TYPES.CATEGORY)
+      .forEach((channel) => {
+        const targetMessageId = channel.last_message_id || null;
+        const targetMessage = targetMessageId ? this.getMessage(targetMessageId) : null;
+
+        upsertChannelMembership(this.db, {
+          channel_id: channel.id,
+          user_id: userId,
+          last_read_message_id: targetMessageId,
+          last_read_at: targetMessage?.created_at || new Date().toISOString(),
+          hidden: false,
+          joined_at: joinedAt
+        });
+      });
+
+    await this.save();
+
+    return {
+      guild_id: guildId
+    };
+  }
+
+  async leaveGuild({ guildId, userId }) {
+    const guild = this.db.guilds.find((item) => item.id === guildId);
+    if (!guild) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    const membershipIndex = this.db.guild_members.findIndex(
+      (membership) => membership.guild_id === guildId && membership.user_id === userId
+    );
+    if (membershipIndex === -1) {
+      throw createError("No perteneces a este servidor.", 403);
+    }
+
+    this.db.guild_members.splice(membershipIndex, 1);
+    const guildChannelIds = new Set(
+      this.db.channels
+        .filter((channel) => channel.guild_id === guildId)
+        .map((channel) => channel.id)
+    );
+    this.db.channel_members = this.db.channel_members.filter(
+      (membership) =>
+        membership.user_id !== userId || !guildChannelIds.has(membership.channel_id)
+    );
+
+    await this.save();
+
+    return {
+      guild_id: guildId,
+      left: true
+    };
+  }
+
   async setPresence({ status, userId }) {
     const profile = this.db.profiles.find((item) => item.id === userId);
     if (!profile) {

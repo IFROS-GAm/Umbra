@@ -3,6 +3,7 @@ import React from "react";
 import { Avatar } from "../Avatar.jsx";
 import { Icon } from "../Icon.jsx";
 import { UmbraLogo } from "../UmbraLogo.jsx";
+import { resolveGuildIcon } from "./workspaceHelpers.js";
 
 function truncateDesktopTitle(label) {
   if (!label) {
@@ -26,6 +27,8 @@ export function DesktopTopbar({
   onToggleHeaderPanel,
   topbarActionsRef
 }) {
+  const guildIcon = resolveGuildIcon(activeGuild);
+
   return (
     <div className="desktop-topbar">
       <div className="desktop-topbar-nav">
@@ -58,8 +61,12 @@ export function DesktopTopbar({
           </div>
         </div>
         {activeGuild ? (
-          <span className="desktop-topbar-badge">
-            {activeGuild?.icon_text || desktopTitle.slice(0, 1).toUpperCase()}
+          <span className={`desktop-topbar-badge ${guildIcon ? "has-image" : ""}`.trim()}>
+            {guildIcon ? (
+              <img alt={activeGuild.name} draggable="false" src={guildIcon} />
+            ) : (
+              activeGuild?.icon_text || desktopTitle.slice(0, 1).toUpperCase()
+            )}
           </span>
         ) : null}
       </div>

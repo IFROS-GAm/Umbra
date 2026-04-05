@@ -18,6 +18,10 @@ const lazyNamed = (loader, exportName) =>
   lazy(() => loader().then((module) => ({ default: module[exportName] })));
 
 const Dialog = lazyNamed(() => import("./Dialog.jsx"), "Dialog");
+const ConfirmActionModal = lazyNamed(
+  () => import("./ConfirmActionModal.jsx"),
+  "ConfirmActionModal"
+);
 const FriendsHome = lazyNamed(() => import("./FriendsHome.jsx"), "FriendsHome");
 const InviteServerModal = lazyNamed(() => import("./InviteServerModal.jsx"), "InviteServerModal");
 const MessageRequestsHome = lazyNamed(
@@ -65,16 +69,35 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
   } = useUmbraWorkspaceCore({ accessToken, initialSelection, onSignOut });
   const [voiceInputPanel, setVoiceInputPanel] = useState(null);
   const [voiceOutputPanel, setVoiceOutputPanel] = useState(null);
-  const [serverSettingsOpen, setServerSettingsOpen] = useState(false);
+  const [serverSettingsGuildId, setServerSettingsGuildId] = useState(null);
+  const [leaveGuildTarget, setLeaveGuildTarget] = useState(null);
+  const [leavingGuild, setLeavingGuild] = useState(false);
   const [inviteModalState, setInviteModalState] = useState({
     error: "",
+    guildId: null,
     invite: null,
     loading: false,
     open: false
   });
+  const [guildMenuPrefs, setGuildMenuPrefs] = useState(() => {
+    try {
+      const saved = localStorage.getItem("umbra-guild-menu-prefs");
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
 
   const currentUser = workspace?.current_user || null;
   const currentUserId = currentUser?.id || "";
+  const serverSettingsGuild =
+    workspace?.guilds.find((guild) => guild.id === serverSettingsGuildId) || null;
+  const inviteTargetGuild =
+    workspace?.guilds.find((guild) => guild.id === inviteModalState.guildId) || null;
+
+  useEffect(() => {
+    localStorage.setItem("umbra-guild-menu-prefs", JSON.stringify(guildMenuPrefs));
+  }, [guildMenuPrefs]);
 
   function buildProfileCardData(targetUser, displayNameOverride = null) {
     if (!workspace || !targetUser?.id) {
@@ -1029,26 +1052,27 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
     });
   }
 
-  async function handleCopyGuildId() {
-    if (!activeGuild?.id) {
+  async function handleCopyGuildId(guildOverride = activeGuild) {
+    if (!guildOverride?.id) {
       return;
     }
 
     try {
-      await navigator.clipboard.writeText(activeGuild.id);
+      await navigator.clipboard.writeText(guildOverride.id);
       showUiNotice("ID del servidor copiado.");
     } catch {
-      showUiNotice(`ID del servidor: ${activeGuild.id}`);
+      showUiNotice(`ID del servidor: ${guildOverride.id}`);
     }
   }
 
-  async function openInviteModal() {
-    if (!activeGuild?.id) {
+  async function openInviteModal(guildOverride = activeGuild) {
+    if (!guildOverride?.id) {
       return;
     }
 
     setInviteModalState({
       error: "",
+      guildId: guildOverride.id,
       invite: null,
       loading: true,
       open: true
@@ -1056,10 +1080,11 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
 
     try {
       const payload = await api.createGuildInvite({
-        guildId: activeGuild.id
+        guildId: guildOverride.id
       });
       setInviteModalState({
         error: "",
+        guildId: guildOverride.id,
         invite: payload.invite,
         loading: false,
         open: true
@@ -1068,6 +1093,7 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
     } catch (error) {
       setInviteModalState({
         error: error.message,
+        guildId: guildOverride.id,
         invite: null,
         loading: false,
         open: true
@@ -1077,7 +1103,7 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
   }
 
   async function handleSaveGuildProfile(nextGuild) {
-    if (!activeGuild?.id) {
+    if (!serverSettingsGuild?.id) {
       return;
     }
 
@@ -1120,7 +1146,7 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
       await api.updateGuild({
         ...guildPatch,
         bannerImageUrl,
-        guildId: activeGuild.id,
+        guildId: serverSettingsGuild.id,
         iconUrl
       });
 
@@ -1131,6 +1157,128 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
       setAppError(error.message);
       throw error;
     }
+  }
+
+  function handleUpdateGuildMenuPref(guildId, key, value = null) {
+    if (!guildId || !key) {
+      return;
+    }
+
+    setGuildMenuPrefs((previous) => {
+      const current = previous[guildId] || {
+        hideMutedChannels: false,
+        notificationLevel: "mentions",
+        showAllChannels: true
+      };
+
+      return {
+        ...previous,
+        [guildId]: {
+          ...current,
+          [key]: value === null ? !current[key] : value
+        }
+      };
+    });
+  }
+
+  async function handleMarkGuildRead(guild) {
+    if (!guild?.id) {
+      return;
+    }
+
+    try {
+      await api.markGuildRead({
+        guildId: guild.id
+      });
+      await loadBootstrap(
+        activeSelection.guildId === guild.id
+          ? activeSelection
+          : {
+              channelId: activeSelection.channelId,
+              guildId: activeSelection.guildId,
+              kind: activeSelection.kind
+            }
+      );
+      showUiNotice(`Todo al dia en ${guild.name}.`);
+    } catch (error) {
+      setAppError(error.message);
+    }
+  }
+
+  async function handleLeaveGuild(guild) {
+    if (!guild?.id) {
+      return;
+    }
+    setLeaveGuildTarget(guild);
+  }
+
+  async function confirmLeaveGuild() {
+    if (!leaveGuildTarget?.id) {
+      return;
+    }
+
+    setLeavingGuild(true);
+
+    try {
+      await api.leaveGuild({
+        guildId: leaveGuildTarget.id
+      });
+
+      const fallbackGuild =
+        workspace.guilds.find((item) => item.id !== leaveGuildTarget.id) || null;
+      const fallbackChannel =
+        fallbackGuild?.channels.find((channel) => !channel.is_voice && !channel.is_category) ||
+        fallbackGuild?.channels.find((channel) => channel.is_voice) ||
+        fallbackGuild?.channels[0] ||
+        null;
+      const fallbackSelection = fallbackGuild
+        ? {
+            channelId: fallbackChannel?.id || null,
+            guildId: fallbackGuild.id,
+            kind: "guild"
+          }
+        : {
+            channelId: null,
+            guildId: null,
+            kind: "home"
+          };
+
+      setServerSettingsGuildId((previous) => (previous === leaveGuildTarget.id ? null : previous));
+      setInviteModalState((previous) =>
+        previous.guildId === leaveGuildTarget.id
+          ? {
+              error: "",
+              guildId: null,
+              invite: null,
+              loading: false,
+              open: false
+            }
+          : previous
+      );
+      setLeaveGuildTarget(null);
+      await loadBootstrap(fallbackSelection);
+      showUiNotice(`Saliste de ${leaveGuildTarget.name}.`);
+    } catch (error) {
+      setAppError(error.message);
+    } finally {
+      setLeavingGuild(false);
+    }
+  }
+
+  function handleOpenGuildSettings(guildOverride = activeGuild) {
+    if (!guildOverride?.id) {
+      return;
+    }
+
+    setServerSettingsGuildId(guildOverride.id);
+  }
+
+  function handleOpenGuildPrivacy(guildOverride = activeGuild) {
+    if (!guildOverride?.id) {
+      return;
+    }
+
+    showUiNotice(`Ajustes de privacidad de ${guildOverride.name} en camino.`);
   }
 
   function handleSelectDirectLink(id, notice = null, channelId = null) {
@@ -1264,6 +1412,7 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
           activeSelection={activeSelection}
           currentUserLabel={currentUserLabel}
           directUnreadCount={directUnreadCount}
+          guildMenuPrefs={guildMenuPrefs}
           hoveredVoiceChannelId={hoveredVoiceChannelId}
           inputMenuNode={voiceMenu === "input" && !isVoiceChannel ? renderInputMenu() : null}
           outputMenuNode={voiceMenu === "output" && !isVoiceChannel ? renderOutputMenu() : null}
@@ -1272,17 +1421,24 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
           joinedVoiceChannelId={joinedVoiceChannelId}
           onHandleVoiceLeave={handleVoiceLeave}
           onOpenDialog={openDialog}
-          onOpenGuildSettings={() => setServerSettingsOpen(true)}
+          onOpenGuildPrivacy={handleOpenGuildPrivacy}
+          onOpenGuildSettings={handleOpenGuildSettings}
           onOpenInviteModal={openInviteModal}
           onOpenProfileCard={openProfileCard}
           onOpenSettings={() => setSettingsOpen(true)}
           onCopyGuildId={handleCopyGuildId}
+          onLeaveGuild={handleLeaveGuild}
+          onMarkGuildRead={handleMarkGuildRead}
           onSelectDirectLink={handleSelectDirectLink}
           onSelectGuild={handleSelectGuild}
           onSelectGuildChannel={handleSelectGuildChannel}
           onSelectHome={handleSelectHome}
           onSetHoveredVoiceChannelId={setHoveredVoiceChannelId}
           onShowNotice={showUiNotice}
+          onToggleGuildMenuPref={handleUpdateGuildMenuPref}
+          onUpdateGuildNotificationLevel={(guildId, level) =>
+            handleUpdateGuildMenuPref(guildId, "notificationLevel", level)
+          }
           onToggleVoiceMenu={toggleVoiceMenu}
           onToggleVoiceState={toggleVoiceState}
           voiceMenu={voiceMenu}
@@ -1465,24 +1621,24 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
           </Suspense>
         ) : null}
 
-        {serverSettingsOpen && activeGuild ? (
+        {serverSettingsGuild ? (
           <Suspense fallback={<WorkspacePanelFallback compact />}>
             <ServerSettingsModal
-              guild={activeGuild}
-              memberCount={activeGuild.members?.length || 0}
-              onClose={() => setServerSettingsOpen(false)}
+              guild={serverSettingsGuild}
+              memberCount={serverSettingsGuild.members?.length || 0}
+              onClose={() => setServerSettingsGuildId(null)}
               onSave={handleSaveGuildProfile}
             />
           </Suspense>
         ) : null}
 
-        {inviteModalState.open && activeGuild ? (
+        {inviteModalState.open && inviteTargetGuild ? (
           <Suspense fallback={<WorkspacePanelFallback compact />}>
             <InviteServerModal
               channelName={activeChannel?.name || activeChannel?.display_name || ""}
               error={inviteModalState.error}
               friends={friendUsers}
-              guildName={activeGuild.name}
+              guildName={inviteTargetGuild.name}
               invite={inviteModalState.invite}
               loading={inviteModalState.loading}
               onClose={() =>
@@ -1491,8 +1647,26 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
                   open: false
                 }))
               }
-              onRefresh={openInviteModal}
+              onRefresh={() => openInviteModal(inviteTargetGuild)}
               onShowNotice={showUiNotice}
+            />
+          </Suspense>
+        ) : null}
+
+        {leaveGuildTarget ? (
+          <Suspense fallback={<WorkspacePanelFallback compact />}>
+            <ConfirmActionModal
+              cancelLabel="Cancelar"
+              confirmLabel="Abandonar"
+              description={`Perderas acceso a ${leaveGuildTarget.name} hasta que alguien vuelva a invitarte.`}
+              loading={leavingGuild}
+              onClose={() => {
+                if (!leavingGuild) {
+                  setLeaveGuildTarget(null);
+                }
+              }}
+              onConfirm={confirmLeaveGuild}
+              title={`Abandonar ${leaveGuildTarget.name}?`}
             />
           </Suspense>
         ) : null}

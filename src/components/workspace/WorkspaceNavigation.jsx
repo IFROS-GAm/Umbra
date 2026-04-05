@@ -4,6 +4,7 @@ import { Avatar } from "../Avatar.jsx";
 import { Icon } from "../Icon.jsx";
 import { UmbraLogo } from "../UmbraLogo.jsx";
 import { ServerAdminMenu } from "./ServerAdminMenu.jsx";
+import { ServerContextMenu } from "./ServerContextMenu.jsx";
 import {
   HOME_LINKS,
   buildGuildStructureEntries,
@@ -29,9 +30,12 @@ export function WorkspaceNavigation({
   onOpenDialog,
   onOpenProfileCard,
   onOpenSettings,
+  onOpenGuildPrivacy,
   onOpenGuildSettings,
   onOpenInviteModal,
   onCopyGuildId,
+  onLeaveGuild,
+  onMarkGuildRead,
   onSelectDirectLink,
   onSelectGuild,
   onSelectGuildChannel,
@@ -44,9 +48,13 @@ export function WorkspaceNavigation({
   voiceSessions,
   voiceState,
   voiceUsersByChannel,
+  guildMenuPrefs,
+  onToggleGuildMenuPref,
+  onUpdateGuildNotificationLevel,
   workspace
 }) {
   const [collapsedSectionIds, setCollapsedSectionIds] = React.useState({});
+  const [serverContextMenu, setServerContextMenu] = React.useState(null);
   const truncatedCurrentUserLabel =
     currentUserLabel.length > 16 ? `${currentUserLabel.slice(0, 13)}...` : currentUserLabel;
   const canManageStructure = Boolean(activeGuild?.permissions?.can_manage_channels);
@@ -66,6 +74,16 @@ export function WorkspaceNavigation({
       [sectionId]: !previous[sectionId]
     }));
   }
+
+  const serverContextGuild =
+    workspace.guilds.find((guild) => guild.id === serverContextMenu?.guildId) || null;
+  const serverContextPrefs = serverContextGuild
+    ? guildMenuPrefs?.[serverContextGuild.id] || {
+        hideMutedChannels: false,
+        notificationLevel: "mentions",
+        showAllChannels: true
+      }
+    : null;
 
   function renderTextChannelRow(channel, { nested = false } = {}) {
     return (
@@ -199,6 +217,22 @@ export function WorkspaceNavigation({
                   data-tooltip-position="right"
                   key={guild.id}
                   onClick={() => onSelectGuild(guild)}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    setServerContextMenu({
+                      guildId: guild.id,
+                      x: rect.right + 12,
+                      y: rect.top - 6,
+                      anchorRect: {
+                        bottom: rect.bottom,
+                        height: rect.height,
+                        left: rect.left,
+                        right: rect.right,
+                        top: rect.top
+                      }
+                    });
+                  }}
                   type="button"
                 >
                   {guildIcon ? (
@@ -228,6 +262,24 @@ export function WorkspaceNavigation({
           </button>
         </div>
       </aside>
+
+      {serverContextGuild ? (
+        <ServerContextMenu
+          canManageGuild={Boolean(serverContextGuild?.permissions?.can_manage_guild)}
+          guild={serverContextGuild}
+          onClose={() => setServerContextMenu(null)}
+          onCopyId={onCopyGuildId}
+          onInvite={onOpenInviteModal}
+          onLeaveGuild={onLeaveGuild}
+          onMarkRead={onMarkGuildRead}
+          onOpenPrivacy={onOpenGuildPrivacy}
+          onOpenSettings={onOpenGuildSettings}
+          onTogglePref={onToggleGuildMenuPref}
+          onUpdateNotificationLevel={onUpdateGuildNotificationLevel}
+          position={serverContextMenu}
+          prefs={serverContextPrefs}
+        />
+      ) : null}
 
       <aside className="navigator-panel">
         <div className="navigator-top">

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 
 import { Icon } from "../Icon.jsx";
+import { resolveGuildIcon } from "./workspaceHelpers.js";
 
 function truncateServerName(name) {
   if (!name) {
@@ -30,6 +31,7 @@ export function ServerAdminMenu({
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
+  const guildIcon = resolveGuildIcon(guild);
 
   useEffect(() => {
     if (!open) {
@@ -83,6 +85,13 @@ export function ServerAdminMenu({
         }}
         type="button"
       >
+        <span className={`navigator-server-glyph ${guildIcon ? "has-image" : ""}`.trim()}>
+          {guildIcon ? (
+            <img alt={guild.name} draggable="false" src={guildIcon} />
+          ) : (
+            <span>{guild.icon_text || guild.name.slice(0, 1).toUpperCase()}</span>
+          )}
+        </span>
         <strong title={guild.name}>{truncateServerName(guild.name)}</strong>
         {canManageGuild ? <Icon name="chevronDown" size={15} /> : null}
       </button>

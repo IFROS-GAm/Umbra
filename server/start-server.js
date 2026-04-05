@@ -687,6 +687,42 @@ export async function startServer(options = {}) {
     }
   });
 
+  app.post("/api/guilds/:guildId/read", requireViewer, async (req, res) => {
+    try {
+      const payload = await store.markGuildRead({
+        guildId: req.params.guildId,
+        userId: req.viewer.id
+      });
+
+      emitNavigationUpdate({
+        guildId: req.params.guildId,
+        type: "guild:read",
+        userId: req.viewer.id
+      });
+      res.json(payload);
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.delete("/api/guilds/:guildId/members/me", requireViewer, async (req, res) => {
+    try {
+      const payload = await store.leaveGuild({
+        guildId: req.params.guildId,
+        userId: req.viewer.id
+      });
+
+      emitNavigationUpdate({
+        guildId: req.params.guildId,
+        type: "guild:leave",
+        userId: req.viewer.id
+      });
+      res.json(payload);
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
   app.use((error, _req, res, next) => {
     if (error instanceof multer.MulterError) {
       sendError(res, createHttpError("No se pudieron procesar los adjuntos.", 400));
