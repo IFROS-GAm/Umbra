@@ -133,6 +133,40 @@ create table if not exists public.message_reactions (
   primary key (message_id, user_id, emoji)
 );
 
+create table if not exists public.friendships (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  friend_id uuid not null references public.profiles(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  constraint friendships_not_self check (user_id <> friend_id)
+);
+
+create table if not exists public.friend_requests (
+  id uuid primary key default gen_random_uuid(),
+  requester_id uuid not null references public.profiles(id) on delete cascade,
+  recipient_id uuid not null references public.profiles(id) on delete cascade,
+  status text not null default 'pending' check (status in ('pending', 'accepted', 'cancelled')),
+  created_at timestamptz not null default now(),
+  constraint friend_requests_not_self check (requester_id <> recipient_id)
+);
+
+create table if not exists public.user_blocks (
+  id uuid primary key default gen_random_uuid(),
+  blocker_id uuid not null references public.profiles(id) on delete cascade,
+  blocked_id uuid not null references public.profiles(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  constraint user_blocks_not_self check (blocker_id <> blocked_id)
+);
+
+create table if not exists public.profile_reports (
+  id uuid primary key default gen_random_uuid(),
+  reporter_id uuid not null references public.profiles(id) on delete cascade,
+  target_user_id uuid not null references public.profiles(id) on delete cascade,
+  reason text not null default 'spam',
+  created_at timestamptz not null default now(),
+  constraint profile_reports_not_self check (reporter_id <> target_user_id)
+);
+
 create table if not exists public.channel_overwrites (
   id uuid primary key default gen_random_uuid(),
   channel_id uuid not null references public.channels(id) on delete cascade,
@@ -161,6 +195,12 @@ create index if not exists idx_channel_members_user_id on public.channel_members
 create index if not exists idx_messages_channel_id_created_at on public.messages(channel_id, created_at desc);
 create index if not exists idx_messages_guild_id on public.messages(guild_id);
 create index if not exists idx_message_reactions_message_id on public.message_reactions(message_id);
+create unique index if not exists idx_friendships_pair on public.friendships(user_id, friend_id);
+create index if not exists idx_friendships_friend_id on public.friendships(friend_id);
+create unique index if not exists idx_friend_requests_pair on public.friend_requests(requester_id, recipient_id);
+create index if not exists idx_friend_requests_recipient on public.friend_requests(recipient_id, status);
+create unique index if not exists idx_user_blocks_pair on public.user_blocks(blocker_id, blocked_id);
+create index if not exists idx_profile_reports_target on public.profile_reports(target_user_id, created_at desc);
 
 drop trigger if exists trg_profiles_updated_at on public.profiles;
 create trigger trg_profiles_updated_at

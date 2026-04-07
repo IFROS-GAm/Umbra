@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { resolveAssetUrl } from "../api.js";
 import { Avatar } from "./Avatar.jsx";
@@ -7,8 +7,6 @@ import { Icon } from "./Icon.jsx";
 const CARD_WIDTH = 340;
 const CARD_GAP = 14;
 const CARD_MARGIN = 16;
-const CARD_HEIGHT_ESTIMATE = 456;
-
 function statusLabel(status) {
   switch (status) {
     case "online":
@@ -24,7 +22,7 @@ function statusLabel(status) {
   }
 }
 
-function getPosition(anchorRect) {
+function getPosition(anchorRect, cardHeight = 456) {
   if (!anchorRect || typeof window === "undefined") {
     return {
       left: CARD_MARGIN,
@@ -37,7 +35,11 @@ function getPosition(anchorRect) {
     left = Math.max(CARD_MARGIN, anchorRect.left - CARD_WIDTH - CARD_GAP);
   }
 
-  const maxTop = Math.max(CARD_MARGIN, window.innerHeight - CARD_HEIGHT_ESTIMATE - CARD_MARGIN);
+  const bottomSafeSpace = 24;
+  const maxTop = Math.max(
+    CARD_MARGIN,
+    window.innerHeight - cardHeight - bottomSafeSpace
+  );
   const top = Math.min(Math.max(CARD_MARGIN, anchorRect.top), maxTop);
 
   return {
@@ -114,15 +116,61 @@ function currentStatusLabel(status) {
   }
 }
 
+function relationshipAction(profile, handlers) {
+  if (!profile) {
+    return {
+      action: () => {},
+      label: "Anadir amigo"
+    };
+  }
+
+  if (profile.isFriend) {
+    return {
+      action: () => handlers.onShowNotice?.("Ya son sombras."),
+      label: "Amigos"
+    };
+  }
+
+  if (profile.friendRequestState === "received") {
+    return {
+      action: () => handlers.onAcceptFriendRequest?.(profile),
+      label: "Aceptar solicitud"
+    };
+  }
+
+  if (profile.friendRequestState === "sent") {
+    return {
+      action: () => handlers.onCancelFriendRequest?.(profile),
+      label: "Cancelar solicitud"
+    };
+  }
+
+  return {
+    action: () => handlers.onAddFriend?.(profile),
+    label: "Anadir amigo"
+  };
+}
+
 export function UserProfileCard({
   card,
+  onAcceptFriendRequest,
+  onAddFriend,
+  onBlockUser,
+  onCancelFriendRequest,
   onChangeStatus,
   onClose,
   onOpenDm,
-  onOpenSelfProfile
+  onRemoveFriend,
+  onReportUser,
+  onSendDm,
+  onOpenSelfProfile,
+  onShowNotice
 }) {
-  const position = useMemo(() => getPosition(card?.anchorRect), [card?.anchorRect]);
+  const cardRef = useRef(null);
+  const [position, setPosition] = useState(() => getPosition(card?.anchorRect));
   const [copyMessage, setCopyMessage] = useState("");
+  const [messageDraft, setMessageDraft] = useState("");
+  const [messageBusy, setMessageBusy] = useState(false);
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
 
   if (!card) {
@@ -131,11 +179,37 @@ export function UserProfileCard({
 
   const profile = card.profile;
   const bannerStyle = buildBannerStyle(profile);
+  const friendAction = relationshipAction(profile, {
+    onAcceptFriendRequest,
+    onAddFriend,
+    onCancelFriendRequest,
+    onShowNotice
+  });
 
   useEffect(() => {
     setCopyMessage("");
+    setMessageDraft("");
+    setMessageBusy(false);
     setStatusMenuOpen(false);
   }, [card?.profile?.id]);
+
+  useLayoutEffect(() => {
+    if (!card?.anchorRect || !cardRef.current) {
+      return;
+    }
+
+    function updatePosition() {
+      const rect = cardRef.current?.getBoundingClientRect();
+      const next = getPosition(card.anchorRect, rect?.height || 456);
+      setPosition((previous) =>
+        previous.left === next.left && previous.top === next.top ? previous : next
+      );
+    }
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    return () => window.removeEventListener("resize", updatePosition);
+  }, [card?.anchorRect, card?.profile?.id, statusMenuOpen]);
 
   useEffect(() => {
     if (!copyMessage) {
@@ -158,11 +232,28 @@ export function UserProfileCard({
     }
   }
 
+  async function handleDirectMessageSubmit(event) {
+    event.preventDefault();
+
+    if (!onSendDm || !messageDraft.trim() || messageBusy) {
+      return;
+    }
+
+    setMessageBusy(true);
+    try {
+      await onSendDm(profile, messageDraft);
+      setMessageDraft("");
+    } finally {
+      setMessageBusy(false);
+    }
+  }
+
   return (
     <div className="profile-popover-layer" onClick={onClose}>
       <aside
         className="user-profile-card"
         onClick={(event) => event.stopPropagation()}
+        ref={cardRef}
         style={position}
       >
         <div className="user-profile-banner" style={bannerStyle} />
@@ -324,10 +415,62 @@ export function UserProfileCard({
               </div>
             </>
           ) : (
-            <button className="user-profile-message-box" onClick={() => onOpenDm(profile)} type="button">
-              <Icon name="mail" />
-              <span>Enviar un mensaje a @{profile.username}</span>
-            </button>
+            <>
+              <div className="user-profile-action-row">
+                <button
+                  className="primary-button"
+                  onClick={() => onOpenDm(profile)}
+                  type="button"
+                >
+                  <Icon name="mail" />
+                  <span>Mensaje directo</span>
+                </button>
+                <button className="ghost-button" onClick={friendAction.action} type="button">
+                  <Icon name="userAdd" />
+                  <span>{friendAction.label}</span>
+                </button>
+                {profile.isFriend ? (
+                  <button className="ghost-button danger" onClick={() => onRemoveFriend?.(profile)} type="button">
+                    <span>Eliminar</span>
+                  </button>
+                ) : null}
+              </div>
+
+              <form className="user-profile-message-box" onSubmit={handleDirectMessageSubmit}>
+                <input
+                  className="user-profile-message-input"
+                  disabled={messageBusy}
+                  onChange={(event) => setMessageDraft(event.target.value)}
+                  placeholder={`Enviar un mensaje a @${profile.username}`}
+                  type="text"
+                  value={messageDraft}
+                />
+                <button
+                  aria-label="Bloquear usuario"
+                  className="user-profile-message-icon ghost-button icon-only"
+                  onClick={() => onBlockUser?.(profile)}
+                  type="button"
+                >
+                  <Icon name="close" size={16} />
+                </button>
+                <button
+                  aria-label="Denunciar perfil"
+                  className="user-profile-message-icon ghost-button icon-only"
+                  onClick={() => onReportUser?.(profile, "perfil")}
+                  type="button"
+                >
+                  <Icon name="flag" size={16} />
+                </button>
+                <button
+                  aria-label="Enviar mensaje"
+                  className="user-profile-message-icon ghost-button icon-only"
+                  disabled={!messageDraft.trim() || messageBusy}
+                  type="submit"
+                >
+                  <Icon name="emoji" size={16} />
+                </button>
+              </form>
+            </>
           )}
         </div>
       </aside>

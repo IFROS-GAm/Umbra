@@ -1,5 +1,6 @@
 import React from "react";
 
+import { DirectMessageHero } from "./DirectMessagePanels.jsx";
 import { MessageComposer } from "./MessageComposer.jsx";
 import { VirtualMessageFeed } from "./VirtualMessageFeed.jsx";
 
@@ -13,6 +14,7 @@ export function MessageStage(props) {
     composerMenuOpen,
     composerPicker,
     composerRef,
+    directMessageProfile,
     editingMessage,
     handleAttachmentSelection,
     handleComposerChange,
@@ -26,15 +28,21 @@ export function MessageStage(props) {
     loadingMessages,
     messageMenuFor,
     messages,
+    onAcceptFriendRequest,
+    onAddFriend,
+    onBlockUser,
     onCancelEdit,
+    onCancelFriendRequest,
     onCancelReply,
     onEditMessage,
+    onReportUser,
     onSetComposerMenuOpen,
     onSetComposerPicker,
     onSetMessageMenuFor,
     onSetReactionPickerFor,
     onStartReply,
     onToggleReplyMention,
+    onShowNotice,
     openProfileCard,
     reactionPickerFor,
     removeComposerAttachment,
@@ -105,10 +113,36 @@ export function MessageStage(props) {
     }
   }
 
+  function handleQuickMessage(prefill = "") {
+    handleComposerChange(prefill);
+    requestAnimationFrame(() => {
+      composerRef?.current?.focus?.();
+      if (typeof prefill === "string" && prefill.length) {
+        composerRef?.current?.setSelectionRange?.(prefill.length, prefill.length);
+      }
+    });
+  }
+
+  const headerContent =
+    activeSelectionKind === "dm" && directMessageProfile ? (
+      <DirectMessageHero
+        onAcceptFriendRequest={onAcceptFriendRequest}
+        onAddFriend={onAddFriend}
+        onBlockUser={onBlockUser}
+        onCancelFriendRequest={onCancelFriendRequest}
+        onOpenProfileCard={openProfileCard}
+        onQuickMessage={handleQuickMessage}
+        onReportUser={onReportUser}
+        onShowNotice={onShowNotice || showUiNotice}
+        profile={directMessageProfile}
+      />
+    ) : null;
+
   return (
     <>
       <VirtualMessageFeed
         availableUsersById={availableUsersById}
+        headerContent={headerContent}
         handleReaction={handleReaction}
         handleScroll={handleScroll}
         listRef={listRef}

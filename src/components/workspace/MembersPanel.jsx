@@ -1,15 +1,49 @@
 import React from "react";
 
 import { Avatar } from "../Avatar.jsx";
+import { DirectMessageSidebar } from "./DirectMessagePanels.jsx";
 
 export function MembersPanel({
+  activeChannel,
   activeNowUsers,
+  directMessageProfile,
   activeSelectionKind,
   memberGroups,
   memberList,
+  onAcceptFriendRequest,
+  onAddFriend,
+  onBlockUser,
+  onCancelFriendRequest,
+  onCopyProfileId,
+  onOpenDm,
+  onOpenFullProfile,
   onOpenProfileCard,
+  onRemoveFriend,
+  onReportUser,
+  onShowNotice,
   workspace
 }) {
+  if (activeSelectionKind === "dm" && directMessageProfile && activeChannel?.type === "dm") {
+    return (
+      <aside className="members-panel">
+        <DirectMessageSidebar
+          onAcceptFriendRequest={onAcceptFriendRequest}
+          onAddFriend={onAddFriend}
+          onBlockUser={onBlockUser}
+          onCancelFriendRequest={onCancelFriendRequest}
+          onCopyId={onCopyProfileId}
+          onOpenDm={onOpenDm}
+          onOpenFullProfile={onOpenFullProfile}
+          onOpenProfileCard={onOpenProfileCard}
+          onRemoveFriend={onRemoveFriend}
+          onReportUser={onReportUser}
+          onShowNotice={onShowNotice}
+          profile={directMessageProfile}
+        />
+      </aside>
+    );
+  }
+
   return (
     <aside className="members-panel">
       {activeSelectionKind === "home" ? (

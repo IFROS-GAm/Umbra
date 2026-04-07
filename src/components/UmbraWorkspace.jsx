@@ -1,7 +1,9 @@
-import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 
 import { api } from "../api.js";
 import { Icon } from "./Icon.jsx";
+import { UserProfileCard } from "./UserProfileCard.jsx";
+import { UserProfileModal } from "./UserProfileModal.jsx";
 import { ChatHeader } from "./workspace/ChatHeader.jsx";
 import { DesktopTopbar } from "./workspace/DesktopTopbar.jsx";
 import { MembersPanel } from "./workspace/MembersPanel.jsx";
@@ -9,8 +11,10 @@ import { WorkspaceNavigation } from "./workspace/WorkspaceNavigation.jsx";
 import {
   buildMemberGroups,
   buildVoiceStageTone,
+  findDirectDmByUserId,
   fallbackDeviceLabel,
-  isVisibleStatus
+  isVisibleStatus,
+  resolveGuildIcon
 } from "./workspace/workspaceHelpers.js";
 import { useUmbraWorkspaceCore } from "./workspace/useUmbraWorkspaceCore.js";
 
@@ -33,7 +37,6 @@ const ServerSettingsModal = lazyNamed(
   "ServerSettingsModal"
 );
 const SettingsModal = lazyNamed(() => import("./SettingsModal.jsx"), "SettingsModal");
-const UserProfileCard = lazyNamed(() => import("./UserProfileCard.jsx"), "UserProfileCard");
 const MessageStage = lazyNamed(() => import("./workspace/MessageStage.jsx"), "MessageStage");
 const VoiceRoomStage = lazyNamed(() => import("./workspace/VoiceRoomStage.jsx"), "VoiceRoomStage");
 
@@ -49,7 +52,7 @@ function WorkspacePanelFallback({ compact = false }) {
 export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut }) {
   const {
     activeChannel, activeGuild, activeGuildTextChannels, activeGuildVoiceChannels, activeSelection,
-    appError, attachmentInputRef, booting, composer, composerAttachments, composerMenuOpen,
+    appError, attachmentInputRef, booting, cameraStatus, cameraStream, composer, composerAttachments, composerMenuOpen,
     composerPicker, composerRef, currentUserLabel, dialog, directUnreadCount, editingMessage,
     handleAttachmentSelection, handleComposerChange, handleComposerShortcut, handleDeleteMessage,
     handleDialogSubmit, handlePickerInsert, handleProfileUpdate, handleReaction, handleScroll,
@@ -69,6 +72,19 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
   } = useUmbraWorkspaceCore({ accessToken, initialSelection, onSignOut });
   const [voiceInputPanel, setVoiceInputPanel] = useState(null);
   const [voiceOutputPanel, setVoiceOutputPanel] = useState(null);
+  const [fullProfile, setFullProfile] = useState(null);
+  const [isResizingMembersPanel, setIsResizingMembersPanel] = useState(false);
+  const [viewportWidth, setViewportWidth] = useState(() =>
+    typeof window !== "undefined" ? window.visualViewport?.width || window.innerWidth : 1440
+  );
+  const [membersPanelWidth, setMembersPanelWidth] = useState(() => {
+    try {
+      const saved = Number(localStorage.getItem("umbra-members-panel-width"));
+      return Number.isFinite(saved) && saved >= 340 && saved <= 520 ? saved : 356;
+    } catch {
+      return 356;
+    }
+  });
   const [serverSettingsGuildId, setServerSettingsGuildId] = useState(null);
   const [leaveGuildTarget, setLeaveGuildTarget] = useState(null);
   const [leavingGuild, setLeavingGuild] = useState(false);
@@ -87,6 +103,11 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
       return {};
     }
   });
+  const openingDmRequestsRef = useRef(new Map());
+  const desktopShellRef = useRef(null);
+  const appShellRef = useRef(null);
+  const membersResizeRef = useRef(null);
+  const membersResizeCleanupRef = useRef(null);
 
   const currentUser = workspace?.current_user || null;
   const currentUserId = currentUser?.id || "";
@@ -94,10 +115,127 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
     workspace?.guilds.find((guild) => guild.id === serverSettingsGuildId) || null;
   const inviteTargetGuild =
     workspace?.guilds.find((guild) => guild.id === inviteModalState.guildId) || null;
+  const isSingleDirectMessagePanel =
+    membersPanelVisible && activeSelection?.kind === "dm" && activeChannel?.type === "dm";
+  const resolvedMembersPanelWidth = isSingleDirectMessagePanel ? membersPanelWidth : 292;
+  const resolvedMembersPanelMinWidth = isSingleDirectMessagePanel ? 320 : 292;
+  const minimumNavigatorWidth = 272;
+  const minimumChatStageWidth = isSingleDirectMessagePanel ? 540 : 500;
+  const effectiveNavigatorVisible =
+    viewportWidth >= 78 + minimumNavigatorWidth + minimumChatStageWidth;
+  const requiredViewportWidth =
+    78 +
+    (effectiveNavigatorVisible ? minimumNavigatorWidth : 0) +
+    resolvedMembersPanelWidth +
+    (isSingleDirectMessagePanel ? 10 : 0) +
+    minimumChatStageWidth;
+  const effectiveMembersPanelVisible =
+    membersPanelVisible && viewportWidth >= requiredViewportWidth;
 
   useEffect(() => {
     localStorage.setItem("umbra-guild-menu-prefs", JSON.stringify(guildMenuPrefs));
   }, [guildMenuPrefs]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("umbra-members-panel-width", String(membersPanelWidth));
+    } catch {
+      // Ignore local-only persistence issues.
+    }
+  }, [membersPanelWidth]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    function updateViewportWidth() {
+      const measuredWidth =
+        appShellRef.current?.getBoundingClientRect?.().width ||
+        desktopShellRef.current?.getBoundingClientRect?.().width ||
+        window.visualViewport?.width ||
+        window.innerWidth;
+      setViewportWidth((previous) =>
+        Math.abs(previous - measuredWidth) > 1 ? measuredWidth : previous
+      );
+    }
+
+    updateViewportWidth();
+
+    let resizeObserver;
+    if (typeof ResizeObserver !== "undefined") {
+      resizeObserver = new ResizeObserver(() => updateViewportWidth());
+      if (desktopShellRef.current) {
+        resizeObserver.observe(desktopShellRef.current);
+      }
+      if (appShellRef.current) {
+        resizeObserver.observe(appShellRef.current);
+      }
+    }
+
+    window.addEventListener("resize", updateViewportWidth);
+    window.visualViewport?.addEventListener("resize", updateViewportWidth);
+    return () => {
+      window.removeEventListener("resize", updateViewportWidth);
+      window.visualViewport?.removeEventListener("resize", updateViewportWidth);
+      resizeObserver?.disconnect();
+    };
+  }, []);
+
+  const shellGridTemplateColumns = useMemo(() => {
+    const columns = ["78px"];
+
+    if (effectiveNavigatorVisible) {
+      columns.push("272px");
+    }
+
+    columns.push("minmax(0, 1fr)");
+
+    if (effectiveMembersPanelVisible) {
+      if (isSingleDirectMessagePanel) {
+        columns.push("10px");
+      }
+
+      columns.push(`${resolvedMembersPanelWidth}px`);
+    }
+
+    return columns.join(" ");
+  }, [
+    effectiveMembersPanelVisible,
+    effectiveNavigatorVisible,
+    isSingleDirectMessagePanel,
+    resolvedMembersPanelWidth
+  ]);
+
+  useEffect(
+    () => () => {
+      if (membersResizeCleanupRef.current) {
+        membersResizeCleanupRef.current();
+        membersResizeCleanupRef.current = null;
+      }
+    },
+    []
+  );
+
+  function formatMemberSinceLabel(isoDate) {
+    if (!isoDate) {
+      return "";
+    }
+
+    return new Intl.DateTimeFormat("es-CO", {
+      day: "numeric",
+      month: "short",
+      year: "numeric"
+    }).format(new Date(isoDate));
+  }
+
+  function extractProfileLinks(text = "") {
+    return [...String(text).matchAll(/https?:\/\/[^\s]+/gi)].map((match, index) => ({
+      href: match[0],
+      id: `link-${index}`,
+      label: match[0].replace(/^https?:\/\//i, "")
+    }));
+  }
 
   function buildProfileCardData(targetUser, displayNameOverride = null) {
     if (!workspace || !targetUser?.id) {
@@ -113,11 +251,59 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
     const activeParticipant =
       activeChannel?.participants?.find((participant) => participant.id === targetUser.id) || null;
     const sharedGuilds = workspace.guilds.filter((guild) =>
-      guild.members.some((member) => member.id === targetUser.id)
+      (guild.members || []).some((member) => member.id === targetUser.id)
     );
     const sharedDms = workspace.dms.filter((dm) =>
       dm.participants.some((participant) => participant.id === targetUser.id)
     );
+    const sharedGuildEntries = sharedGuilds.map((guild) => {
+      const member = (guild.members || []).find((item) => item.id === targetUser.id) || null;
+
+      return {
+        id: guild.id,
+        iconUrl: resolveGuildIcon(guild),
+        joinedAt: member?.joined_at || null,
+        memberCount: guild.member_count || guild.members?.length || 0,
+        name: guild.name
+      };
+    });
+    const commonFriends = (workspace.friends || [])
+      .filter((friend) => {
+        if (!friend?.id || friend.id === targetUser.id || friend.id === workspace.current_user.id) {
+          return false;
+        }
+
+        return sharedGuilds.some((guild) =>
+          (guild.members || []).some((member) => member.id === friend.id)
+        );
+      })
+      .slice(0, 8);
+    const friendRequestSent =
+      (workspace.friend_requests_sent || []).find(
+        (request) => (request.user?.id || request.recipient_id) === targetUser.id
+      ) || null;
+    const friendRequestReceived =
+      (workspace.friend_requests_received || []).find(
+        (request) => (request.user?.id || request.requester_id) === targetUser.id
+      ) || null;
+    const accountCreatedAt =
+      targetUser.created_at ||
+      fallbackProfile?.created_at ||
+      activeGuildMember?.created_at ||
+      activeParticipant?.created_at ||
+      null;
+    const memberSinceLabel = formatMemberSinceLabel(accountCreatedAt);
+    const bio =
+      targetUser.bio ||
+      activeGuildMember?.bio ||
+      activeParticipant?.bio ||
+      fallbackProfile?.bio ||
+      "";
+    const infoLines = bio
+      .split(/\r?\n+/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const extractedLinks = extractProfileLinks(bio);
 
     return {
       id: targetUser.id,
@@ -137,7 +323,23 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
         activeParticipant?.profile_banner_url ||
         fallbackProfile?.profile_banner_url ||
         "",
-      bio: targetUser.bio || activeGuildMember?.bio || fallbackProfile?.bio || "",
+      bio,
+      connections: [
+        ...sharedGuildEntries.slice(0, 6).map((guild) => ({
+          iconUrl: guild.iconUrl,
+          id: `guild-${guild.id}`,
+          kind: "guild",
+          label: guild.name,
+          meta: guild.joinedAt
+            ? `Miembro desde ${formatMemberSinceLabel(guild.joinedAt)}`
+            : `${guild.memberCount} miembros visibles`
+        })),
+        ...extractedLinks.map((link) => ({
+          ...link,
+          kind: "link",
+          meta: "Enlace compartido en su perfil"
+        }))
+      ],
       customStatus:
         targetUser.custom_status ||
         activeGuildMember?.custom_status ||
@@ -153,7 +355,17 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
         targetUser.username ||
         fallbackProfile?.username ||
         "Umbra user",
+      friendRequestId: friendRequestReceived?.id || friendRequestSent?.id || null,
+      friendRequestState: friendRequestReceived
+        ? "received"
+        : friendRequestSent
+          ? "sent"
+          : null,
+      infoLines,
       isCurrentUser: workspace.current_user.id === targetUser.id,
+      isBlockedByMe: (workspace.blocked_users || []).some((user) => user.id === targetUser.id),
+      isFriend: (workspace.friends || []).some((friend) => friend.id === targetUser.id),
+      memberSinceLabel,
       primaryTag: activeGuildMember ? activeGuild?.name || "Miembro" : sharedGuilds[0]?.name || null,
       profileColor:
         targetUser.profile_color ||
@@ -162,6 +374,8 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
         fallbackProfile?.profile_color ||
         "#5865F2",
       roleColor: targetUser.role_color || activeGuildMember?.role_color || null,
+      commonFriends,
+      sharedGuilds: sharedGuildEntries,
       sharedDmCount: sharedDms.length,
       sharedGuildCount: sharedGuilds.length,
       status:
@@ -170,9 +384,92 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
         activeParticipant?.status ||
         fallbackProfile?.status ||
         "offline",
+      statusLabel:
+        (targetUser.status ||
+          activeGuildMember?.status ||
+          activeParticipant?.status ||
+          fallbackProfile?.status ||
+          "offline") === "online"
+          ? "Online"
+          : (targetUser.status ||
+                activeGuildMember?.status ||
+                activeParticipant?.status ||
+                fallbackProfile?.status ||
+                "offline") === "idle"
+            ? "Ausente"
+            : (targetUser.status ||
+                  activeGuildMember?.status ||
+                  activeParticipant?.status ||
+                  fallbackProfile?.status ||
+                  "offline") === "dnd"
+              ? "No molestar"
+              : (targetUser.status ||
+                    activeGuildMember?.status ||
+                    activeParticipant?.status ||
+                    fallbackProfile?.status ||
+                    "offline") === "invisible"
+                ? "Invisible"
+                : "Offline",
       username:
         targetUser.username || fallbackProfile?.username || targetUser.display_name || "umbra_user"
     };
+  }
+
+  async function handleCopyProfileId(profile) {
+    if (!profile?.id) {
+      showUiNotice("No hay ID visible para copiar.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(String(profile.id));
+      showUiNotice("ID del usuario copiado.");
+    } catch {
+      showUiNotice("No se pudo copiar el ID del usuario.");
+    }
+  }
+
+  function handleStartMembersResize(event) {
+    if (!effectiveMembersPanelVisible || !isSingleDirectMessagePanel) {
+      return;
+    }
+
+    if (membersResizeCleanupRef.current) {
+      membersResizeCleanupRef.current();
+      membersResizeCleanupRef.current = null;
+    }
+
+    const rightEdge = appShellRef.current?.getBoundingClientRect().right || window.innerWidth;
+    membersResizeRef.current = { rightEdge };
+    setIsResizingMembersPanel(true);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    const handleMove = (moveEvent) => {
+      if (!membersResizeRef.current) {
+        return;
+      }
+
+      const edge = membersResizeRef.current.rightEdge || window.innerWidth;
+      const nextWidth = Math.round(edge - moveEvent.clientX);
+      setMembersPanelWidth(Math.max(320, Math.min(460, nextWidth)));
+    };
+    const handleStop = () => {
+      membersResizeRef.current = null;
+      setIsResizingMembersPanel(false);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("mousemove", handleMove, true);
+      window.removeEventListener("mouseup", handleStop, true);
+      window.removeEventListener("blur", handleStop);
+      window.removeEventListener("mouseleave", handleStop);
+      membersResizeCleanupRef.current = null;
+    };
+    membersResizeCleanupRef.current = handleStop;
+    window.addEventListener("mousemove", handleMove, true);
+    window.addEventListener("mouseup", handleStop, true);
+    window.addEventListener("blur", handleStop);
+    window.addEventListener("mouseleave", handleStop);
+    event.preventDefault();
   }
 
   function openProfileCard(event, targetUser, displayNameOverride = null) {
@@ -193,33 +490,230 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
     });
   }
 
-  async function handleOpenDmFromCard(profile) {
-    if (!profile?.id) {
+  function openFullProfile(targetUser, displayNameOverride = null) {
+    const resolved = buildProfileCardData(targetUser, displayNameOverride);
+    if (!resolved) {
       return;
+    }
+
+    setFullProfile(resolved);
+  }
+
+  async function ensureDirectDmChannel(profile, { loadConversation = true } = {}) {
+    if (!profile?.id) {
+      return null;
     }
 
     if (profile.isCurrentUser) {
       setSettingsOpen(true);
       setProfileCard(null);
-      return;
+      return null;
     }
 
-    try {
-      const payload = await api.createDm({
-        recipientId: profile.id
-      });
+    const existingDm = findDirectDmByUserId(workspace?.dms || [], currentUserId, profile.id);
+    if (existingDm) {
+      if (loadConversation) {
+        setProfileCard(null);
+        setActiveSelection({
+          channelId: existingDm.id,
+          guildId: null,
+          kind: "dm"
+        });
+        await loadBootstrap({
+          channelId: existingDm.id,
+          guildId: null,
+          kind: "dm"
+        });
+      }
+      return existingDm;
+    }
 
+    let pendingRequest = openingDmRequestsRef.current.get(profile.id);
+    if (!pendingRequest) {
+      pendingRequest = api
+        .createDm({
+          recipientId: profile.id
+        })
+        .then((payload) => payload.channel)
+        .finally(() => {
+          if (openingDmRequestsRef.current.get(profile.id) === pendingRequest) {
+            openingDmRequestsRef.current.delete(profile.id);
+          }
+        });
+      openingDmRequestsRef.current.set(profile.id, pendingRequest);
+    }
+
+    const channel = await pendingRequest;
+
+    if (loadConversation && channel) {
       setProfileCard(null);
       setActiveSelection({
-        channelId: payload.channel.id,
+        channelId: channel.id,
         guildId: null,
         kind: "dm"
       });
       await loadBootstrap({
-        channelId: payload.channel.id,
+        channelId: channel.id,
         guildId: null,
         kind: "dm"
       });
+    }
+
+    return channel;
+  }
+
+  async function handleOpenDmFromCard(profile) {
+    try {
+      await ensureDirectDmChannel(profile, {
+        loadConversation: true
+      });
+    } catch (error) {
+      setAppError(error.message);
+    }
+  }
+
+  async function handleSendDmFromCard(profile, content) {
+    const trimmed = String(content || "").trim();
+    if (!trimmed) {
+      return;
+    }
+
+    try {
+      const channel = await ensureDirectDmChannel(profile, {
+        loadConversation: false
+      });
+
+      if (!channel?.id) {
+        return;
+      }
+
+      await api.createMessage({
+        attachments: [],
+        channelId: channel.id,
+        content: trimmed,
+        replyMentionUserId: null,
+        replyTo: null
+      });
+
+      setProfileCard(null);
+      setActiveSelection({
+        channelId: channel.id,
+        guildId: null,
+        kind: "dm"
+      });
+      await loadBootstrap({
+        channelId: channel.id,
+        guildId: null,
+        kind: "dm"
+      });
+    } catch (error) {
+      setAppError(error.message);
+    }
+  }
+
+  async function refreshSocialSelection(notice = "") {
+    await loadBootstrap({
+      channelId: activeSelection.channelId,
+      guildId: activeSelection.guildId,
+      kind: activeSelection.kind
+    });
+    if (notice) {
+      showUiNotice(notice);
+    }
+  }
+
+  async function handleSendFriendRequest(profile) {
+    if (!profile?.id || profile.isCurrentUser || profile.isBlockedByMe || profile.isFriend) {
+      return;
+    }
+
+    try {
+      if (profile.friendRequestState === "received" && profile.friendRequestId) {
+        await api.acceptFriendRequest({ requestId: profile.friendRequestId });
+        await refreshSocialSelection("Ahora son sombras.");
+        return;
+      }
+
+      if (profile.friendRequestState === "sent") {
+        return;
+      }
+
+      const payload = await api.sendFriendRequest({ recipientId: profile.id });
+      if (payload?.status === "accepted") {
+        await refreshSocialSelection("Ahora son sombras.");
+        return;
+      }
+
+      await refreshSocialSelection(`Solicitud enviada a ${profile.displayName || profile.username}.`);
+    } catch (error) {
+      setAppError(error.message);
+    }
+  }
+
+  async function handleAcceptFriendRequest(requestOrProfile) {
+    const requestId = requestOrProfile?.id || requestOrProfile?.friendRequestId;
+    if (!requestId) {
+      return;
+    }
+
+    try {
+      await api.acceptFriendRequest({ requestId });
+      await refreshSocialSelection("Ahora son sombras.");
+    } catch (error) {
+      setAppError(error.message);
+    }
+  }
+
+  async function handleCancelFriendRequest(requestOrProfile) {
+    const requestId = requestOrProfile?.id || requestOrProfile?.friendRequestId;
+    if (!requestId) {
+      return;
+    }
+
+    try {
+      await api.cancelFriendRequest({ requestId });
+      await refreshSocialSelection("Solicitud actualizada.");
+    } catch (error) {
+      setAppError(error.message);
+    }
+  }
+
+  async function handleRemoveFriend(profile) {
+    if (!profile?.id) {
+      return;
+    }
+
+    try {
+      await api.removeFriend({ friendId: profile.id });
+      await refreshSocialSelection("Sombra eliminada.");
+    } catch (error) {
+      setAppError(error.message);
+    }
+  }
+
+  async function handleBlockUser(profile) {
+    if (!profile?.id) {
+      return;
+    }
+
+    try {
+      await api.blockUser({ userId: profile.id });
+      setProfileCard(null);
+      setFullProfile(null);
+      await refreshSocialSelection(`${profile.displayName || profile.username} ha sido bloqueado.`);
+    } catch (error) {
+      setAppError(error.message);
+    }
+  }
+
+  async function handleReportUser(profile, reason = "spam") {
+    if (!profile?.id) {
+      return;
+    }
+
+    try {
+      await api.reportUser({ reason, userId: profile.id });
+      showUiNotice("Reporte enviado.");
     } catch (error) {
       setAppError(error.message);
     }
@@ -268,6 +762,9 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
     () => friendUsers.filter((user) => isVisibleStatus(user.status)).slice(0, 3),
     [friendUsers]
   );
+  const blockedUsers = workspace?.blocked_users || [];
+  const pendingFriendRequestsReceived = workspace?.friend_requests_received || [];
+  const pendingFriendRequestsSent = workspace?.friend_requests_sent || [];
   const desktopTitle = activeGuild?.name || activeChannel?.display_name || activeChannel?.name || "Umbra";
   const inboxItems = useMemo(
     () => ({
@@ -376,15 +873,31 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
         : activeGuild?.members || []
       : activeChannel?.participants || [];
   const memberGroups = useMemo(() => buildMemberGroups(memberList), [memberList]);
+  const directMessageProfile = useMemo(() => {
+    if (activeSelection.kind !== "dm" || activeChannel?.type !== "dm" || !workspace?.current_user?.id) {
+      return null;
+    }
+
+    const other =
+      activeChannel.participants?.find((participant) => participant.id !== workspace.current_user.id) ||
+      null;
+
+    if (!other) {
+      return null;
+    }
+
+    return buildProfileCardData(other, other.display_name || other.username || "Umbra user");
+  }, [activeChannel, activeSelection.kind, workspace, activeGuild]);
   const voiceStageParticipants = useMemo(
     () =>
       voiceUsers.map((user) => ({
         ...user,
         isStreaming: user.id === currentUserId && voiceState.screenShareEnabled,
         isCameraOn: user.id === currentUserId && voiceState.cameraEnabled,
+        localCameraStream: user.id === currentUserId ? cameraStream : null,
         stageStyle: buildVoiceStageTone(user.avatar_hue || 220)
       })),
-    [currentUserId, voiceState.cameraEnabled, voiceState.screenShareEnabled, voiceUsers]
+    [cameraStream, currentUserId, voiceState.cameraEnabled, voiceState.screenShareEnabled, voiceUsers]
   );
   const headerSearchPlaceholder = activeGuild
     ? `Buscar ${activeGuild.name}`
@@ -754,9 +1267,15 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
         >
           <span>
             <strong>Vista previa de la camara</strong>
-            <small>{voiceState.cameraEnabled ? "Activa" : "Inactiva"}</small>
+            <small>
+              {cameraStatus.error
+                ? cameraStatus.error
+                : voiceState.cameraEnabled && cameraStatus.ready
+                  ? cameraStatus.label || "Camara activa"
+                  : "Inactiva"}
+            </small>
           </span>
-          <Icon name="emoji" size={16} />
+          <Icon name="camera" size={16} />
         </button>
 
         <button className="voice-control-link" onClick={() => setSettingsOpen(true)} type="button">
@@ -1388,7 +1907,7 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
   }
 
   return (
-    <div className={`desktop-shell theme-${theme}`}>
+    <div className={`desktop-shell theme-${theme}`} ref={desktopShellRef}>
       <DesktopTopbar
         activeGuild={activeGuild}
         currentInboxItems={currentInboxItems}
@@ -1404,49 +1923,68 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
         topbarActionsRef={topbarActionsRef}
       />
 
-      <div className={`app-shell ${membersPanelVisible ? "" : "members-collapsed"}`.trim()}>
-        <WorkspaceNavigation
-          activeGuild={activeGuild}
-          activeGuildTextChannels={activeGuildTextChannels}
-          activeGuildVoiceChannels={activeGuildVoiceChannels}
-          activeSelection={activeSelection}
-          currentUserLabel={currentUserLabel}
-          directUnreadCount={directUnreadCount}
-          guildMenuPrefs={guildMenuPrefs}
-          hoveredVoiceChannelId={hoveredVoiceChannelId}
-          inputMenuNode={voiceMenu === "input" && !isVoiceChannel ? renderInputMenu() : null}
-          outputMenuNode={voiceMenu === "output" && !isVoiceChannel ? renderOutputMenu() : null}
-          isVoiceChannel={isVoiceChannel}
-          joinedVoiceChannel={joinedVoiceChannel}
-          joinedVoiceChannelId={joinedVoiceChannelId}
-          onHandleVoiceLeave={handleVoiceLeave}
-          onOpenDialog={openDialog}
-          onOpenGuildPrivacy={handleOpenGuildPrivacy}
-          onOpenGuildSettings={handleOpenGuildSettings}
-          onOpenInviteModal={openInviteModal}
-          onOpenProfileCard={openProfileCard}
-          onOpenSettings={() => setSettingsOpen(true)}
-          onCopyGuildId={handleCopyGuildId}
-          onLeaveGuild={handleLeaveGuild}
-          onMarkGuildRead={handleMarkGuildRead}
-          onSelectDirectLink={handleSelectDirectLink}
-          onSelectGuild={handleSelectGuild}
-          onSelectGuildChannel={handleSelectGuildChannel}
-          onSelectHome={handleSelectHome}
-          onSetHoveredVoiceChannelId={setHoveredVoiceChannelId}
-          onShowNotice={showUiNotice}
-          onToggleGuildMenuPref={handleUpdateGuildMenuPref}
-          onUpdateGuildNotificationLevel={(guildId, level) =>
-            handleUpdateGuildMenuPref(guildId, "notificationLevel", level)
-          }
-          onToggleVoiceMenu={toggleVoiceMenu}
-          onToggleVoiceState={toggleVoiceState}
-          voiceMenu={voiceMenu}
-          voiceSessions={voiceSessions}
-          voiceState={voiceState}
-          voiceUsersByChannel={voiceUsersByChannel}
-          workspace={workspace}
-        />
+      <div
+        className={[
+          "app-shell",
+          effectiveMembersPanelVisible ? "" : "members-collapsed",
+          effectiveNavigatorVisible ? "" : "navigator-collapsed"
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        ref={appShellRef}
+        style={{
+          gridTemplateColumns: shellGridTemplateColumns,
+          "--navigator-panel-width": effectiveNavigatorVisible ? "272px" : "0px",
+          "--members-panel-min-width": `${resolvedMembersPanelMinWidth}px`,
+          "--members-panel-resizer-width":
+            effectiveMembersPanelVisible && isSingleDirectMessagePanel ? "10px" : "0px",
+          "--members-panel-width": `${resolvedMembersPanelWidth}px`
+        }}
+      >
+        {effectiveNavigatorVisible ? (
+          <WorkspaceNavigation
+            activeGuild={activeGuild}
+            activeGuildTextChannels={activeGuildTextChannels}
+            activeGuildVoiceChannels={activeGuildVoiceChannels}
+            activeSelection={activeSelection}
+            currentUserLabel={currentUserLabel}
+            directUnreadCount={directUnreadCount}
+            guildMenuPrefs={guildMenuPrefs}
+            hoveredVoiceChannelId={hoveredVoiceChannelId}
+            inputMenuNode={voiceMenu === "input" && !isVoiceChannel ? renderInputMenu() : null}
+            outputMenuNode={voiceMenu === "output" && !isVoiceChannel ? renderOutputMenu() : null}
+            isVoiceChannel={isVoiceChannel}
+            joinedVoiceChannel={joinedVoiceChannel}
+            joinedVoiceChannelId={joinedVoiceChannelId}
+            onHandleVoiceLeave={handleVoiceLeave}
+            onOpenDialog={openDialog}
+            onOpenGuildPrivacy={handleOpenGuildPrivacy}
+            onOpenGuildSettings={handleOpenGuildSettings}
+            onOpenInviteModal={openInviteModal}
+            onOpenProfileCard={openProfileCard}
+            onOpenSettings={() => setSettingsOpen(true)}
+            onCopyGuildId={handleCopyGuildId}
+            onLeaveGuild={handleLeaveGuild}
+            onMarkGuildRead={handleMarkGuildRead}
+            onSelectDirectLink={handleSelectDirectLink}
+            onSelectGuild={handleSelectGuild}
+            onSelectGuildChannel={handleSelectGuildChannel}
+            onSelectHome={handleSelectHome}
+            onSetHoveredVoiceChannelId={setHoveredVoiceChannelId}
+            onShowNotice={showUiNotice}
+            onToggleGuildMenuPref={handleUpdateGuildMenuPref}
+            onUpdateGuildNotificationLevel={(guildId, level) =>
+              handleUpdateGuildMenuPref(guildId, "notificationLevel", level)
+            }
+            onToggleVoiceMenu={toggleVoiceMenu}
+            onToggleVoiceState={toggleVoiceState}
+            voiceMenu={voiceMenu}
+            voiceSessions={voiceSessions}
+            voiceState={voiceState}
+            voiceUsersByChannel={voiceUsersByChannel}
+            workspace={workspace}
+          />
+        ) : null}
 
         <main className="chat-stage">
           {activeSelection.kind === "home" ? (
@@ -1454,10 +1992,17 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
               {appError ? <div className="error-banner">{appError}</div> : null}
               <Suspense fallback={<WorkspacePanelFallback />}>
                 <FriendsHome
+                  availableUsers={workspace.available_users}
+                  blockedUsers={blockedUsers}
+                  friends={friendUsers}
+                  onAcceptFriendRequest={handleAcceptFriendRequest}
+                  onCancelFriendRequest={handleCancelFriendRequest}
                   onOpenDm={handleOpenDmFromCard}
                   onOpenProfileCard={openProfileCard}
-                  onShowNotice={showUiNotice}
-                  users={friendUsers}
+                  onRemoveFriend={handleRemoveFriend}
+                  onSendFriendRequest={handleSendFriendRequest}
+                  pendingReceived={pendingFriendRequestsReceived}
+                  pendingSent={pendingFriendRequestsSent}
                 />
               </Suspense>
             </>
@@ -1476,12 +2021,15 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
           ) : (
             <>
               <ChatHeader
+                directMessageProfile={directMessageProfile}
                 headerActionsRef={headerActionsRef}
                 headerPanel={headerPanel}
                 headerPanelNode={renderChatHeaderPanel()}
                 headerSearchPlaceholder={headerSearchPlaceholder}
-                membersPanelVisible={membersPanelVisible}
+                membersPanelVisible={effectiveMembersPanelVisible}
+                onAddFriend={handleSendFriendRequest}
                 onOpenDialog={openDialog}
+                onShowNotice={showUiNotice}
                 onToggleHeaderPanel={toggleHeaderPanel}
                 onToggleMembersPanel={() => setMembersPanelVisible((previous) => !previous)}
                 subtitle={activeGuild?.name || headerCopy.eyebrow}
@@ -1494,6 +2042,7 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
                 <Suspense fallback={<WorkspacePanelFallback />}>
                   <VoiceRoomStage
                     activeChannel={activeChannel}
+                    cameraStatus={cameraStatus}
                     cameraMenuNode={voiceMenu === "camera" ? renderCameraMenu() : null}
                     inputMenuNode={voiceMenu === "input" ? renderInputMenu() : null}
                     joinedVoiceChannelId={joinedVoiceChannelId}
@@ -1521,6 +2070,7 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
                     composerMenuOpen={composerMenuOpen}
                     composerPicker={composerPicker}
                     composerRef={composerRef}
+                    directMessageProfile={directMessageProfile}
                     editingMessage={editingMessage}
                     handleAttachmentSelection={handleAttachmentSelection}
                     handleComposerChange={handleComposerChange}
@@ -1534,11 +2084,15 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
                     loadingMessages={loadingMessages}
                     messageMenuFor={messageMenuFor}
                     messages={messages}
+                    onAcceptFriendRequest={handleAcceptFriendRequest}
+                    onAddFriend={handleSendFriendRequest}
+                    onBlockUser={handleBlockUser}
                     onCancelEdit={() => {
                       setEditingMessage(null);
                       setComposerAttachments([]);
                       setComposer("");
                     }}
+                    onCancelFriendRequest={handleCancelFriendRequest}
                     onCancelReply={() => {
                       setReplyTarget(null);
                       setReplyMentionEnabled(true);
@@ -1548,6 +2102,8 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
                     onSetComposerPicker={setComposerPicker}
                     onSetMessageMenuFor={setMessageMenuFor}
                     onSetReactionPickerFor={setReactionPickerFor}
+                    onReportUser={handleReportUser}
+                    onShowNotice={showUiNotice}
                     onStartReply={handleStartReply}
                     onToggleReplyMention={() => setReplyMentionEnabled((previous) => !previous)}
                     openProfileCard={openProfileCard}
@@ -1568,15 +2124,37 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
           )}
         </main>
 
-        {membersPanelVisible ? (
-          <MembersPanel
-            activeNowUsers={activeNowUsers}
-            activeSelectionKind={activeSelection.kind}
-            memberGroups={memberGroups}
-            memberList={memberList}
-            onOpenProfileCard={openProfileCard}
-            workspace={workspace}
-          />
+        {effectiveMembersPanelVisible ? (
+          <>
+            {isSingleDirectMessagePanel ? (
+              <button
+                aria-label="Ajustar ancho del panel"
+                className={`members-panel-divider ${isResizingMembersPanel ? "is-dragging" : ""}`.trim()}
+                onMouseDown={handleStartMembersResize}
+                type="button"
+              />
+            ) : null}
+            <MembersPanel
+              activeChannel={activeChannel}
+              activeNowUsers={activeNowUsers}
+              activeSelectionKind={activeSelection.kind}
+              directMessageProfile={directMessageProfile}
+              memberGroups={memberGroups}
+              memberList={memberList}
+              onAcceptFriendRequest={handleAcceptFriendRequest}
+              onAddFriend={handleSendFriendRequest}
+              onBlockUser={handleBlockUser}
+              onCancelFriendRequest={handleCancelFriendRequest}
+              onCopyProfileId={handleCopyProfileId}
+              onOpenDm={handleOpenDmFromCard}
+              onOpenFullProfile={openFullProfile}
+              onOpenProfileCard={openProfileCard}
+              onRemoveFriend={handleRemoveFriend}
+              onReportUser={handleReportUser}
+              onShowNotice={showUiNotice}
+              workspace={workspace}
+            />
+          </>
         ) : null}
 
         {settingsOpen ? (
@@ -1595,18 +2173,42 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
         ) : null}
 
         {profileCard ? (
-          <Suspense fallback={<WorkspacePanelFallback compact />}>
-            <UserProfileCard
-              card={profileCard}
-              onChangeStatus={handleStatusChange}
-              onClose={() => setProfileCard(null)}
-              onOpenDm={handleOpenDmFromCard}
-              onOpenSelfProfile={() => {
-                setProfileCard(null);
-                setSettingsOpen(true);
-              }}
-            />
-          </Suspense>
+          <UserProfileCard
+            card={profileCard}
+            onAcceptFriendRequest={handleAcceptFriendRequest}
+            onAddFriend={handleSendFriendRequest}
+            onBlockUser={handleBlockUser}
+            onCancelFriendRequest={handleCancelFriendRequest}
+            onChangeStatus={handleStatusChange}
+            onClose={() => setProfileCard(null)}
+            onOpenDm={handleOpenDmFromCard}
+            onRemoveFriend={handleRemoveFriend}
+            onReportUser={handleReportUser}
+            onSendDm={handleSendDmFromCard}
+            onOpenSelfProfile={() => {
+              setProfileCard(null);
+              setSettingsOpen(true);
+            }}
+            onShowNotice={showUiNotice}
+          />
+        ) : null}
+
+        {fullProfile ? (
+          <UserProfileModal
+            onAcceptFriendRequest={handleAcceptFriendRequest}
+            onClose={() => setFullProfile(null)}
+            onAddFriend={handleSendFriendRequest}
+            onBlockUser={handleBlockUser}
+            onCancelFriendRequest={handleCancelFriendRequest}
+            onOpenDm={async (profile) => {
+              await handleOpenDmFromCard(profile);
+              setFullProfile(null);
+            }}
+            onRemoveFriend={handleRemoveFriend}
+            onReportUser={handleReportUser}
+            onShowNotice={showUiNotice}
+            profile={fullProfile}
+          />
         ) : null}
 
         {dialog ? (

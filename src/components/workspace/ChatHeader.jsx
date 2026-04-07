@@ -1,14 +1,18 @@
 import React from "react";
 
+import { Avatar } from "../Avatar.jsx";
 import { Icon } from "../Icon.jsx";
 
 export function ChatHeader({
+  directMessageProfile,
   headerActionsRef,
   headerPanel,
   headerPanelNode,
   headerSearchPlaceholder,
   membersPanelVisible,
+  onAddFriend,
   onOpenDialog,
+  onShowNotice,
   onToggleHeaderPanel,
   onToggleMembersPanel,
   subtitle,
@@ -17,11 +21,22 @@ export function ChatHeader({
   return (
     <header className="chat-header">
       <div className="chat-title-block">
-        <div className="chat-title-eyebrow">
-          <span className="chat-title-sigil" />
-          <small>{subtitle || "UMBRA CHANNEL"}</small>
-        </div>
+        {!directMessageProfile ? (
+          <div className="chat-title-eyebrow">
+            <span className="chat-title-sigil" />
+            <small>{subtitle || "UMBRA CHANNEL"}</small>
+          </div>
+        ) : null}
         <div className="chat-title-line">
+          {directMessageProfile ? (
+            <Avatar
+              hue={directMessageProfile.avatarHue}
+              label={directMessageProfile.displayName || directMessageProfile.username}
+              size={28}
+              src={directMessageProfile.avatarUrl}
+              status={directMessageProfile.status}
+            />
+          ) : null}
           <h1>{title}</h1>
         </div>
       </div>
@@ -29,64 +44,131 @@ export function ChatHeader({
       <div className="chat-header-tools">
         <div className="chat-header-actions-shell">
           <div className="chat-header-tool-cluster" ref={headerActionsRef}>
-            <button
-              aria-label="Hilos"
-              className={`ghost-button icon-only tooltip-anchor ${headerPanel === "threads" ? "active" : ""}`}
-              data-tooltip="Hilos"
-              data-tooltip-position="bottom"
-              onClick={() => onToggleHeaderPanel("threads")}
-              type="button"
-            >
-              <Icon name="threads" />
-            </button>
-            <button
-              aria-label="Notificaciones"
-              className={`ghost-button icon-only tooltip-anchor ${headerPanel === "notifications" ? "active" : ""}`}
-              data-tooltip="Notificaciones"
-              data-tooltip-position="bottom"
-              onClick={() => onToggleHeaderPanel("notifications")}
-              type="button"
-            >
-              <Icon name="bell" />
-            </button>
-            <button
-              aria-label="Fijados"
-              className={`ghost-button icon-only tooltip-anchor ${headerPanel === "pins" ? "active" : ""}`}
-              data-tooltip="Fijados"
-              data-tooltip-position="bottom"
-              onClick={() => onToggleHeaderPanel("pins")}
-              type="button"
-            >
-              <Icon name="pin" />
-            </button>
-            <button
-              aria-label="Invitar"
-              className="ghost-button icon-only tooltip-anchor"
-              data-tooltip="Invitar personas"
-              data-tooltip-position="bottom"
-              onClick={() => onOpenDialog("dm")}
-              type="button"
-            >
-              <Icon name="userAdd" />
-            </button>
-            <button
-              aria-label={
-                membersPanelVisible
-                  ? "Ocultar la lista de miembros"
-                  : "Mostrar la lista de miembros"
-              }
-              className={`ghost-button icon-only tooltip-anchor ${membersPanelVisible ? "active" : ""}`}
-              data-tooltip={
-                membersPanelVisible
-                  ? "Ocultar la lista de miembros"
-                  : "Mostrar la lista de miembros"
-              }
-              data-tooltip-position="bottom"
-              onClick={onToggleMembersPanel}
-              type="button"
-            >
-              <Icon name="community" />
-            </button>
+            {directMessageProfile ? (
+              <>
+                <button
+                  aria-label="Llamada"
+                  className="ghost-button icon-only tooltip-anchor"
+                  data-tooltip="Llamar"
+                  data-tooltip-position="bottom"
+                  onClick={() => onShowNotice?.("Las llamadas directas llegan en una siguiente pasada.")}
+                  type="button"
+                >
+                  <Icon name="phone" />
+                </button>
+                <button
+                  aria-label="Videollamada"
+                  className="ghost-button icon-only tooltip-anchor"
+                  data-tooltip="Videollamada"
+                  data-tooltip-position="bottom"
+                  onClick={() =>
+                    onShowNotice?.("Las videollamadas directas llegan en una siguiente pasada.")
+                  }
+                  type="button"
+                >
+                  <Icon name="camera" />
+                </button>
+                <button
+                  aria-label="Fijados"
+                  className={`ghost-button icon-only tooltip-anchor ${headerPanel === "pins" ? "active" : ""}`}
+                  data-tooltip="Mensajes fijados"
+                  data-tooltip-position="bottom"
+                  onClick={() => onToggleHeaderPanel("pins")}
+                  type="button"
+                >
+                  <Icon name="pin" />
+                </button>
+                <button
+                  aria-label="Anadir amigo"
+                  className="ghost-button icon-only tooltip-anchor"
+                  data-tooltip="Anadir amigo"
+                  data-tooltip-position="bottom"
+                  onClick={() => onAddFriend?.(directMessageProfile)}
+                  type="button"
+                >
+                  <Icon name="userAdd" />
+                </button>
+                <button
+                  aria-label={
+                    membersPanelVisible
+                      ? "Ocultar perfil"
+                      : "Mostrar perfil"
+                  }
+                  className={`ghost-button icon-only tooltip-anchor ${membersPanelVisible ? "active" : ""}`}
+                  data-tooltip={
+                    membersPanelVisible
+                      ? "Ocultar perfil"
+                      : "Mostrar perfil"
+                  }
+                  data-tooltip-position="bottom"
+                  onClick={onToggleMembersPanel}
+                  type="button"
+                >
+                  <Icon name="profile" />
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  aria-label="Hilos"
+                  className={`ghost-button icon-only tooltip-anchor ${headerPanel === "threads" ? "active" : ""}`}
+                  data-tooltip="Hilos"
+                  data-tooltip-position="bottom"
+                  onClick={() => onToggleHeaderPanel("threads")}
+                  type="button"
+                >
+                  <Icon name="threads" />
+                </button>
+                <button
+                  aria-label="Notificaciones"
+                  className={`ghost-button icon-only tooltip-anchor ${headerPanel === "notifications" ? "active" : ""}`}
+                  data-tooltip="Notificaciones"
+                  data-tooltip-position="bottom"
+                  onClick={() => onToggleHeaderPanel("notifications")}
+                  type="button"
+                >
+                  <Icon name="bell" />
+                </button>
+                <button
+                  aria-label="Fijados"
+                  className={`ghost-button icon-only tooltip-anchor ${headerPanel === "pins" ? "active" : ""}`}
+                  data-tooltip="Fijados"
+                  data-tooltip-position="bottom"
+                  onClick={() => onToggleHeaderPanel("pins")}
+                  type="button"
+                >
+                  <Icon name="pin" />
+                </button>
+                <button
+                  aria-label="Invitar"
+                  className="ghost-button icon-only tooltip-anchor"
+                  data-tooltip="Invitar personas"
+                  data-tooltip-position="bottom"
+                  onClick={() => onOpenDialog("dm")}
+                  type="button"
+                >
+                  <Icon name="userAdd" />
+                </button>
+                <button
+                  aria-label={
+                    membersPanelVisible
+                      ? "Ocultar la lista de miembros"
+                      : "Mostrar la lista de miembros"
+                  }
+                  className={`ghost-button icon-only tooltip-anchor ${membersPanelVisible ? "active" : ""}`}
+                  data-tooltip={
+                    membersPanelVisible
+                      ? "Ocultar la lista de miembros"
+                      : "Mostrar la lista de miembros"
+                  }
+                  data-tooltip-position="bottom"
+                  onClick={onToggleMembersPanel}
+                  type="button"
+                >
+                  <Icon name="community" />
+                </button>
+              </>
+            )}
           </div>
 
           <label className="chat-search">

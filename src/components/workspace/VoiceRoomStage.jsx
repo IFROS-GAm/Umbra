@@ -1,10 +1,40 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 
 import { Avatar } from "../Avatar.jsx";
 import { Icon } from "../Icon.jsx";
 
+function VoiceStageVideo({ stream, user }) {
+  const videoRef = useRef(null);
+
+  useEffect(() => {
+    if (!videoRef.current) {
+      return undefined;
+    }
+
+    videoRef.current.srcObject = stream || null;
+
+    return () => {
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+    };
+  }, [stream]);
+
+  return (
+    <video
+      autoPlay
+      className="voice-stage-video"
+      muted
+      playsInline
+      ref={videoRef}
+      title={user.display_name || user.username}
+    />
+  );
+}
+
 export function VoiceRoomStage({
   activeChannel,
+  cameraStatus,
   cameraMenuNode,
   inputMenuNode,
   joinedVoiceChannelId,
@@ -69,13 +99,19 @@ export function VoiceRoomStage({
               </div>
 
               <div className="voice-stage-center">
-                <Avatar
-                  hue={user.avatar_hue}
-                  label={user.display_name || user.username}
-                  size={84}
-                  src={user.avatar_url}
-                  status={user.status}
-                />
+                {user.isCameraOn && user.localCameraStream ? (
+                  <div className="voice-stage-video-shell">
+                    <VoiceStageVideo stream={user.localCameraStream} user={user} />
+                  </div>
+                ) : (
+                  <Avatar
+                    hue={user.avatar_hue}
+                    label={user.display_name || user.username}
+                    size={84}
+                    src={user.avatar_url}
+                    status={user.status}
+                  />
+                )}
               </div>
 
               <div className="voice-stage-nameplate">
@@ -121,7 +157,13 @@ export function VoiceRoomStage({
           {cameraMenuNode}
           <button
             className={`voice-stage-control tooltip-anchor ${voiceState.cameraEnabled ? "active" : ""}`}
-            data-tooltip={voiceState.cameraEnabled ? "Apagar camara" : "Encender la camara"}
+            data-tooltip={
+              voiceState.cameraEnabled
+                ? "Apagar camara"
+                : cameraStatus?.error
+                  ? "Reintentar camara"
+                  : "Encender la camara"
+            }
             data-tooltip-position="top"
             onClick={() => onToggleVoiceState("cameraEnabled")}
             type="button"

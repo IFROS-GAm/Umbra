@@ -13,6 +13,15 @@ export const STATUS_OPTIONS = [
   { value: "offline", label: "Offline" }
 ];
 
+export function sanitizeUsername(value = "") {
+  return String(value)
+    .normalize("NFKD")
+    .replace(/[^\w.-]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^\.+|\.+$/g, "")
+    .slice(0, 24);
+}
+
 export function avatarStyle(hue = 240) {
   return {
     background: `linear-gradient(135deg, hsl(${hue} 78% 55%), hsl(${(hue + 48) % 360} 78% 38%))`

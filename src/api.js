@@ -212,6 +212,42 @@ export const api = {
       })
     });
   },
+  sendFriendRequest({ recipientId }) {
+    return request("/api/friends/requests", {
+      method: "POST",
+      body: JSON.stringify({
+        recipientId
+      })
+    });
+  },
+  acceptFriendRequest({ requestId }) {
+    return request(`/api/friends/requests/${requestId}/accept`, {
+      method: "POST"
+    });
+  },
+  cancelFriendRequest({ requestId }) {
+    return request(`/api/friends/requests/${requestId}`, {
+      method: "DELETE"
+    });
+  },
+  removeFriend({ friendId }) {
+    return request(`/api/friends/${friendId}`, {
+      method: "DELETE"
+    });
+  },
+  blockUser({ userId }) {
+    return request(`/api/users/${userId}/block`, {
+      method: "POST"
+    });
+  },
+  reportUser({ reason = "spam", userId }) {
+    return request(`/api/users/${userId}/report`, {
+      method: "POST",
+      body: JSON.stringify({
+        reason
+      })
+    });
+  },
   updateStatus({ status }) {
     return request("/api/users/me/status", {
       method: "PATCH",

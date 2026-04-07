@@ -349,6 +349,23 @@ export class SupabaseStore {
 
     const guildIds = [...new Set(guildMemberships.map((item) => item.guild_id))];
     const dmChannelIds = [...new Set(dmMemberships.map((item) => item.channel_id))];
+    const [friendships, friendRequests, blockedEntries] = await Promise.all([
+      expectData(
+        this.client
+          .from("friendships")
+          .select("*")
+          .or(`user_id.eq.${userId},friend_id.eq.${userId}`)
+      ).catch(() => []),
+      expectData(
+        this.client
+          .from("friend_requests")
+          .select("*")
+          .or(`requester_id.eq.${userId},recipient_id.eq.${userId}`)
+      ).catch(() => []),
+      expectData(
+        this.client.from("user_blocks").select("*").eq("blocker_id", userId)
+      ).catch(() => [])
+    ]);
 
     const [guilds, roles, guildMembers, guildChannels, dmChannels] = await Promise.all([
       guildIds.length
@@ -390,7 +407,10 @@ export class SupabaseStore {
           ...channelMembers.map((member) => member.user_id),
           ...guilds.map((guild) => guild.owner_id),
           ...channels.map((channel) => channel.created_by),
-          ...channels.map((channel) => channel.last_message_author_id)
+          ...channels.map((channel) => channel.last_message_author_id),
+          ...friendships.flatMap((friendship) => [friendship.user_id, friendship.friend_id]),
+          ...friendRequests.flatMap((request) => [request.requester_id, request.recipient_id]),
+          ...blockedEntries.map((entry) => entry.blocked_id)
         ].filter(Boolean)
       )
     ];
@@ -405,6 +425,9 @@ export class SupabaseStore {
       guild_members: guildMembers,
       channels,
       channel_members: channelMembers,
+      friendships,
+      friend_requests: friendRequests,
+      user_blocks: blockedEntries,
       messages: [],
       message_reactions: []
     };

@@ -489,13 +489,40 @@ export function buildBootstrapState(db, userId) {
     .map((friendId) => db.profiles.find((profile) => profile.id === friendId))
     .filter(Boolean)
     .sort((a, b) => a.username.localeCompare(b.username, "es"));
+  const pendingFriendRequests = (db.friend_requests || []).filter(
+    (request) => String(request.status || "pending") === "pending"
+  );
+  const friendRequestsSent = pendingFriendRequests
+    .filter((request) => request.requester_id === viewerId)
+    .map((request) => ({
+      ...request,
+      user:
+        db.profiles.find((profile) => profile.id === request.recipient_id) || null
+    }))
+    .filter((request) => request.user);
+  const friendRequestsReceived = pendingFriendRequests
+    .filter((request) => request.recipient_id === viewerId)
+    .map((request) => ({
+      ...request,
+      user:
+        db.profiles.find((profile) => profile.id === request.requester_id) || null
+    }))
+    .filter((request) => request.user);
+  const blockedUsers = (db.user_blocks || [])
+    .filter((entry) => entry.blocker_id === viewerId)
+    .map((entry) => db.profiles.find((profile) => profile.id === entry.blocked_id))
+    .filter(Boolean)
+    .sort((a, b) => a.username.localeCompare(b.username, "es"));
 
   return {
     current_user: currentUser,
     available_users: [...db.profiles].sort((a, b) =>
       a.username.localeCompare(b.username, "es")
     ),
+    blocked_users: blockedUsers,
     friends,
+    friend_requests_received: friendRequestsReceived,
+    friend_requests_sent: friendRequestsSent,
     guilds,
     dms,
     defaults: {

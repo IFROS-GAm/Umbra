@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import { resolveAssetUrl } from "../api.js";
-import { STATUS_OPTIONS } from "../utils.js";
+import { STATUS_OPTIONS, sanitizeUsername } from "../utils.js";
 import { Avatar } from "./Avatar.jsx";
+import { AvatarCropModal } from "./AvatarCropModal.jsx";
 import { Icon } from "./Icon.jsx";
 
 const PROFILE_COLOR_PRESETS = [
@@ -113,6 +114,11 @@ export function SettingsModal({
   const [bannerFile, setBannerFile] = useState(null);
   const [bannerPreview, setBannerPreview] = useState("");
   const [clearBanner, setClearBanner] = useState(false);
+  const [avatarCropState, setAvatarCropState] = useState({
+    file: null,
+    imageUrl: "",
+    open: false
+  });
 
   const [form, setForm] = useState({
     avatarHue: user.avatar_hue || 220,
@@ -136,11 +142,22 @@ export function SettingsModal({
     setBannerFile(null);
     setBannerPreview("");
     setClearBanner(false);
+    setAvatarCropState({
+      file: null,
+      imageUrl: "",
+      open: false
+    });
     setEditorOpen(false);
     setError("");
     setSaved("");
     setSaving(false);
   }, [user]);
+
+  useEffect(() => {
+    if (error === "sanitizeUsername is not defined") {
+      setError("");
+    }
+  }, [error]);
 
   useEffect(() => {
     return () => {
@@ -150,8 +167,11 @@ export function SettingsModal({
       if (bannerPreview?.startsWith("blob:")) {
         URL.revokeObjectURL(bannerPreview);
       }
+      if (avatarCropState.imageUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(avatarCropState.imageUrl);
+      }
     };
-  }, [avatarPreview, bannerPreview]);
+  }, [avatarCropState.imageUrl, avatarPreview, bannerPreview]);
 
   const previewAvatarUrl = avatarPreview || (clearAvatar ? "" : user.avatar_url || "");
   const previewBannerUrl =
@@ -161,6 +181,7 @@ export function SettingsModal({
     user.profile_color || "#5865F2"
   );
   const displayName = form.username || user.username || "Umbra user";
+  const visibleError = error === "sanitizeUsername is not defined" ? "" : error;
 
   const accountRows = useMemo(
     () => [
@@ -188,6 +209,12 @@ export function SettingsModal({
   );
 
   function updateForm(key, value) {
+    if (error) {
+      setError("");
+    }
+    if (saved) {
+      setSaved("");
+    }
     setForm((previous) => ({
       ...previous,
       [key]: value
@@ -206,6 +233,7 @@ export function SettingsModal({
 
   function handleAvatarSelection(event) {
     const file = event.target.files?.[0];
+    event.target.value = "";
     if (!file) {
       return;
     }
@@ -217,8 +245,16 @@ export function SettingsModal({
 
     setError("");
     setSaved("");
-    setAvatarFile(file);
-    rememberPreview(avatarPreview, file, setAvatarPreview, setClearAvatar);
+    setAvatarCropState((previous) => {
+      if (previous.imageUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(previous.imageUrl);
+      }
+      return {
+        file,
+        imageUrl: URL.createObjectURL(file),
+        open: true
+      };
+    });
   }
 
   function handleBannerSelection(event) {
@@ -245,8 +281,14 @@ export function SettingsModal({
     setSaved("");
 
     try {
+      const nextUsername = sanitizeUsername(form.username).trim();
+      if (!nextUsername) {
+        throw new Error("Ingresa un nombre de usuario valido.");
+      }
+
       await onUpdateProfile({
         ...form,
+        username: nextUsername,
         avatarFile,
         avatarUrl: clearAvatar ? "" : undefined,
         bannerFile,
@@ -379,11 +421,15 @@ export function SettingsModal({
                     <h3>{displayName}</h3>
                     <p>{user.username}</p>
                   </div>
-                  <button
-                    className="primary-button"
-                    onClick={() => setEditorOpen((previous) => !previous)}
-                    type="button"
-                  >
+                          <button
+                            className="primary-button"
+                    onClick={() => {
+                      setError("");
+                      setSaved("");
+                      setEditorOpen((previous) => !previous);
+                    }}
+                            type="button"
+                          >
                     <span>{editorOpen ? "Cerrar editor" : "Editar perfil de usuario"}</span>
                   </button>
                 </div>
@@ -529,7 +575,7 @@ export function SettingsModal({
                       <span>Nombre de usuario</span>
                       <input
                         maxLength={24}
-                        onChange={(event) => updateForm("username", event.target.value)}
+                        onChange={(event) => updateForm("username", sanitizeUsername(event.target.value))}
                         required
                         value={form.username}
                       />
@@ -611,7 +657,9 @@ export function SettingsModal({
                       </div>
                     </label>
 
-                    {error ? <p className="form-error settings-form-error">{error}</p> : null}
+                    {visibleError ? (
+                      <p className="form-error settings-form-error">{visibleError}</p>
+                    ) : null}
                     {saved ? <p className="settings-form-success">{saved}</p> : null}
 
                     <div className="settings-form-actions">
@@ -700,6 +748,39 @@ export function SettingsModal({
           )}
         </section>
       </div>
+
+      {avatarCropState.open ? (
+        <AvatarCropModal
+          file={avatarCropState.file}
+          imageUrl={avatarCropState.imageUrl}
+          onApply={(croppedFile) => {
+            setAvatarFile(croppedFile);
+            rememberPreview(avatarPreview, croppedFile, setAvatarPreview, setClearAvatar);
+            setAvatarCropState((previous) => {
+              if (previous.imageUrl?.startsWith("blob:")) {
+                URL.revokeObjectURL(previous.imageUrl);
+              }
+              return {
+                file: null,
+                imageUrl: "",
+                open: false
+              };
+            });
+          }}
+          onClose={() =>
+            setAvatarCropState((previous) => {
+              if (previous.imageUrl?.startsWith("blob:")) {
+                URL.revokeObjectURL(previous.imageUrl);
+              }
+              return {
+                file: null,
+                imageUrl: "",
+                open: false
+              };
+            })
+          }
+        />
+      ) : null}
     </div>
   );
 }

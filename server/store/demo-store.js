@@ -66,6 +66,14 @@ function sanitizeCategoryName(candidate = "") {
   return String(candidate || "").trim();
 }
 
+function buildDirectDmKey(ownerId, recipientId) {
+  return [String(ownerId || ""), String(recipientId || "")].sort().join(":");
+}
+
+function buildFriendshipPair(leftId, rightId) {
+  return [String(leftId || ""), String(rightId || "")].sort();
+}
+
 function buildInviteCode() {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
 }
@@ -93,6 +101,7 @@ export class DemoStore {
     this.filePath = filePath;
     this.uploadDir = path.join(path.dirname(filePath), "uploads");
     this.db = null;
+    this.dmLocks = new Map();
   }
 
   getMode() {
@@ -123,7 +132,11 @@ export class DemoStore {
       banner_image_url: "",
       ...guild
     }));
+    this.db.friendships = this.db.friendships || [];
+    this.db.friend_requests = this.db.friend_requests || [];
     this.db.invites = this.db.invites || [];
+    this.db.profile_reports = this.db.profile_reports || [];
+    this.db.user_blocks = this.db.user_blocks || [];
 
     refreshChannelSummaries(this.db);
     return this;
@@ -740,6 +753,223 @@ export class DemoStore {
     return guild;
   }
 
+  async sendFriendRequest({ recipientId, requesterId }) {
+    if (!recipientId || requesterId === recipientId) {
+      throw createError("No puedes enviarte una solicitud a ti mismo.", 400);
+    }
+
+    const recipient = this.getProfileById(recipientId);
+    if (!recipient) {
+      throw createError("Usuario no encontrado.", 404);
+    }
+
+    const isBlocked = (this.db.user_blocks || []).some(
+      (entry) =>
+        (entry.blocker_id === requesterId && entry.blocked_id === recipientId) ||
+        (entry.blocker_id === recipientId && entry.blocked_id === requesterId)
+    );
+    if (isBlocked) {
+      throw createError("No puedes enviar una solicitud a este usuario.", 403);
+    }
+
+    const [user_id, friend_id] = buildFriendshipPair(requesterId, recipientId);
+    const existingFriendship = (this.db.friendships || []).find(
+      (friendship) => friendship.user_id === user_id && friendship.friend_id === friend_id
+    );
+    if (existingFriendship) {
+      return {
+        friend: recipient,
+        friendship: existingFriendship,
+        status: "friends"
+      };
+    }
+
+    const reversePending = (this.db.friend_requests || []).find(
+      (request) =>
+        request.requester_id === recipientId &&
+        request.recipient_id === requesterId &&
+        String(request.status || "pending") === "pending"
+    );
+    if (reversePending) {
+      const accepted = await this.acceptFriendRequest({
+        requestId: reversePending.id,
+        userId: requesterId
+      });
+      return {
+        friend: recipient,
+        friendship: accepted.friendship,
+        status: "accepted"
+      };
+    }
+
+    const existingPending = (this.db.friend_requests || []).find(
+      (request) =>
+        request.requester_id === requesterId &&
+        request.recipient_id === recipientId &&
+        String(request.status || "pending") === "pending"
+    );
+    if (existingPending) {
+      return {
+        request: existingPending,
+        status: "pending",
+        user: recipient
+      };
+    }
+
+    const request = {
+      id: createId(),
+      requester_id: requesterId,
+      recipient_id: recipientId,
+      status: "pending",
+      created_at: new Date().toISOString()
+    };
+
+    this.db.friend_requests.push(request);
+    await this.save();
+
+    return {
+      request,
+      status: "pending",
+      user: recipient
+    };
+  }
+
+  async acceptFriendRequest({ requestId, userId }) {
+    const request = (this.db.friend_requests || []).find((item) => item.id === requestId);
+    if (!request || String(request.status || "pending") !== "pending") {
+      throw createError("Solicitud no encontrada.", 404);
+    }
+
+    if (request.recipient_id !== userId) {
+      throw createError("No puedes aceptar esta solicitud.", 403);
+    }
+
+    const [leftId, rightId] = buildFriendshipPair(request.requester_id, request.recipient_id);
+    let friendship = (this.db.friendships || []).find(
+      (item) => item.user_id === leftId && item.friend_id === rightId
+    );
+
+    if (!friendship) {
+      friendship = {
+        id: createId(),
+        user_id: leftId,
+        friend_id: rightId,
+        created_at: new Date().toISOString()
+      };
+      this.db.friendships.push(friendship);
+    }
+
+    this.db.friend_requests = (this.db.friend_requests || []).filter(
+      (item) =>
+        !(
+          String(item.status || "pending") === "pending" &&
+          ((item.requester_id === request.requester_id && item.recipient_id === request.recipient_id) ||
+            (item.requester_id === request.recipient_id && item.recipient_id === request.requester_id))
+        )
+    );
+
+    await this.save();
+
+    return {
+      friend_id: request.requester_id,
+      friendship,
+      status: "friends"
+    };
+  }
+
+  async cancelFriendRequest({ requestId, userId }) {
+    const request = (this.db.friend_requests || []).find((item) => item.id === requestId);
+    if (!request || String(request.status || "pending") !== "pending") {
+      throw createError("Solicitud no encontrada.", 404);
+    }
+
+    if (request.requester_id !== userId && request.recipient_id !== userId) {
+      throw createError("No puedes cancelar esta solicitud.", 403);
+    }
+
+    this.db.friend_requests = (this.db.friend_requests || []).filter(
+      (item) => item.id !== requestId
+    );
+    await this.save();
+    return { ok: true, request_id: requestId };
+  }
+
+  async removeFriend({ friendId, userId }) {
+    const [leftId, rightId] = buildFriendshipPair(userId, friendId);
+    const previousCount = (this.db.friendships || []).length;
+    this.db.friendships = (this.db.friendships || []).filter(
+      (friendship) => !(friendship.user_id === leftId && friendship.friend_id === rightId)
+    );
+
+    if (this.db.friendships.length === previousCount) {
+      throw createError("La amistad no existe.", 404);
+    }
+
+    await this.save();
+    return { friend_id: friendId, ok: true };
+  }
+
+  async blockUser({ targetUserId, userId }) {
+    if (!targetUserId || targetUserId === userId) {
+      throw createError("No puedes bloquearte a ti mismo.", 400);
+    }
+
+    const target = this.getProfileById(targetUserId);
+    if (!target) {
+      throw createError("Usuario no encontrado.", 404);
+    }
+
+    const alreadyBlocked = (this.db.user_blocks || []).some(
+      (entry) => entry.blocker_id === userId && entry.blocked_id === targetUserId
+    );
+    if (!alreadyBlocked) {
+      this.db.user_blocks.push({
+        blocker_id: userId,
+        blocked_id: targetUserId,
+        created_at: new Date().toISOString(),
+        id: createId()
+      });
+    }
+
+    const [leftId, rightId] = buildFriendshipPair(userId, targetUserId);
+    this.db.friendships = (this.db.friendships || []).filter(
+      (friendship) => !(friendship.user_id === leftId && friendship.friend_id === rightId)
+    );
+    this.db.friend_requests = (this.db.friend_requests || []).filter(
+      (request) =>
+        !(
+          (request.requester_id === userId && request.recipient_id === targetUserId) ||
+          (request.requester_id === targetUserId && request.recipient_id === userId)
+        )
+    );
+
+    await this.save();
+    return { blocked_id: targetUserId, ok: true };
+  }
+
+  async reportProfile({ reason = "spam", reporterId, targetUserId }) {
+    if (!targetUserId || targetUserId === reporterId) {
+      throw createError("No puedes reportarte a ti mismo.", 400);
+    }
+
+    const target = this.getProfileById(targetUserId);
+    if (!target) {
+      throw createError("Usuario no encontrado.", 404);
+    }
+
+    const report = {
+      id: createId(),
+      reporter_id: reporterId,
+      target_user_id: targetUserId,
+      reason: String(reason || "spam").slice(0, 64),
+      created_at: new Date().toISOString()
+    };
+
+    this.db.profile_reports.push(report);
+    await this.save();
+    return { ok: true, report };
+  }
+
   async createInvite({ guildId, userId }) {
     const guild = this.db.guilds.find((item) => item.id === guildId);
     if (!guild) {
@@ -908,6 +1138,90 @@ export class DemoStore {
     await this.save();
 
     return channel;
+  }
+
+  async createOrGetDm({ ownerId, recipientId }) {
+    const dmKey = buildDirectDmKey(ownerId, recipientId);
+    const existingLock = this.dmLocks.get(dmKey);
+    if (existingLock) {
+      return existingLock;
+    }
+
+    const task = (async () => {
+      const expected = [ownerId, recipientId].sort();
+      const existing = this.db.channels.find((channel) => {
+        if (channel.type !== CHANNEL_TYPES.DM) {
+          return false;
+        }
+
+        const participants = this.db.channel_members
+          .filter((membership) => membership.channel_id === channel.id)
+          .map((membership) => membership.user_id)
+          .sort();
+
+        return (
+          participants.length === 2 &&
+          participants[0] === expected[0] &&
+          participants[1] === expected[1]
+        );
+      });
+
+      if (existing) {
+        return existing;
+      }
+
+      const now = new Date().toISOString();
+      const channel = {
+        id: createId(),
+        guild_id: null,
+        type: CHANNEL_TYPES.DM,
+        name: "",
+        topic: "ConversaciÃ³n directa",
+        position: 0,
+        parent_id: null,
+        created_by: ownerId,
+        last_message_id: null,
+        last_message_author_id: null,
+        last_message_preview: "",
+        last_message_at: null,
+        created_at: now,
+        updated_at: now
+      };
+
+      this.db.channels.push(channel);
+      this.db.channel_members.push(
+        {
+          channel_id: channel.id,
+          user_id: ownerId,
+          last_read_message_id: null,
+          last_read_at: null,
+          hidden: false,
+          joined_at: now
+        },
+        {
+          channel_id: channel.id,
+          user_id: recipientId,
+          last_read_message_id: null,
+          last_read_at: null,
+          hidden: false,
+          joined_at: now
+        }
+      );
+
+      await this.save();
+
+      return channel;
+    })();
+
+    this.dmLocks.set(dmKey, task);
+
+    try {
+      return await task;
+    } finally {
+      if (this.dmLocks.get(dmKey) === task) {
+        this.dmLocks.delete(dmKey);
+      }
+    }
   }
 
   async createGroupDm({ name = "", ownerId, recipientIds }) {

@@ -121,6 +121,27 @@ export function getDmSummary(dm, currentUserId) {
   return other?.custom_status || dm.last_message_preview || "Sin mensajes todavia";
 }
 
+export function findDirectDmByUserId(dms = [], currentUserId, targetUserId) {
+  if (!currentUserId || !targetUserId) {
+    return null;
+  }
+
+  return (
+    dms.find((dm) => {
+      if (dm?.type !== "dm") {
+        return false;
+      }
+
+      const participants = (dm.participants || []).map((participant) => participant.id).filter(Boolean);
+      if (participants.length !== 2) {
+        return false;
+      }
+
+      return participants.includes(currentUserId) && participants.includes(targetUserId);
+    }) || null
+  );
+}
+
 export function isImageAttachment(attachment) {
   return Boolean(attachment?.content_type?.startsWith("image/"));
 }

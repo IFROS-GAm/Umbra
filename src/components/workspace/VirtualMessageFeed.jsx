@@ -43,6 +43,7 @@ function MessageDateDivider({ label }) {
 
 export const VirtualMessageFeed = memo(function VirtualMessageFeed({
   availableUsersById,
+  headerContent,
   handleReaction,
   handleScroll,
   listRef,
@@ -103,10 +104,13 @@ export const VirtualMessageFeed = memo(function VirtualMessageFeed({
   if (!rows.length && !loadingMessages) {
     return (
       <section className="message-feed">
-        <div className="empty-state">
-          <h3>Este canal aun no tiene ecos.</h3>
-          <p>Escribe el primer mensaje y enciende Umbra.</p>
-        </div>
+        {headerContent}
+        {!headerContent ? (
+          <div className="empty-state">
+            <h3>Este canal aun no tiene ecos.</h3>
+            <p>Escribe el primer mensaje y enciende Umbra.</p>
+          </div>
+        ) : null}
       </section>
     );
   }
@@ -115,7 +119,10 @@ export const VirtualMessageFeed = memo(function VirtualMessageFeed({
     <div className="message-feed-host">
       <Virtuoso
         className="message-feed-virtuoso"
-        components={{ Scroller: MessageFeedScroller }}
+        components={{
+          Header: headerContent ? () => <div className="message-feed-header">{headerContent}</div> : undefined,
+          Scroller: MessageFeedScroller
+        }}
         computeItemKey={(index, row) => row.key || `${row.type}-${index}`}
         context={{ handleScroll, listRef }}
         data={rows}

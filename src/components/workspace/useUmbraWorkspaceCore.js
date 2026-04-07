@@ -5,6 +5,7 @@ import { getSocket } from "../../socket.js";
 import { findChannelInSession, resolveSelection } from "../../utils.js";
 import {
   applyChannelPreviewToWorkspace,
+  findDirectDmByUserId,
   isChannelCacheFresh,
   listLikelyChannelIds,
   fallbackDeviceLabel,
@@ -16,6 +17,7 @@ import {
   toggleReactionBucket,
   upsertChannelMessage
 } from "./workspaceHelpers.js";
+import { createVoiceCameraSession } from "./voiceCameraSession.js";
 import { createVoiceInputProcessingSession } from "./voiceInputProcessing.js";
 
 export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, onSignOut }) {
@@ -53,6 +55,12 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
   const [voiceInputStatus, setVoiceInputStatus] = useState({
     engine: "off",
     error: "",
+    ready: false
+  });
+  const [cameraStream, setCameraStream] = useState(null);
+  const [cameraStatus, setCameraStatus] = useState({
+    error: "",
+    label: "",
     ready: false
   });
   const [voiceState, setVoiceState] = useState({
@@ -96,10 +104,12 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
   const accessTokenRef = useRef(accessToken);
   const joinedVoiceChannelIdRef = useRef(joinedVoiceChannelId);
   const voiceInputSessionRef = useRef(null);
+  const cameraSessionRef = useRef(null);
   const messageCacheRef = useRef(new Map());
   const messageRequestIdRef = useRef(0);
   const messageAbortRef = useRef(null);
   const localReadStateRef = useRef(new Map());
+  const pendingDirectDmRef = useRef(new Set());
 
   activeSelectionRef.current = activeSelection;
   accessTokenRef.current = accessToken;
@@ -534,7 +544,16 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
     const socket = getSocket(accessToken);
 
     const refreshNavigation = async (payload = {}) => {
-      if (!["guild:create", "guild:update", "channel:create", "dm:create", "profile:update"].includes(payload?.type)) {
+      if (
+        ![
+          "guild:create",
+          "guild:update",
+          "channel:create",
+          "dm:create",
+          "profile:update",
+          "friends:update"
+        ].includes(payload?.type)
+      ) {
         return;
       }
 
@@ -978,6 +997,87 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
   }, [voiceState.inputVolume, voiceState.micMuted]);
 
   useEffect(() => {
+    const shouldProcessCamera = Boolean(
+      voiceState.cameraEnabled && (joinedVoiceChannelId || voiceMenu === "camera")
+    );
+
+    if (!shouldProcessCamera) {
+      setCameraStatus({
+        error: "",
+        label: "",
+        ready: false
+      });
+      setCameraStream(null);
+
+      if (cameraSessionRef.current) {
+        cameraSessionRef.current.destroy().catch(() => {});
+        cameraSessionRef.current = null;
+      }
+
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function startCameraSession() {
+      if (cameraSessionRef.current) {
+        await cameraSessionRef.current.destroy().catch(() => {});
+        cameraSessionRef.current = null;
+      }
+
+      try {
+        const session = await createVoiceCameraSession({
+          deviceId: selectedVoiceDevices.videoinput
+        });
+
+        if (cancelled) {
+          await session.destroy();
+          return;
+        }
+
+        cameraSessionRef.current = session;
+        session.setEnabled(true);
+        setCameraStream(session.stream);
+        setCameraStatus({
+          error: "",
+          label: session.label,
+          ready: true
+        });
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setCameraStream(null);
+        setCameraStatus({
+          error: error.message || "No se pudo abrir la camara.",
+          label: "",
+          ready: false
+        });
+        setVoiceState((previous) =>
+          previous.cameraEnabled
+            ? {
+                ...previous,
+                cameraEnabled: false
+              }
+            : previous
+        );
+      }
+    }
+
+    startCameraSession();
+
+    return () => {
+      cancelled = true;
+      if (cameraSessionRef.current) {
+        cameraSessionRef.current.destroy().catch(() => {});
+        cameraSessionRef.current = null;
+      }
+      setCameraStream(null);
+    };
+  }, [joinedVoiceChannelId, selectedVoiceDevices.videoinput, voiceMenu, voiceState.cameraEnabled]);
+
+  useEffect(() => {
     if (!headerPanel) {
       return undefined;
     }
@@ -1328,14 +1428,35 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
         }
 
       if (dialog.type === "dm") {
-        const payload = await api.createDm({
-          recipientId: values.recipientId
-        });
-        await loadBootstrap({
-          channelId: payload.channel.id,
-          guildId: null,
-          kind: "dm"
-        });
+        const recipientId = values.recipientId;
+        const existingDm = findDirectDmByUserId(workspace?.dms || [], workspace?.current_user?.id, recipientId);
+
+        if (existingDm) {
+          await loadBootstrap({
+            channelId: existingDm.id,
+            guildId: null,
+            kind: "dm"
+          });
+        } else {
+          if (pendingDirectDmRef.current.has(recipientId)) {
+            return;
+          }
+
+          pendingDirectDmRef.current.add(recipientId);
+
+          try {
+            const payload = await api.createDm({
+              recipientId
+            });
+            await loadBootstrap({
+              channelId: payload.channel.id,
+              guildId: null,
+              kind: "dm"
+            });
+          } finally {
+            pendingDirectDmRef.current.delete(recipientId);
+          }
+        }
       }
 
       if (dialog.type === "dm_group") {
@@ -1537,11 +1658,17 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
     getSocket(accessToken).emit("voice:leave");
     setVoiceMenu(null);
     setJoinedVoiceChannelId(null);
+    setVoiceState((previous) => ({
+      ...previous,
+      cameraEnabled: false,
+      screenShareEnabled: false
+    }));
   }
 
   return {
     accessTokenRef, activeChannel, activeGuild, activeGuildTextChannels, activeGuildVoiceChannels, activeLookup,
     activeSelection, activeSelectionRef, appError, attachmentInputRef, booting, composer, composerAttachments,
+    cameraStatus, cameraStream,
     composerMenuOpen, composerPicker, composerRef, currentUserLabel, cycleVoiceDevice, dialog, directUnreadCount, editingMessage,
     handleAttachmentSelection, handleComposerChange, handleComposerShortcut, handleDeleteMessage, handleDialogSubmit,
     handlePickerInsert, handleProfileUpdate, handleReaction, handleScroll, handleSelectGuildChannel,

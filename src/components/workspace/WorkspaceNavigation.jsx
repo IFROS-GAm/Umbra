@@ -282,7 +282,7 @@ export function WorkspaceNavigation({
       ) : null}
 
       <aside className="navigator-panel">
-        <div className="navigator-top">
+        <div className={`navigator-top ${activeGuild ? "" : "direct-home-header"}`.trim()}>
           {activeGuild ? (
             <>
               <div className="navigator-server-header">
@@ -319,8 +319,8 @@ export function WorkspaceNavigation({
                 <UmbraLogo alt="Umbra" className="navigator-title-logo" size={34} />
                 <div className="navigator-title-copy">
                   <small>UMBRA DIRECT</small>
-                  <h2>{activeSelection.kind === "home" ? "Sombras" : "Mensajes directos"}</h2>
-                  <p className="subcopy">Accesos directos, ecos privados y grupos del borde.</p>
+                  <h2>Mensajes directos</h2>
+                  <p className="subcopy">Ecos privados, grupos y accesos.</p>
                 </div>
               </div>
               <button

@@ -630,6 +630,114 @@ export async function startServer(options = {}) {
     }
   });
 
+  app.post("/api/friends/requests", requireViewer, async (req, res) => {
+    try {
+      const payload = await store.sendFriendRequest({
+        recipientId: req.body.recipientId,
+        requesterId: req.viewer.id
+      });
+
+      emitNavigationUpdate({
+        type: "friends:update",
+        userId: req.viewer.id,
+        targetUserId: req.body.recipientId || null
+      });
+
+      res.status(201).json(payload);
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.post("/api/friends/requests/:requestId/accept", requireViewer, async (req, res) => {
+    try {
+      const payload = await store.acceptFriendRequest({
+        requestId: req.params.requestId,
+        userId: req.viewer.id
+      });
+
+      emitNavigationUpdate({
+        type: "friends:update",
+        userId: req.viewer.id,
+        targetUserId: payload.friend_id || null
+      });
+
+      res.json(payload);
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.delete("/api/friends/requests/:requestId", requireViewer, async (req, res) => {
+    try {
+      const payload = await store.cancelFriendRequest({
+        requestId: req.params.requestId,
+        userId: req.viewer.id
+      });
+
+      emitNavigationUpdate({
+        type: "friends:update",
+        userId: req.viewer.id
+      });
+
+      res.json(payload);
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.delete("/api/friends/:friendId", requireViewer, async (req, res) => {
+    try {
+      const payload = await store.removeFriend({
+        friendId: req.params.friendId,
+        userId: req.viewer.id
+      });
+
+      emitNavigationUpdate({
+        type: "friends:update",
+        userId: req.viewer.id,
+        targetUserId: req.params.friendId
+      });
+
+      res.json(payload);
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.post("/api/users/:userId/block", requireViewer, async (req, res) => {
+    try {
+      const payload = await store.blockUser({
+        targetUserId: req.params.userId,
+        userId: req.viewer.id
+      });
+
+      emitNavigationUpdate({
+        type: "friends:update",
+        userId: req.viewer.id,
+        targetUserId: req.params.userId
+      });
+
+      res.json(payload);
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.post("/api/users/:userId/report", requireViewer, async (req, res) => {
+    try {
+      const payload = await store.reportProfile({
+        reason: req.body.reason || "spam",
+        reporterId: req.viewer.id,
+        targetUserId: req.params.userId
+      });
+
+      res.status(201).json(payload);
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
   app.patch("/api/users/me/status", requireViewer, async (req, res) => {
     try {
       const status = req.body.status;

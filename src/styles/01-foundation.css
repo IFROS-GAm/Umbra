@@ -456,14 +456,32 @@ button {
 .app-shell {
   display: grid;
   gap: 0;
-  grid-template-columns: 78px 272px 1fr 236px;
+  grid-template-columns:
+    78px
+    var(--navigator-panel-width, 272px)
+    minmax(0, 1fr)
+    var(--members-panel-resizer-width, 10px)
+    var(--members-panel-width, 324px);
   height: 100%;
+  min-width: 0;
   padding: 0;
   position: relative;
 }
 
 .app-shell.members-collapsed {
-  grid-template-columns: 78px 272px 1fr;
+  grid-template-columns: 78px var(--navigator-panel-width, 272px) minmax(0, 1fr);
+}
+
+.app-shell.navigator-collapsed {
+  grid-template-columns:
+    78px
+    minmax(0, 1fr)
+    var(--members-panel-resizer-width, 10px)
+    var(--members-panel-width, 324px);
+}
+
+.app-shell.navigator-collapsed.members-collapsed {
+  grid-template-columns: 78px minmax(0, 1fr);
 }
 
 .server-rail,
@@ -473,6 +491,10 @@ button {
   backdrop-filter: blur(12px);
   border: 1px solid var(--line);
   box-shadow: var(--shadow-brand);
+}
+
+.members-panel {
+  min-width: var(--members-panel-min-width, 300px);
 }
 
 .server-rail {
@@ -622,8 +644,15 @@ button {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
   padding: 12px;
+  position: relative;
+}
+
+.navigator-panel {
+  min-width: 0;
+  width: var(--navigator-panel-width, 272px);
 }
 
 .navigator-top,
@@ -638,6 +667,12 @@ button {
   display: flex;
   gap: 12px;
   justify-content: space-between;
+}
+
+.direct-home-header {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .navigator-server-header {
@@ -730,15 +765,29 @@ button {
   align-items: center;
   display: flex;
   gap: 12px;
+  min-width: 0;
 }
 
 .navigator-title-logo {
   border-radius: 12px;
   box-shadow: 0 0 0 1px rgba(174, 194, 255, 0.08), 0 14px 30px rgba(0, 0, 0, 0.22);
+  flex: 0 0 auto;
 }
 
 .navigator-title-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
+}
+
+.navigator-title-copy h2 {
+  line-height: 1.08;
+  margin: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .eyebrow {
@@ -751,9 +800,51 @@ button {
 
 .subcopy {
   color: var(--text-2);
-  font-size: 0.86rem;
-  line-height: 1.45;
-  margin: 6px 0 0;
+  font-size: 0.78rem;
+  line-height: 1.2;
+  margin: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.direct-home-header .navigator-title-brand {
+  align-items: flex-start;
+  gap: 10px;
+  padding-right: 6px;
+}
+
+.direct-home-header .navigator-title-copy small {
+  line-height: 1;
+}
+
+.direct-home-header .navigator-title-copy h2 {
+  font-size: 1rem;
+  overflow: visible;
+  text-overflow: initial;
+  white-space: normal;
+}
+
+.direct-home-header .navigator-create-button {
+  align-self: center;
+  border-radius: 12px;
+  flex: 0 0 auto;
+  font-size: 0.82rem;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+}
+
+.direct-home-header .navigator-title-copy {
+  gap: 4px;
+}
+
+.direct-home-header .subcopy {
+  line-height: 1.25;
+  overflow: visible;
+  text-overflow: initial;
+  white-space: normal;
 }
 
 .channel-list,

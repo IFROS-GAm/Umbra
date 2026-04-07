@@ -1336,6 +1336,105 @@
   opacity: 0.7;
 }
 
+.avatar-crop-modal {
+  background: linear-gradient(180deg, rgba(22, 24, 31, 0.99), rgba(17, 19, 24, 0.99));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  box-shadow: 0 28px 60px rgba(0, 0, 0, 0.42);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px;
+  width: min(92vw, 500px);
+}
+
+.avatar-crop-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.avatar-crop-header h3 {
+  font-size: 1.05rem;
+  margin: 0;
+}
+
+.avatar-crop-stage {
+  align-items: center;
+  background: #17191f;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  display: flex;
+  height: 360px;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+}
+
+.avatar-crop-stage::before,
+.avatar-crop-stage::after {
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.avatar-crop-stage::before {
+  background:
+    linear-gradient(to right, rgba(8, 9, 13, 0.72) 0, rgba(8, 9, 13, 0.72) calc(50% - 160px), transparent calc(50% - 160px), transparent calc(50% + 160px), rgba(8, 9, 13, 0.72) calc(50% + 160px), rgba(8, 9, 13, 0.72) 100%),
+    linear-gradient(to bottom, rgba(8, 9, 13, 0.72) 0, rgba(8, 9, 13, 0.72) calc(50% - 160px), transparent calc(50% - 160px), transparent calc(50% + 160px), rgba(8, 9, 13, 0.72) calc(50% + 160px), rgba(8, 9, 13, 0.72) 100%);
+}
+
+.avatar-crop-image {
+  left: 50%;
+  max-width: none;
+  position: absolute;
+  top: 50%;
+  transform-origin: center center;
+  user-select: none;
+}
+
+.avatar-crop-ring {
+  border: 5px solid rgba(255, 255, 255, 0.96);
+  border-radius: 999px;
+  box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.08);
+  height: 260px;
+  pointer-events: none;
+  position: relative;
+  width: 260px;
+  z-index: 1;
+}
+
+.avatar-crop-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.avatar-crop-control {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.avatar-crop-control span {
+  align-items: center;
+  color: var(--text-1);
+  display: inline-flex;
+  gap: 8px;
+}
+
+.avatar-crop-actions {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.avatar-crop-actions-right {
+  display: flex;
+  gap: 10px;
+}
+
 ::-webkit-scrollbar {
   height: 10px;
   width: 10px;

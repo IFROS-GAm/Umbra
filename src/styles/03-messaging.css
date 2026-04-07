@@ -214,6 +214,10 @@
   gap: 10px;
 }
 
+.chat-title-line .avatar-shell {
+  flex-shrink: 0;
+}
+
 .chat-topic-pill,
 .inline-pill {
   align-items: center;
