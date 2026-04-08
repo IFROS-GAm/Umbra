@@ -23,6 +23,24 @@ export function MembersPanel({
   onShowNotice,
   workspace
 }) {
+  const currentUser = workspace?.current_user || null;
+
+  function getMemberAvatar(member) {
+    if (!member) {
+      return "";
+    }
+
+    if (member.avatar_url) {
+      return member.avatar_url;
+    }
+
+    if (currentUser?.id === member.id) {
+      return currentUser.avatar_url || "";
+    }
+
+    return "";
+  }
+
   if (activeSelectionKind === "dm" && directMessageProfile && activeChannel?.type === "dm") {
     return (
       <aside className="members-panel">
@@ -65,8 +83,9 @@ export function MembersPanel({
                   <Avatar
                     hue={user.avatar_hue}
                     label={user.username}
+                    priority
                     size={42}
-                    src={user.avatar_url}
+                    src={getMemberAvatar(user)}
                     status={user.status}
                   />
                   <div className="activity-card-copy">
@@ -115,8 +134,9 @@ export function MembersPanel({
                     <Avatar
                       hue={member.avatar_hue}
                       label={member.display_name || member.username}
+                      priority
                       size={38}
-                      src={member.avatar_url}
+                      src={getMemberAvatar(member)}
                       status={member.status}
                     />
                     <div className="member-copy">

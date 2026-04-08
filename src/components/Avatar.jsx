@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 import { resolveAssetUrl } from "../api.js";
 import { avatarStyle } from "../utils.js";
@@ -7,12 +7,21 @@ export function Avatar({ label, size = 42, status, hue, priority = false, src })
   const safeLabel = String(label || "?");
   const [imageFailed, setImageFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const imageRef = useRef(null);
   const resolvedSrc = resolveAssetUrl(src);
   const showImage = Boolean(resolvedSrc) && !imageFailed;
 
   useEffect(() => {
     setImageFailed(false);
     setLoaded(false);
+  }, [resolvedSrc]);
+
+  useEffect(() => {
+    const image = imageRef.current;
+
+    if (image?.complete && image.naturalWidth > 0) {
+      setLoaded(true);
+    }
   }, [resolvedSrc]);
 
   return (
@@ -26,7 +35,9 @@ export function Avatar({ label, size = 42, status, hue, priority = false, src })
             alt={safeLabel}
             className={`avatar-media ${loaded ? "is-loaded" : ""}`}
             decoding="async"
+            draggable={false}
             fetchPriority={priority ? "high" : "low"}
+            ref={imageRef}
             loading={priority ? "eager" : "lazy"}
             onLoad={() => setLoaded(true)}
             onError={() => setImageFailed(true)}

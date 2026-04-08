@@ -120,34 +120,44 @@ function relationshipAction(profile, handlers) {
   if (!profile) {
     return {
       action: () => {},
-      label: "Anadir amigo"
+      disabled: true,
+      label: "Enviar solicitud de amigo",
+      visible: true
     };
   }
 
   if (profile.isFriend) {
     return {
-      action: () => handlers.onShowNotice?.("Ya son sombras."),
-      label: "Amigos"
+      action: null,
+      disabled: true,
+      label: "Amigos",
+      visible: false
     };
   }
 
   if (profile.friendRequestState === "received") {
     return {
       action: () => handlers.onAcceptFriendRequest?.(profile),
-      label: "Aceptar solicitud"
+      disabled: false,
+      label: "Aceptar solicitud",
+      visible: true
     };
   }
 
   if (profile.friendRequestState === "sent") {
     return {
-      action: () => handlers.onCancelFriendRequest?.(profile),
-      label: "Cancelar solicitud"
+      action: () => {},
+      disabled: true,
+      label: "Enviado",
+      visible: true
     };
   }
 
   return {
     action: () => handlers.onAddFriend?.(profile),
-    label: "Anadir amigo"
+    disabled: false,
+    label: "Enviar solicitud de amigo",
+    visible: true
   };
 }
 
@@ -417,18 +427,25 @@ export function UserProfileCard({
           ) : (
             <>
               <div className="user-profile-action-row">
-                <button
-                  className="primary-button"
-                  onClick={() => onOpenDm(profile)}
-                  type="button"
-                >
-                  <Icon name="mail" />
-                  <span>Mensaje directo</span>
-                </button>
-                <button className="ghost-button" onClick={friendAction.action} type="button">
-                  <Icon name="userAdd" />
-                  <span>{friendAction.label}</span>
-                </button>
+              <button
+                className="primary-button"
+                onClick={() => onOpenDm(profile)}
+                type="button"
+              >
+                <Icon name="mail" />
+                <span>Mensaje directo</span>
+              </button>
+                {friendAction.visible ? (
+                  <button
+                    className="ghost-button"
+                    disabled={friendAction.disabled}
+                    onClick={friendAction.action}
+                    type="button"
+                  >
+                    <Icon name="userAdd" />
+                    <span>{friendAction.label}</span>
+                  </button>
+                ) : null}
                 {profile.isFriend ? (
                   <button className="ghost-button danger" onClick={() => onRemoveFriend?.(profile)} type="button">
                     <span>Eliminar</span>

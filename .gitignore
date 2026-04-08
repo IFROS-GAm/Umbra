@@ -6,5 +6,6 @@ server/data/uploads/
 Links.md
 Links
 *.log
+.umbra-dev-*.err
 release/
 RENDER_VALORES_PRIVADOS.md

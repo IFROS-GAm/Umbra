@@ -52,6 +52,7 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
   const [voiceMenu, setVoiceMenu] = useState(null);
   const [hoveredVoiceChannelId, setHoveredVoiceChannelId] = useState(null);
   const [voiceInputLevel, setVoiceInputLevel] = useState(0);
+  const [voiceInputSpeaking, setVoiceInputSpeaking] = useState(false);
   const [voiceInputStatus, setVoiceInputStatus] = useState({
     engine: "off",
     error: "",
@@ -549,6 +550,7 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
           "guild:create",
           "guild:update",
           "channel:create",
+          "channel:move",
           "dm:create",
           "profile:update",
           "friends:update"
@@ -656,20 +658,25 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
         }
 
         const nextStatus = user.status === "invisible" ? "offline" : user.status;
+        const nextUserPatch = {
+          ...user,
+          status: nextStatus
+        };
+
         return {
           ...previous,
           available_users: previous.available_users.map((item) =>
-            item.id === user.id ? { ...item, ...user } : item
+            item.id === user.id ? { ...item, ...nextUserPatch } : item
           ),
           current_user:
             previous.current_user.id === user.id
-              ? { ...previous.current_user, ...user }
+              ? { ...previous.current_user, ...nextUserPatch }
               : previous.current_user,
           guilds: previous.guilds.map((guild) => ({
             ...guild,
             members: guild.members.map((member) =>
               member.id === user.id
-                ? { ...member, status: nextStatus, custom_status: user.custom_status }
+                ? { ...member, ...nextUserPatch }
                 : member
             )
           })),
@@ -677,7 +684,7 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
             ...dm,
             participants: dm.participants.map((participant) =>
               participant.id === user.id
-                ? { ...participant, status: nextStatus, custom_status: user.custom_status }
+                ? { ...participant, ...nextUserPatch }
                 : participant
             )
           }))
@@ -915,6 +922,7 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
 
     if (!shouldProcessInput) {
       setVoiceInputLevel(0);
+      setVoiceInputSpeaking(false);
       setVoiceInputStatus({
         engine: voiceState.noiseSuppression ? "native" : "off",
         error: "",
@@ -946,6 +954,11 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
             if (!cancelled) {
               setVoiceInputLevel(level);
             }
+          },
+          onSpeakingChange: (nextSpeaking) => {
+            if (!cancelled) {
+              setVoiceInputSpeaking(Boolean(nextSpeaking));
+            }
           }
         });
 
@@ -966,6 +979,7 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
         }
 
         setVoiceInputLevel(0);
+        setVoiceInputSpeaking(false);
         setVoiceInputStatus({
           engine: "off",
           error: error.message || "No se pudo abrir el microfono.",
@@ -1679,11 +1693,11 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
     reactionPickerFor, removeComposerAttachment, replyMentionEnabled, replyTarget, selectedVoiceDevices,
     setActiveSelection, setAppError, setBooting, setComposer, setComposerAttachments, setComposerMenuOpen,
     setComposerPicker, setDialog, setEditingMessage, setHeaderPanel, setHoveredVoiceChannelId, setInboxTab,
-    setJoinedVoiceChannelId, setMembersPanelVisible, setMessageMenuFor, setProfileCard,
+    setJoinedVoiceChannelId, setMembersPanelVisible, setMessageMenuFor, setProfileCard, setWorkspace,
     setReactionPickerFor, setReplyMentionEnabled, setReplyTarget, setSettingsOpen, setTheme, setTypingEvents,
     setUiNotice, setVoiceDevices, setVoiceMenu, setVoiceSessions, setVoiceState, settingsOpen, showUiNotice,
     theme, toggleHeaderPanel, toggleVoiceMenu, toggleVoiceState, topbarActionsRef, typingEvents, typingUsers,
     uiNotice, updateVoiceSetting, uploadingAttachments, voiceDevices, voiceInputLevel, voiceInputStatus,
-    voiceMenu, voiceSessions, voiceState, voiceUserIds, workspace
+    voiceInputSpeaking, voiceMenu, voiceSessions, voiceState, voiceUserIds, workspace
   };
 }

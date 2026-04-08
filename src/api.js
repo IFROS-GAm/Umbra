@@ -163,10 +163,41 @@ export const api = {
       })
     });
   },
+  moveChannel({
+    channelId,
+    guildId,
+    parentId = null,
+    placement = "after",
+    relativeToChannelId = null
+  }) {
+    return request(`/api/guilds/${guildId}/channels/${channelId}/move`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        parentId,
+        placement,
+        relativeToChannelId
+      })
+    });
+  },
+  moveGuild({ guildId, placement = "after", relativeToGuildId = null }) {
+    return request(`/api/guilds/${guildId}/move`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        placement,
+        relativeToGuildId
+      })
+    });
+  },
   createGuildInvite({ guildId }) {
     return request(`/api/guilds/${guildId}/invites`, {
       method: "POST"
     });
+  },
+  listGuildInvites({ guildId }) {
+    return request(`/api/guilds/${guildId}/invites`);
+  },
+  listGuildRoles({ guildId }) {
+    return request(`/api/guilds/${guildId}/roles`);
   },
   getInviteByCode(code) {
     return request(`/api/invites/${encodeURIComponent(code)}`);
@@ -209,6 +240,14 @@ export const api = {
       body: JSON.stringify({
         name,
         recipientIds
+      })
+    });
+  },
+  setDmVisibility({ channelId, hidden }) {
+    return request(`/api/dms/${channelId}/visibility`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        hidden
       })
     });
   },
@@ -262,7 +301,11 @@ export const api = {
     bannerImageUrl,
     bio,
     customStatus,
+    privacySettings,
     profileColor,
+    recoveryAccount,
+    recoveryProvider,
+    socialLinks,
     username
   }) {
     return request("/api/users/me/profile", {
@@ -273,8 +316,29 @@ export const api = {
         bannerImageUrl,
         bio,
         customStatus,
+        privacySettings,
         profileColor,
+        recoveryAccount,
+        recoveryProvider,
+        socialLinks,
         username
+      })
+    });
+  },
+  resendConfirmationEmail({ emailRedirectTo } = {}) {
+    return request("/api/users/me/email/resend-confirmation", {
+      method: "POST",
+      body: JSON.stringify({
+        emailRedirectTo
+      })
+    });
+  },
+  sendEmailCheck({ emailRedirectTo, target } = {}) {
+    return request("/api/users/me/email/send-check", {
+      method: "POST",
+      body: JSON.stringify({
+        emailRedirectTo,
+        target
       })
     });
   },

@@ -172,7 +172,12 @@ async function createWindow() {
   });
 
   if (isDev) {
-    const devUrls = ["http://127.0.0.1:5173", "http://localhost:5173"];
+    const devUrls = [
+      "http://127.0.0.1:5173",
+      "http://localhost:5173",
+      "http://127.0.0.1:5174",
+      "http://localhost:5174"
+    ];
     let loaded = false;
     let lastError = null;
 

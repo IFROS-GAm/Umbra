@@ -201,7 +201,11 @@ function PendingSentRow({ onCancel, request }) {
 
 function AddFriendRow({ onSendRequest, requestState, user }) {
   const buttonLabel =
-    requestState === "sent" ? "Enviado" : requestState === "received" ? "Aceptar" : "Anadir";
+    requestState === "sent"
+      ? "Enviado"
+      : requestState === "received"
+        ? "Aceptar solicitud"
+        : "Enviar solicitud de amigo";
 
   return (
     <div className="request-row add-friend-row">

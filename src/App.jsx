@@ -37,7 +37,46 @@ function pushRoute(path, { replace = false } = {}) {
   return readInviteCodeFromLocation();
 }
 
-export default function App() {
+class RootErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      error: null
+    };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error) {
+    console.error("Umbra root render failed:", error);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="boot-screen">
+          <div className="boot-failure-card">
+            <strong>Umbra encontro un error al dibujar la interfaz.</strong>
+            <p>{this.state.error?.message || "Hubo un problema inesperado en el renderer."}</p>
+            <button
+              className="primary-button"
+              onClick={() => window.location.reload()}
+              type="button"
+            >
+              Recargar app
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+function AppContent() {
   const [session, setSession] = useState(null);
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -378,5 +417,13 @@ export default function App() {
       initialSelection={workspaceInitialSelection}
       onSignOut={handleSignOut}
     />
+  );
+}
+
+export default function App() {
+  return (
+    <RootErrorBoundary>
+      <AppContent />
+    </RootErrorBoundary>
   );
 }

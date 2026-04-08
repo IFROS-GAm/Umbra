@@ -126,34 +126,44 @@ function relationshipAction(profile, handlers) {
   if (!profile) {
     return {
       action: () => {},
-      label: "Anadir amigo"
+      disabled: true,
+      label: "Enviar solicitud de amigo",
+      visible: true
     };
   }
 
   if (profile.isFriend) {
     return {
-      action: () => handlers.onShowNotice?.("Ya son sombras."),
-      label: "Amigos"
+      action: null,
+      disabled: true,
+      label: "Amigos",
+      visible: false
     };
   }
 
   if (profile.friendRequestState === "received") {
     return {
       action: () => handlers.onAcceptFriendRequest?.(profile),
-      label: "Aceptar solicitud"
+      disabled: false,
+      label: "Aceptar solicitud",
+      visible: true
     };
   }
 
   if (profile.friendRequestState === "sent") {
     return {
-      action: () => handlers.onCancelFriendRequest?.(profile),
-      label: "Cancelar solicitud"
+      action: () => {},
+      disabled: true,
+      label: "Enviado",
+      visible: true
     };
   }
 
   return {
     action: () => handlers.onAddFriend?.(profile),
-    label: "Anadir amigo"
+    disabled: false,
+    label: "Enviar solicitud de amigo",
+    visible: true
   };
 }
 
@@ -218,13 +228,16 @@ export function DirectMessageHero({
         </div>
 
         <div className="dm-hero-actions">
-          <button
-            className="primary-button dm-hero-button"
-            onClick={friendAction.action}
-            type="button"
-          >
-            <span>{friendAction.label}</span>
-          </button>
+          {friendAction.visible ? (
+            <button
+              className="primary-button dm-hero-button"
+              disabled={friendAction.disabled}
+              onClick={friendAction.action}
+              type="button"
+            >
+              <span>{friendAction.label}</span>
+            </button>
+          ) : null}
           <button
             className="ghost-button dm-hero-button"
             onClick={() => onBlockUser?.(profile)}
@@ -279,14 +292,17 @@ export function DirectMessageSidebar({
 
       <div className="dm-sidebar-body">
         <div className="dm-sidebar-actions">
-          <button
-            aria-label="Gestion social"
-            className="ghost-button icon-only dm-sidebar-round"
-            onClick={friendAction.action}
-            type="button"
-          >
-            <Icon name="userAdd" />
-          </button>
+          {friendAction.visible ? (
+            <button
+              aria-label={friendAction.label}
+              className="ghost-button icon-only dm-sidebar-round"
+              disabled={friendAction.disabled}
+              onClick={friendAction.action}
+              type="button"
+            >
+              <Icon name="userAdd" />
+            </button>
+          ) : null}
           <button
             aria-label="Mas acciones"
             className="ghost-button icon-only dm-sidebar-round"

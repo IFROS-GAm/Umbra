@@ -46,6 +46,7 @@ export function VoiceRoomStage({
   onToggleVoiceState,
   shareMenuNode,
   voiceMenu,
+  voiceInputLevel,
   voiceStageParticipants,
   voiceState,
   workspace
@@ -79,7 +80,7 @@ export function VoiceRoomStage({
         {voiceStageParticipants.length ? (
           voiceStageParticipants.map((user) => (
             <button
-              className={`voice-stage-tile ${user.isStreaming ? "streaming" : ""}`}
+              className={`voice-stage-tile ${user.isStreaming ? "streaming" : ""} ${user.isSpeaking ? "speaking" : ""}`.trim()}
               key={user.id}
               onClick={(event) => onOpenProfileCard(event, user, user.display_name)}
               style={user.stageStyle}
@@ -118,6 +119,9 @@ export function VoiceRoomStage({
                 <strong>{user.display_name || user.username}</strong>
                 {user.id === workspace.current_user.id && voiceState.micMuted ? (
                   <Icon name="micOff" size={14} />
+                ) : null}
+                {user.id === workspace.current_user.id && !voiceState.micMuted ? (
+                  <span className="voice-stage-level-chip">{Math.round(voiceInputLevel)}%</span>
                 ) : null}
               </div>
             </button>

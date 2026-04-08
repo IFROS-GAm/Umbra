@@ -207,6 +207,186 @@ export function getDefaultGuildChannel(channels = [], guildId) {
   );
 }
 
+function normalizeParentId(parentId) {
+  return parentId || null;
+}
+
+function sortChannelsByPosition(channels = []) {
+  return [...channels].sort((left, right) => Number(left.position || 0) - Number(right.position || 0));
+}
+
+export function buildChannelMovePatchPlan({
+  channelId,
+  channels = [],
+  guildId,
+  parentId = null,
+  placement = "after",
+  relativeToChannelId = null
+}) {
+  const guildChannels = channels.filter((channel) => channel.guild_id === guildId);
+  const draggedChannel = guildChannels.find((channel) => channel.id === channelId);
+
+  if (!draggedChannel) {
+    throw new Error("Canal no encontrado.");
+  }
+
+  if (isGuildCategoryChannel(draggedChannel)) {
+    throw new Error("Las categorias no se pueden reordenar desde aqui.");
+  }
+
+  const nextParentId = normalizeParentId(parentId);
+  const currentParentId = normalizeParentId(draggedChannel.parent_id);
+
+  if (nextParentId) {
+    const parentChannel = guildChannels.find((channel) => channel.id === nextParentId);
+    if (!parentChannel || !isGuildCategoryChannel(parentChannel)) {
+      throw new Error("La categoria seleccionada no existe.");
+    }
+  }
+
+  const referenceChannel = relativeToChannelId
+    ? guildChannels.find((channel) => channel.id === relativeToChannelId)
+    : null;
+
+  if (relativeToChannelId && !referenceChannel) {
+    throw new Error("No se encontro el canal de referencia.");
+  }
+
+  if (referenceChannel && isGuildCategoryChannel(referenceChannel)) {
+    throw new Error("El canal de referencia no es valido.");
+  }
+
+  if (
+    referenceChannel &&
+    normalizeParentId(referenceChannel.parent_id) !== nextParentId
+  ) {
+    throw new Error("El canal de referencia no pertenece a ese grupo.");
+  }
+
+  const targetSiblings = sortChannelsByPosition(
+    guildChannels.filter(
+      (channel) =>
+        channel.id !== draggedChannel.id &&
+        !isGuildCategoryChannel(channel) &&
+        normalizeParentId(channel.parent_id) === nextParentId
+    )
+  );
+
+  let insertIndex = targetSiblings.length;
+  if (referenceChannel) {
+    const referenceIndex = targetSiblings.findIndex((channel) => channel.id === referenceChannel.id);
+    if (referenceIndex === -1) {
+      throw new Error("No se pudo calcular la nueva posicion.");
+    }
+
+    insertIndex = placement === "before" ? referenceIndex : referenceIndex + 1;
+  }
+
+  const reorderedTargetSiblings = [...targetSiblings];
+  reorderedTargetSiblings.splice(insertIndex, 0, draggedChannel);
+
+  const patches = [];
+
+  const queuePatch = (channel, position, nextParent = normalizeParentId(channel.parent_id)) => {
+    if (
+      Number(channel.position || 0) === Number(position) &&
+      normalizeParentId(channel.parent_id) === normalizeParentId(nextParent)
+    ) {
+      return;
+    }
+
+    patches.push({
+      id: channel.id,
+      parent_id: normalizeParentId(nextParent),
+      position
+    });
+  };
+
+  reorderedTargetSiblings.forEach((channel, index) => {
+    queuePatch(channel, index, nextParentId);
+  });
+
+  if (currentParentId !== nextParentId) {
+    const reorderedSourceSiblings = sortChannelsByPosition(
+      guildChannels.filter(
+        (channel) =>
+          channel.id !== draggedChannel.id &&
+          !isGuildCategoryChannel(channel) &&
+          normalizeParentId(channel.parent_id) === currentParentId
+      )
+    );
+
+    reorderedSourceSiblings.forEach((channel, index) => {
+      queuePatch(channel, index, currentParentId);
+    });
+  }
+
+  return patches;
+}
+
+function sortGuildMembershipsByPosition(memberships = []) {
+  return [...memberships].sort((left, right) => {
+    const positionDiff = Number(left.position || 0) - Number(right.position || 0);
+    if (positionDiff !== 0) {
+      return positionDiff;
+    }
+
+    const leftJoined = left.joined_at ? new Date(left.joined_at).getTime() : 0;
+    const rightJoined = right.joined_at ? new Date(right.joined_at).getTime() : 0;
+    if (leftJoined !== rightJoined) {
+      return leftJoined - rightJoined;
+    }
+
+    return String(left.guild_id || "").localeCompare(String(right.guild_id || ""), "es");
+  });
+}
+
+export function buildGuildMovePatchPlan({
+  guildId,
+  guildMemberships = [],
+  placement = "after",
+  relativeToGuildId = null,
+  userId
+}) {
+  const memberships = sortGuildMembershipsByPosition(
+    guildMemberships.filter((membership) => membership.user_id === userId)
+  );
+
+  const draggedMembership = memberships.find((membership) => membership.guild_id === guildId);
+  if (!draggedMembership) {
+    throw new Error("No perteneces a este servidor.");
+  }
+
+  const remainingMemberships = memberships.filter((membership) => membership.guild_id !== guildId);
+  let insertIndex = remainingMemberships.length;
+
+  if (relativeToGuildId) {
+    const referenceIndex = remainingMemberships.findIndex(
+      (membership) => membership.guild_id === relativeToGuildId
+    );
+
+    if (referenceIndex === -1) {
+      throw new Error("No se encontro el servidor de referencia.");
+    }
+
+    insertIndex = placement === "before" ? referenceIndex : referenceIndex + 1;
+  }
+
+  const reorderedMemberships = [...remainingMemberships];
+  reorderedMemberships.splice(insertIndex, 0, draggedMembership);
+
+  return reorderedMemberships
+    .map((membership, index) => ({
+      guild_id: membership.guild_id,
+      position: index,
+      user_id: membership.user_id
+    }))
+    .filter((patch) => {
+      const current = memberships.find((membership) => membership.guild_id === patch.guild_id);
+      return Number(current?.position || 0) !== patch.position;
+    });
+}
+
 export function buildInvitePreview({
   channels = [],
   guild,
@@ -309,14 +489,24 @@ export function buildBootstrapState(db, userId) {
     userChannelMemberships.map((membership) => [membership.channel_id, membership])
   );
 
-  const guildMemberships = db.guild_members.filter(
-    (membership) => membership.user_id === viewerId
+  const guildMemberships = sortGuildMembershipsByPosition(
+    db.guild_members.filter((membership) => membership.user_id === viewerId)
   );
 
   const guilds = guildMemberships
-    .map((membership) => db.guilds.find((guild) => guild.id === membership.guild_id))
+    .map((membership) => {
+      const guild = db.guilds.find((item) => item.id === membership.guild_id);
+      if (!guild) {
+        return null;
+      }
+
+      return {
+        guild,
+        membership
+      };
+    })
     .filter(Boolean)
-    .map((guild) => {
+    .map(({ guild, membership }) => {
       const permissionBits = computePermissionBits({
         guilds: db.guilds,
         guildId: guild.id,
@@ -390,6 +580,7 @@ export function buildBootstrapState(db, userId) {
 
       return {
         ...guild,
+        position: Number(membership.position || 0),
         unread_count: channels.reduce(
           (sum, channel) => sum + Number(channel.unread_count || 0),
           0
@@ -434,13 +625,23 @@ export function buildBootstrapState(db, userId) {
           custom_status: profile.custom_status,
           bio: profile.bio
         }));
+      const otherParticipants = participants.filter(
+        (participant) => participant.id !== viewerId
+      );
+
+      if (channel.type === CHANNEL_TYPES.DM && otherParticipants.length < 1) {
+        return null;
+      }
+
+      if (channel.type === CHANNEL_TYPES.GROUP_DM && otherParticipants.length < 2) {
+        return null;
+      }
 
       const fallbackName =
         channel.type === CHANNEL_TYPES.DM
-          ? participants.find((participant) => participant.id !== viewerId)?.username ||
+          ? otherParticipants[0]?.username ||
             "DM"
-          : participants
-              .filter((participant) => participant.id !== viewerId)
+          : otherParticipants
               .map((participant) => participant.username)
               .join(", ");
 
@@ -461,6 +662,7 @@ export function buildBootstrapState(db, userId) {
         participants
       };
     })
+    .filter(Boolean)
     .sort((a, b) => {
       const aDate = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
       const bDate = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;

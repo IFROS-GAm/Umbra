@@ -40,34 +40,44 @@ function getRelationshipAction(profile, handlers) {
   if (!profile) {
     return {
       action: () => {},
-      label: "Enviar solicitud"
+      disabled: true,
+      label: "Enviar solicitud de amigo",
+      visible: true
     };
   }
 
   if (profile.isFriend) {
     return {
-      action: () => handlers.onShowNotice?.("Ya son sombras."),
-      label: "Amigos"
+      action: null,
+      disabled: true,
+      label: "Amigos",
+      visible: false
     };
   }
 
   if (profile.friendRequestState === "received") {
     return {
       action: () => handlers.onAcceptFriendRequest?.(profile),
-      label: "Aceptar solicitud"
+      disabled: false,
+      label: "Aceptar solicitud",
+      visible: true
     };
   }
 
   if (profile.friendRequestState === "sent") {
     return {
-      action: () => handlers.onCancelFriendRequest?.(profile),
-      label: "Cancelar solicitud"
+      action: () => {},
+      disabled: true,
+      label: "Enviado",
+      visible: true
     };
   }
 
   return {
     action: () => handlers.onAddFriend?.(profile),
-    label: "Enviar solicitud"
+    disabled: false,
+    label: "Enviar solicitud de amigo",
+    visible: true
   };
 }
 
@@ -179,14 +189,17 @@ export function UserProfileModal({
               <Icon name="mail" />
               <span>Enviar mensaje</span>
             </button>
-            <button
-              className="ghost-button"
-              onClick={relationshipAction.action}
-              type="button"
-            >
-              <Icon name="userAdd" />
-              <span>{relationshipAction.label}</span>
-            </button>
+            {relationshipAction.visible ? (
+              <button
+                className="ghost-button"
+                disabled={relationshipAction.disabled}
+                onClick={relationshipAction.action}
+                type="button"
+              >
+                <Icon name="userAdd" />
+                <span>{relationshipAction.label}</span>
+              </button>
+            ) : null}
             <button className="ghost-button danger" onClick={() => onBlockUser?.(profile)} type="button">
               <span>Bloquear</span>
             </button>

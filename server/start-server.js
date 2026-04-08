@@ -586,6 +586,44 @@ export async function startServer(options = {}) {
     }
   });
 
+  app.patch("/api/guilds/:guildId/channels/:channelId/move", requireViewer, async (req, res) => {
+    try {
+      const channel = await store.moveChannel({
+        channelId: req.params.channelId,
+        createdBy: req.viewer.id,
+        guildId: req.params.guildId,
+        parentId: req.body.parentId || null,
+        placement: req.body.placement || "after",
+        relativeToChannelId: req.body.relativeToChannelId || null
+      });
+
+      emitNavigationUpdate({
+        channelId: req.params.channelId,
+        guildId: req.params.guildId,
+        type: "channel:move"
+      });
+
+      res.json({ channel });
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.patch("/api/guilds/:guildId/move", requireViewer, async (req, res) => {
+    try {
+      const guild = await store.moveGuild({
+        createdBy: req.viewer.id,
+        guildId: req.params.guildId,
+        placement: req.body.placement || "after",
+        relativeToGuildId: req.body.relativeToGuildId || null
+      });
+
+      res.json({ guild });
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
   app.post("/api/guilds/:guildId/invites", requireViewer, async (req, res) => {
     try {
       const invite = await store.createInvite({
@@ -594,6 +632,32 @@ export async function startServer(options = {}) {
       });
 
       res.status(201).json({ invite });
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.get("/api/guilds/:guildId/invites", requireViewer, async (req, res) => {
+    try {
+      const invites = await store.listGuildInvites({
+        guildId: req.params.guildId,
+        userId: req.viewer.id
+      });
+
+      res.json({ invites });
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.get("/api/guilds/:guildId/roles", requireViewer, async (req, res) => {
+    try {
+      const roles = await store.listGuildRoles({
+        guildId: req.params.guildId,
+        userId: req.viewer.id
+      });
+
+      res.json({ roles });
     } catch (error) {
       sendError(res, error);
     }
@@ -625,6 +689,27 @@ export async function startServer(options = {}) {
       });
 
       res.status(201).json({ channel });
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.patch("/api/dms/:channelId/visibility", requireViewer, async (req, res) => {
+    try {
+      const payload = await store.setDmVisibility({
+        channelId: req.params.channelId,
+        hidden: Boolean(req.body.hidden),
+        userId: req.viewer.id
+      });
+
+      emitNavigationUpdate({
+        channelId: req.params.channelId,
+        hidden: payload.hidden,
+        type: "dm:visibility",
+        userId: req.viewer.id
+      });
+
+      res.json(payload);
     } catch (error) {
       sendError(res, error);
     }
@@ -765,7 +850,11 @@ export async function startServer(options = {}) {
         bannerImageUrl: req.body.bannerImageUrl,
         bio: req.body.bio,
         customStatus: req.body.customStatus,
+        privacySettings: req.body.privacySettings,
         profileColor: req.body.profileColor,
+        recoveryAccount: req.body.recoveryAccount,
+        recoveryProvider: req.body.recoveryProvider,
+        socialLinks: req.body.socialLinks,
         userId: req.viewer.id,
         username: req.body.username
       });
@@ -776,6 +865,33 @@ export async function startServer(options = {}) {
         userId: req.viewer.id
       });
       res.json({ user });
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.post("/api/users/me/email/resend-confirmation", requireViewer, async (req, res) => {
+    try {
+      const payload = await store.resendEmailConfirmation({
+        emailRedirectTo: req.body.emailRedirectTo,
+        userId: req.viewer.id
+      });
+
+      res.json(payload);
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.post("/api/users/me/email/send-check", requireViewer, async (req, res) => {
+    try {
+      const payload = await store.sendEmailCheck({
+        emailRedirectTo: req.body.emailRedirectTo,
+        target: req.body.target,
+        userId: req.viewer.id
+      });
+
+      res.json(payload);
     } catch (error) {
       sendError(res, error);
     }

@@ -3,6 +3,46 @@ import React from "react";
 import { Avatar } from "../Avatar.jsx";
 import { Icon } from "../Icon.jsx";
 
+function getDirectFriendAction(profile) {
+  if (!profile) {
+    return {
+      disabled: true,
+      label: "Enviar solicitud de amigo",
+      visible: true
+    };
+  }
+
+  if (profile.isFriend) {
+    return {
+      disabled: true,
+      label: "Ya son amigos",
+      visible: false
+    };
+  }
+
+  if (profile.friendRequestState === "received") {
+    return {
+      disabled: false,
+      label: "Aceptar solicitud",
+      visible: true
+    };
+  }
+
+  if (profile.friendRequestState === "sent") {
+    return {
+      disabled: true,
+      label: "Enviado",
+      visible: true
+    };
+  }
+
+  return {
+    disabled: false,
+    label: "Enviar solicitud de amigo",
+    visible: true
+  };
+}
+
 export function ChatHeader({
   directMessageProfile,
   headerActionsRef,
@@ -18,6 +58,8 @@ export function ChatHeader({
   subtitle,
   title
 }) {
+  const directFriendAction = getDirectFriendAction(directMessageProfile);
+
   return (
     <header className="chat-header">
       <div className="chat-title-block">
@@ -78,16 +120,19 @@ export function ChatHeader({
                 >
                   <Icon name="pin" />
                 </button>
-                <button
-                  aria-label="Anadir amigo"
-                  className="ghost-button icon-only tooltip-anchor"
-                  data-tooltip="Anadir amigo"
-                  data-tooltip-position="bottom"
-                  onClick={() => onAddFriend?.(directMessageProfile)}
-                  type="button"
-                >
-                  <Icon name="userAdd" />
-                </button>
+                {directFriendAction.visible ? (
+                  <button
+                    aria-label={directFriendAction.label}
+                    className="ghost-button icon-only tooltip-anchor"
+                    data-tooltip={directFriendAction.label}
+                    data-tooltip-position="bottom"
+                    disabled={directFriendAction.disabled}
+                    onClick={() => onAddFriend?.(directMessageProfile)}
+                    type="button"
+                  >
+                    <Icon name="userAdd" />
+                  </button>
+                ) : null}
                 <button
                   aria-label={
                     membersPanelVisible

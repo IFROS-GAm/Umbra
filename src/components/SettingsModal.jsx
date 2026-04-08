@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
-import { resolveAssetUrl } from "../api.js";
+import { api, resolveAssetUrl } from "../api.js";
 import { STATUS_OPTIONS, sanitizeUsername } from "../utils.js";
 import { Avatar } from "./Avatar.jsx";
 import { AvatarCropModal } from "./AvatarCropModal.jsx";
@@ -17,15 +17,42 @@ const PROFILE_COLOR_PRESETS = [
   "#64748B",
 ];
 
+const SOCIAL_PLATFORM_OPTIONS = [
+  { value: "website", label: "Sitio web", placeholder: "https://tu-sitio.com" },
+  { value: "instagram", label: "Instagram", placeholder: "https://instagram.com/tu_usuario" },
+  { value: "youtube", label: "YouTube", placeholder: "https://youtube.com/@tu_canal" },
+  { value: "spotify", label: "Spotify", placeholder: "https://open.spotify.com/user/..." },
+  { value: "twitch", label: "Twitch", placeholder: "https://twitch.tv/tu_canal" },
+  { value: "tiktok", label: "TikTok", placeholder: "https://tiktok.com/@tu_usuario" },
+  { value: "x", label: "X / Twitter", placeholder: "https://x.com/tu_usuario" },
+  { value: "discord", label: "Discord", placeholder: "https://discord.gg/tu_invite" }
+];
+
+const DEFAULT_PRIVACY_SETTINGS = {
+  allowDirectMessages: true,
+  showActivityStatus: true,
+  showMemberSince: true,
+  showSocialLinks: true
+};
+
+const RECOVERY_PROVIDER_OPTIONS = [
+  { value: "", label: "Sin cuenta de recuperacion", placeholder: "No configurada" },
+  { value: "google", label: "Google", placeholder: "tu-cuenta@gmail.com" },
+  { value: "outlook", label: "Microsoft / Outlook", placeholder: "tu-cuenta@outlook.com" },
+  { value: "apple", label: "Apple", placeholder: "Apple ID o correo asociado" },
+  { value: "discord", label: "Discord", placeholder: "usuario, enlace o handle" },
+  { value: "other", label: "Otra", placeholder: "Correo, usuario o enlace de respaldo" }
+];
+
 const SETTINGS_NAV_GROUPS = [
   {
     title: "Ajustes de usuario",
     items: [
       { id: "security", icon: "profile", label: "Mi cuenta", active: true },
-      { id: "social", icon: "sparkles", label: "Contenido y redes", disabled: true },
-      { id: "privacy", icon: "help", label: "Datos y privacidad", disabled: true },
-      { id: "devices", icon: "screenShare", label: "Dispositivos", disabled: true },
-      { id: "connections", icon: "mail", label: "Conexiones", disabled: true },
+      { id: "social", icon: "sparkles", label: "Contenido y redes", active: false },
+      { id: "privacy", icon: "help", label: "Datos y privacidad", active: false },
+      { id: "devices", icon: "screenShare", label: "Dispositivos", active: false },
+      { id: "connections", icon: "mail", label: "Conexiones", active: false },
     ]
   },
   {
@@ -87,6 +114,89 @@ function maskEmail(email) {
   return `${name.slice(0, 2)}${"*".repeat(Math.max(4, name.length - 2))}@${domain}`;
 }
 
+function isEmailAddress(candidate = "") {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(candidate || "").trim());
+}
+
+function ensureUrlProtocol(candidate = "") {
+  const trimmed = String(candidate || "").trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+
+  return `https://${trimmed}`;
+}
+
+function normalizeSocialLinks(entries = []) {
+  const source = Array.isArray(entries) ? entries : [];
+  return source
+    .map((entry, index) => ({
+      id: String(entry?.id || `social-${index}`),
+      label: String(entry?.label || "").trim().slice(0, 48),
+      platform: SOCIAL_PLATFORM_OPTIONS.some((option) => option.value === entry?.platform)
+        ? entry.platform
+        : "website",
+      url: ensureUrlProtocol(entry?.url || "")
+    }))
+    .filter((entry) => entry.label || entry.url)
+    .slice(0, 8);
+}
+
+function buildSocialLinkDrafts(entries = []) {
+  const source = Array.isArray(entries) ? entries : [];
+  return source.slice(0, 8).map((entry, index) => ({
+    id: String(entry?.id || `social-${index}`),
+    label: String(entry?.label || "").trim().slice(0, 48),
+    platform: SOCIAL_PLATFORM_OPTIONS.some((option) => option.value === entry?.platform)
+      ? entry.platform
+      : "website",
+    url: String(entry?.url || "").trim().slice(0, 240)
+  }));
+}
+
+function normalizePrivacySettings(settings = {}) {
+  const source = settings && typeof settings === "object" ? settings : {};
+  return {
+    ...DEFAULT_PRIVACY_SETTINGS,
+    allowDirectMessages: source.allowDirectMessages !== false,
+    showActivityStatus: source.showActivityStatus !== false,
+    showMemberSince: source.showMemberSince !== false,
+    showSocialLinks: source.showSocialLinks !== false
+  };
+}
+
+function normalizeRecoveryProvider(provider = "") {
+  const normalized = String(provider || "").trim().toLowerCase();
+  return RECOVERY_PROVIDER_OPTIONS.some((option) => option.value === normalized)
+    ? normalized
+    : "";
+}
+
+function normalizeRecoveryAccount(value = "") {
+  return String(value || "").trim().slice(0, 160);
+}
+
+function settingsPanelTitle(tab) {
+  switch (tab) {
+    case "social":
+      return "Contenido y redes";
+    case "privacy":
+      return "Datos y privacidad";
+    case "devices":
+      return "Dispositivos";
+    case "connections":
+      return "Conexiones";
+    case "status":
+      return "Estado";
+    default:
+      return "Mi cuenta";
+  }
+}
+
 export function SettingsModal({
   dmCount,
   guildCount,
@@ -106,6 +216,7 @@ export function SettingsModal({
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
   const [search, setSearch] = useState("");
+  const [connectionsBusy, setConnectionsBusy] = useState("");
 
   const [avatarFile, setAvatarFile] = useState(null);
   const [avatarPreview, setAvatarPreview] = useState("");
@@ -114,6 +225,14 @@ export function SettingsModal({
   const [bannerFile, setBannerFile] = useState(null);
   const [bannerPreview, setBannerPreview] = useState("");
   const [clearBanner, setClearBanner] = useState(false);
+  const [deviceRefreshKey, setDeviceRefreshKey] = useState(0);
+  const [deviceState, setDeviceState] = useState({
+    audioinput: [],
+    audiooutput: [],
+    error: "",
+    loading: false,
+    videoinput: []
+  });
   const [avatarCropState, setAvatarCropState] = useState({
     file: null,
     imageUrl: "",
@@ -125,6 +244,10 @@ export function SettingsModal({
     bio: user.bio || "",
     customStatus: user.custom_status || "",
     profileColor: user.profile_color || "#5865F2",
+    privacySettings: normalizePrivacySettings(user.privacy_settings),
+    recoveryAccount: normalizeRecoveryAccount(user.recovery_account),
+    recoveryProvider: normalizeRecoveryProvider(user.recovery_provider),
+    socialLinks: buildSocialLinkDrafts(user.social_links),
     username: user.username || ""
   });
 
@@ -134,6 +257,10 @@ export function SettingsModal({
       bio: user.bio || "",
       customStatus: user.custom_status || "",
       profileColor: user.profile_color || "#5865F2",
+      privacySettings: normalizePrivacySettings(user.privacy_settings),
+      recoveryAccount: normalizeRecoveryAccount(user.recovery_account),
+      recoveryProvider: normalizeRecoveryProvider(user.recovery_provider),
+      socialLinks: buildSocialLinkDrafts(user.social_links),
       username: user.username || ""
     });
     setAvatarFile(null);
@@ -151,6 +278,7 @@ export function SettingsModal({
     setError("");
     setSaved("");
     setSaving(false);
+    setConnectionsBusy("");
   }, [user]);
 
   useEffect(() => {
@@ -158,6 +286,56 @@ export function SettingsModal({
       setError("");
     }
   }, [error]);
+
+  useEffect(() => {
+    if (tab !== "devices" || typeof navigator === "undefined" || !navigator.mediaDevices?.enumerateDevices) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function loadDevices() {
+      setDeviceState((previous) => ({
+        ...previous,
+        error: "",
+        loading: true
+      }));
+
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        if (cancelled) {
+          return;
+        }
+
+        setDeviceState({
+          audioinput: devices.filter((device) => device.kind === "audioinput"),
+          audiooutput: devices.filter((device) => device.kind === "audiooutput"),
+          error: "",
+          loading: false,
+          videoinput: devices.filter((device) => device.kind === "videoinput")
+        });
+      } catch (deviceError) {
+        if (cancelled) {
+          return;
+        }
+
+        setDeviceState({
+          audioinput: [],
+          audiooutput: [],
+          error: deviceError.message || "No se pudieron leer los dispositivos.",
+          loading: false,
+          videoinput: []
+        });
+      }
+    }
+
+    loadDevices();
+    navigator.mediaDevices.addEventListener?.("devicechange", loadDevices);
+    return () => {
+      cancelled = true;
+      navigator.mediaDevices.removeEventListener?.("devicechange", loadDevices);
+    };
+  }, [deviceRefreshKey, tab]);
 
   useEffect(() => {
     return () => {
@@ -288,6 +466,10 @@ export function SettingsModal({
 
       await onUpdateProfile({
         ...form,
+        privacySettings: normalizePrivacySettings(form.privacySettings),
+        recoveryAccount: normalizeRecoveryAccount(form.recoveryAccount),
+        recoveryProvider: normalizeRecoveryProvider(form.recoveryProvider),
+        socialLinks: normalizeSocialLinks(form.socialLinks),
         username: nextUsername,
         avatarFile,
         avatarUrl: clearAvatar ? "" : undefined,
@@ -311,6 +493,579 @@ export function SettingsModal({
       setSaving(false);
     }
   }
+
+  function updatePrivacySetting(key, checked) {
+    updateForm("privacySettings", {
+      ...normalizePrivacySettings(form.privacySettings),
+      [key]: checked
+    });
+  }
+
+  function updateSocialLink(index, key, value) {
+    const nextLinks = [...buildSocialLinkDrafts(form.socialLinks)];
+    nextLinks[index] = {
+      ...nextLinks[index],
+      [key]: value
+    };
+    updateForm("socialLinks", nextLinks);
+  }
+
+  function addSocialLink() {
+    updateForm("socialLinks", [
+      ...buildSocialLinkDrafts(form.socialLinks),
+      {
+        id: `social-${Date.now()}`,
+        label: "",
+        platform: "website",
+        url: ""
+      }
+    ]);
+  }
+
+  function removeSocialLink(index) {
+    updateForm(
+      "socialLinks",
+      buildSocialLinkDrafts(form.socialLinks).filter((_, itemIndex) => itemIndex !== index)
+    );
+  }
+
+  const visibleSocialLinks = buildSocialLinkDrafts(form.socialLinks);
+  const publicSocialLinks = normalizeSocialLinks(form.socialLinks);
+  const privacySettings = normalizePrivacySettings(form.privacySettings);
+  const panelTitle = settingsPanelTitle(tab);
+  const recoveryProvider = normalizeRecoveryProvider(form.recoveryProvider);
+  const recoveryProviderMeta =
+    RECOVERY_PROVIDER_OPTIONS.find((option) => option.value === recoveryProvider) ||
+    RECOVERY_PROVIDER_OPTIONS[0];
+  const emailConfirmed = Boolean(user.email_confirmed_at);
+  const recoveryAccount = normalizeRecoveryAccount(form.recoveryAccount);
+  const recoveryLooksLikeEmail = isEmailAddress(recoveryAccount);
+
+  async function handleSendPrimaryEmailCheck() {
+    if (!user.email) {
+      setError("No hay un correo principal asociado a esta cuenta.");
+      return;
+    }
+
+    setConnectionsBusy("primary-email");
+    setError("");
+    setSaved("");
+
+    try {
+      const payload = await api.sendEmailCheck({
+        emailRedirectTo:
+          typeof window !== "undefined" ? window.location.origin : undefined,
+        target: "primary"
+      });
+
+      setSaved(
+        payload?.kind === "confirmation"
+          ? "Correo de confirmacion enviado al principal."
+          : "Correo de prueba enviado al principal."
+      );
+    } catch (sendError) {
+      setError(sendError.message || "No se pudo enviar la comprobacion al correo principal.");
+    } finally {
+      setConnectionsBusy("");
+    }
+  }
+
+  async function handleSendRecoveryEmailCheck() {
+    if (!recoveryAccount) {
+      setError("Configura primero una cuenta de respaldo.");
+      return;
+    }
+
+    if (!recoveryLooksLikeEmail) {
+      setError("El respaldo debe ser un correo valido para poder recibir una comprobacion.");
+      return;
+    }
+
+    setConnectionsBusy("recovery-email");
+    setError("");
+    setSaved("");
+
+    try {
+      await api.sendEmailCheck({
+        emailRedirectTo:
+          typeof window !== "undefined" ? window.location.origin : undefined,
+        target: "recovery"
+      });
+
+      setSaved("Correo de prueba enviado al respaldo.");
+    } catch (sendError) {
+      setError(sendError.message || "No se pudo enviar la comprobacion al correo de respaldo.");
+    } finally {
+      setConnectionsBusy("");
+    }
+  }
+
+  async function handleConnectionsSave() {
+    setConnectionsBusy("recovery");
+    setError("");
+    setSaved("");
+
+    try {
+      await onUpdateProfile({
+        avatarHue: form.avatarHue,
+        bio: form.bio,
+        customStatus: form.customStatus,
+        privacySettings,
+        profileColor: normalizedProfileColor,
+        recoveryAccount: normalizeRecoveryAccount(form.recoveryAccount),
+        recoveryProvider,
+        socialLinks: publicSocialLinks,
+        username: sanitizeUsername(form.username)
+      });
+
+      setSaved("Conexiones actualizadas.");
+    } catch (saveError) {
+      setError(saveError.message || "No se pudieron guardar las conexiones.");
+    } finally {
+      setConnectionsBusy("");
+    }
+  }
+
+  const socialSettingsContent = (
+    <div className="settings-stack">
+      <section className="settings-card">
+        <div className="settings-card-title">
+          <h3>Contenido y redes</h3>
+          <span>Lo que publiques aqui aparecera en Ver perfil completo.</span>
+        </div>
+
+        <div className="settings-social-list">
+          {visibleSocialLinks.map((link, index) => {
+            const platformMeta =
+              SOCIAL_PLATFORM_OPTIONS.find((option) => option.value === link.platform) ||
+              SOCIAL_PLATFORM_OPTIONS[0];
+
+            return (
+              <div className="settings-social-row" key={link.id}>
+                <label className="settings-field">
+                  <span>Plataforma</span>
+                  <select
+                    className="settings-inline-select"
+                    onChange={(event) => updateSocialLink(index, "platform", event.target.value)}
+                    value={link.platform}
+                  >
+                    {SOCIAL_PLATFORM_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="settings-field">
+                  <span>Etiqueta visible</span>
+                  <input
+                    maxLength={48}
+                    onChange={(event) => updateSocialLink(index, "label", event.target.value)}
+                    placeholder="Tu nombre o handle"
+                    value={link.label}
+                  />
+                </label>
+
+                <label className="settings-field">
+                  <span>Enlace</span>
+                  <input
+                    onChange={(event) => updateSocialLink(index, "url", event.target.value)}
+                    placeholder={platformMeta.placeholder}
+                    value={link.url}
+                  />
+                </label>
+
+                <button
+                  aria-label="Eliminar red"
+                  className="ghost-button icon-only"
+                  onClick={() => removeSocialLink(index)}
+                  type="button"
+                >
+                  <Icon name="trash" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
+        {!visibleSocialLinks.length ? (
+          <div className="settings-empty-state">
+            <strong>Todavia no hay redes visibles.</strong>
+            <span>Agrega las conexiones que quieres que aparezcan en tu perfil completo.</span>
+          </div>
+        ) : null}
+
+        <div className="settings-form-actions inline">
+          <button
+            className="ghost-button"
+            disabled={visibleSocialLinks.length >= 8}
+            onClick={addSocialLink}
+            type="button"
+          >
+            <Icon name="add" />
+            <span>Anadir red</span>
+          </button>
+          <button className="primary-button" disabled={saving} onClick={handleProfileSave} type="button">
+            <Icon name="save" />
+            <span>{saving ? "Guardando..." : "Guardar redes"}</span>
+          </button>
+        </div>
+
+        {visibleError ? <p className="form-error settings-form-error">{visibleError}</p> : null}
+        {saved ? <p className="settings-form-success">{saved}</p> : null}
+      </section>
+    </div>
+  );
+
+  const privacySettingsContent = (
+    <div className="settings-stack">
+      <section className="settings-card">
+        <div className="settings-card-title">
+          <h3>Datos y privacidad</h3>
+          <span>Controla que partes de tu perfil completo se muestran al resto.</span>
+        </div>
+
+        <div className="settings-toggle-list">
+          <label className="settings-action-row settings-toggle-row">
+            <div className="settings-row-copy">
+              <div>
+                <strong>Mostrar redes y conexiones</strong>
+                <p>Permite que Contenido y redes se vea dentro de tu perfil completo.</p>
+              </div>
+            </div>
+            <input
+              checked={privacySettings.showSocialLinks}
+              onChange={(event) => updatePrivacySetting("showSocialLinks", event.target.checked)}
+              type="checkbox"
+            />
+          </label>
+
+          <label className="settings-action-row settings-toggle-row">
+            <div className="settings-row-copy">
+              <div>
+                <strong>Mostrar fecha de miembro desde</strong>
+                <p>Usa la fecha de creacion de tu cuenta dentro del perfil completo.</p>
+              </div>
+            </div>
+            <input
+              checked={privacySettings.showMemberSince}
+              onChange={(event) => updatePrivacySetting("showMemberSince", event.target.checked)}
+              type="checkbox"
+            />
+          </label>
+
+          <label className="settings-action-row settings-toggle-row">
+            <div className="settings-row-copy">
+              <div>
+                <strong>Mostrar estado de actividad</strong>
+                <p>Deja visible tu estado personalizado y actividad en el perfil.</p>
+              </div>
+            </div>
+            <input
+              checked={privacySettings.showActivityStatus}
+              onChange={(event) => updatePrivacySetting("showActivityStatus", event.target.checked)}
+              type="checkbox"
+            />
+          </label>
+
+          <label className="settings-action-row settings-toggle-row">
+            <div className="settings-row-copy">
+              <div>
+                <strong>Permitir mensajes directos desde perfil</strong>
+                <p>Guarda tu preferencia para futuros accesos directos a DM.</p>
+              </div>
+            </div>
+            <input
+              checked={privacySettings.allowDirectMessages}
+              onChange={(event) => updatePrivacySetting("allowDirectMessages", event.target.checked)}
+              type="checkbox"
+            />
+          </label>
+        </div>
+
+        <div className="settings-form-actions inline">
+          <button className="primary-button" disabled={saving} onClick={handleProfileSave} type="button">
+            <Icon name="save" />
+            <span>{saving ? "Guardando..." : "Guardar privacidad"}</span>
+          </button>
+        </div>
+
+        {visibleError ? <p className="form-error settings-form-error">{visibleError}</p> : null}
+        {saved ? <p className="settings-form-success">{saved}</p> : null}
+      </section>
+    </div>
+  );
+
+  const deviceGroups = [
+    {
+      items: deviceState.audioinput,
+      key: "audioinput",
+      label: "Microfonos"
+    },
+    {
+      items: deviceState.audiooutput,
+      key: "audiooutput",
+      label: "Salidas de audio"
+    },
+    {
+      items: deviceState.videoinput,
+      key: "videoinput",
+      label: "Camaras"
+    }
+  ];
+
+  const devicesSettingsContent = (
+    <div className="settings-stack">
+      <section className="settings-card">
+        <div className="settings-card-title">
+          <h3>Dispositivos</h3>
+          <span>Lectura local de microfonos, salidas y camaras disponibles en este equipo.</span>
+        </div>
+
+        <div className="settings-form-actions inline">
+          <button
+            className="ghost-button"
+            onClick={() => setDeviceRefreshKey((previous) => previous + 1)}
+            type="button"
+          >
+            <Icon name="refresh" />
+            <span>{deviceState.loading ? "Actualizando..." : "Actualizar lista"}</span>
+          </button>
+        </div>
+
+        {deviceState.error ? (
+          <p className="form-error settings-form-error">{deviceState.error}</p>
+        ) : null}
+
+        <div className="settings-device-grid">
+          {deviceGroups.map((group) => (
+            <section className="settings-device-card" key={group.key}>
+              <strong>{group.label}</strong>
+              <span>{group.items.length} detectados</span>
+              <div className="settings-device-list">
+                {group.items.length ? (
+                  group.items.map((device, index) => (
+                    <div
+                      className="settings-device-item"
+                      key={device.deviceId || `${group.key}-${index}`}
+                    >
+                      <Icon
+                        name={
+                          group.key === "videoinput"
+                            ? "camera"
+                            : group.key === "audiooutput"
+                              ? "headphones"
+                              : "mic"
+                        }
+                      />
+                      <div>
+                        <strong>{device.label || `${group.label} ${index + 1}`}</strong>
+                        <small>
+                          {device.deviceId === "default"
+                            ? "Predeterminado del sistema"
+                            : "Detectado localmente"}
+                        </small>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="settings-empty-state compact">
+                    <strong>Sin dispositivos visibles.</strong>
+                    <span>Permite acceso a microfono o camara para ver etiquetas completas.</span>
+                  </div>
+                )}
+              </div>
+            </section>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+
+  const connectionsSettingsContent = (
+    <div className="settings-stack">
+      <section className="settings-card">
+        <div className="settings-card-title">
+          <h3>Conexiones</h3>
+          <span>Administra la verificacion del correo y una cuenta de recuperacion de Umbra.</span>
+        </div>
+
+        <div className="settings-grid">
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <div>
+                <strong>Proveedor de acceso</strong>
+                <p>{String(user.auth_provider || "email").toUpperCase()}</p>
+              </div>
+            </div>
+            <span className="user-profile-chip muted">{user.email ? "Conectado" : "Sin correo"}</span>
+          </div>
+
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <div>
+                <strong>Correo actual</strong>
+                <p>{maskEmail(user.email)}</p>
+              </div>
+            </div>
+            <span className={`user-profile-chip ${emailConfirmed ? "" : "muted"}`}>
+              {emailConfirmed ? "Confirmado" : "Sin confirmar"}
+            </span>
+          </div>
+
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <div>
+                <strong>Confirmacion de correo</strong>
+                <p>
+                  {emailConfirmed
+                    ? "Tu correo principal ya esta confirmado. Puedes mandar un correo de prueba si quieres revisar la entrega."
+                    : "Puedes reenviar el correo de verificacion al principal para comprobar que el flujo funciona."}
+                </p>
+              </div>
+            </div>
+            <button
+              className="ghost-button"
+              disabled={connectionsBusy === "primary-email" || !user.email}
+              onClick={handleSendPrimaryEmailCheck}
+              type="button"
+            >
+              <Icon name="mail" />
+              <span>
+                {connectionsBusy === "primary-email"
+                  ? "Enviando..."
+                  : emailConfirmed
+                    ? "Enviar prueba"
+                    : "Enviar confirmacion"}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <div className="settings-connection-stack">
+          <div className="settings-card-title">
+            <h3>Cuenta de recuperacion</h3>
+            <span>
+              Guarda una via de respaldo como Google u otro servicio para futuros flujos de recuperacion.
+            </span>
+          </div>
+
+          <div className="settings-social-row compact">
+            <label className="settings-field">
+              <span>Proveedor</span>
+              <select
+                className="settings-inline-select"
+                onChange={(event) => updateForm("recoveryProvider", event.target.value)}
+                value={recoveryProvider}
+              >
+                {RECOVERY_PROVIDER_OPTIONS.map((option) => (
+                  <option key={option.value || "none"} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="settings-field">
+              <span>Cuenta o correo</span>
+              <input
+                onChange={(event) => updateForm("recoveryAccount", event.target.value)}
+                placeholder={recoveryProviderMeta.placeholder}
+                value={form.recoveryAccount}
+              />
+            </label>
+          </div>
+
+          <div className="settings-empty-state compact">
+            <strong>
+              {recoveryProvider
+                ? `Respaldo actual: ${recoveryProviderMeta.label}`
+                : "Todavia no hay una cuenta de recuperacion guardada."}
+            </strong>
+            <span>
+              {recoveryProvider && recoveryAccount
+                ? recoveryAccount
+                : "Puedes dejar un correo, usuario o enlace de una cuenta externa como referencia segura."}
+            </span>
+          </div>
+
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <div>
+                <strong>Comprobacion del respaldo</strong>
+                <p>
+                  {recoveryLooksLikeEmail
+                    ? "Envía un correo de prueba al respaldo para validar que siga disponible."
+                    : "Si quieres probar el respaldo por correo, guardalo como un email valido."}
+                </p>
+              </div>
+            </div>
+            <button
+              className="ghost-button"
+              disabled={connectionsBusy === "recovery-email" || !recoveryLooksLikeEmail}
+              onClick={handleSendRecoveryEmailCheck}
+              type="button"
+            >
+              <Icon name="mail" />
+              <span>{connectionsBusy === "recovery-email" ? "Enviando..." : "Enviar prueba"}</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="settings-connection-stack">
+          <div className="settings-card-title">
+            <h3>Redes visibles ahora</h3>
+            <span>
+              {privacySettings.showSocialLinks
+                ? "Esto es lo que la gente vera en tu perfil completo."
+                : "Las redes estan ocultas por tu configuracion de privacidad."}
+            </span>
+          </div>
+          {privacySettings.showSocialLinks && publicSocialLinks.length ? (
+            <div className="profile-detail-connections">
+              {publicSocialLinks.map((connection) => (
+                <div className="profile-detail-connection" key={connection.id}>
+                  <div className="profile-detail-connection-main">
+                    <span className="profile-detail-connection-icon">
+                      <Icon name="link" size={16} />
+                    </span>
+                    <div className="profile-detail-connection-copy">
+                      <strong>{connection.label || connection.url}</strong>
+                      <small>
+                        {SOCIAL_PLATFORM_OPTIONS.find((item) => item.value === connection.platform)?.label || "Enlace"}
+                      </small>
+                    </div>
+                  </div>
+                  <Icon name="arrowRight" size={14} />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="settings-empty-state">
+              <strong>No hay conexiones publicas configuradas.</strong>
+              <span>Usa Contenido y redes para agregar tus enlaces visibles.</span>
+            </div>
+          )}
+        </div>
+
+        <div className="settings-form-actions inline">
+          <button
+            className="primary-button"
+            disabled={connectionsBusy === "recovery"}
+            onClick={handleConnectionsSave}
+            type="button"
+          >
+            <Icon name="save" />
+            <span>{connectionsBusy === "recovery" ? "Guardando..." : "Guardar conexiones"}</span>
+          </button>
+        </div>
+
+        {visibleError ? <p className="form-error settings-form-error">{visibleError}</p> : null}
+        {saved ? <p className="settings-form-success">{saved}</p> : null}
+      </section>
+    </div>
+  );
 
   return (
     <div className="settings-backdrop" onClick={onClose}>
@@ -382,7 +1137,7 @@ export function SettingsModal({
         <section className="settings-panel">
           <div className="settings-panel-header">
             <div>
-              <h2>{tab === "security" ? "Mi cuenta" : "Estado"}</h2>
+              <h2>{panelTitle}</h2>
             </div>
             <button className="ghost-button icon-only" onClick={onClose} type="button">
               <Icon name="close" />
@@ -684,7 +1439,7 @@ export function SettingsModal({
                 </section>
               )}
             </div>
-          ) : (
+          ) : tab === "status" ? (
             <div className="settings-stack">
               <div className="settings-top-tabs">
                 <button
@@ -745,6 +1500,14 @@ export function SettingsModal({
                 </div>
               </section>
             </div>
+          ) : tab === "social" ? (
+            socialSettingsContent
+          ) : tab === "privacy" ? (
+            privacySettingsContent
+          ) : tab === "devices" ? (
+            devicesSettingsContent
+          ) : (
+            connectionsSettingsContent
           )}
         </section>
       </div>

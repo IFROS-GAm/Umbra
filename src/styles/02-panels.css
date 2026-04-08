@@ -1363,13 +1363,13 @@
 
 .avatar-media {
   display: block;
-  filter: blur(18px);
+  filter: blur(8px);
   height: 100%;
   object-fit: cover;
-  opacity: 0.38;
+  opacity: 0.68;
   position: relative;
-  transform: scale(1.08);
-  transition: filter 180ms ease, opacity 180ms ease, transform 180ms ease;
+  transform: scale(1.03);
+  transition: filter 140ms ease, opacity 140ms ease, transform 140ms ease;
   width: 100%;
   z-index: 1;
 }

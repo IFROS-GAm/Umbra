@@ -30,6 +30,10 @@ alter table public.profiles add column if not exists auth_provider text not null
 alter table public.profiles add column if not exists avatar_url text not null default '';
 alter table public.profiles add column if not exists profile_banner_url text not null default '';
 alter table public.profiles add column if not exists profile_color text not null default '#5865F2';
+alter table public.profiles add column if not exists recovery_account text not null default '';
+alter table public.profiles add column if not exists recovery_provider text not null default '';
+alter table public.profiles add column if not exists social_links jsonb not null default '[]'::jsonb;
+alter table public.profiles add column if not exists privacy_settings jsonb not null default '{}'::jsonb;
 
 create unique index if not exists idx_profiles_auth_user_id
 on public.profiles(auth_user_id)
@@ -76,6 +80,29 @@ create table if not exists public.guild_members (
   joined_at timestamptz not null default now(),
   primary key (guild_id, user_id)
 );
+
+alter table public.guild_members add column if not exists position integer;
+
+with ranked_guild_members as (
+  select
+    guild_id,
+    user_id,
+    row_number() over (partition by user_id order by joined_at asc, guild_id asc) - 1 as next_position
+  from public.guild_members
+)
+update public.guild_members as gm
+set position = ranked_guild_members.next_position
+from ranked_guild_members
+where gm.guild_id = ranked_guild_members.guild_id
+  and gm.user_id = ranked_guild_members.user_id
+  and gm.position is null;
+
+update public.guild_members
+set position = 0
+where position is null;
+
+alter table public.guild_members alter column position set default 0;
+alter table public.guild_members alter column position set not null;
 
 create table if not exists public.channels (
   id uuid primary key default gen_random_uuid(),
@@ -190,6 +217,7 @@ create table if not exists public.invites (
 
 create index if not exists idx_roles_guild_id on public.roles(guild_id);
 create index if not exists idx_guild_members_user_id on public.guild_members(user_id);
+create index if not exists idx_guild_members_user_position on public.guild_members(user_id, position);
 create index if not exists idx_channels_guild_id on public.channels(guild_id);
 create index if not exists idx_channel_members_user_id on public.channel_members(user_id);
 create index if not exists idx_messages_channel_id_created_at on public.messages(channel_id, created_at desc);

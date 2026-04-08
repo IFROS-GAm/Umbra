@@ -7,6 +7,8 @@ import {
 import {
   buildInvitePreview,
   buildMessagePreview,
+  buildChannelMovePatchPlan,
+  buildGuildMovePatchPlan,
   createId,
   enrichMessages,
   getDefaultGuildChannel,
@@ -52,6 +54,40 @@ function normalizeProfileColor(candidate, fallback = "#5865F2") {
   }
 
   return fallback;
+}
+
+function normalizeSocialLinks(entries = []) {
+  const source = Array.isArray(entries) ? entries : [];
+  return source
+    .map((entry, index) => ({
+      id: String(entry?.id || `social-${index}`),
+      label: String(entry?.label || "").trim().slice(0, 48),
+      platform: String(entry?.platform || "website").trim() || "website",
+      url: String(entry?.url || "").trim().slice(0, 240)
+    }))
+    .filter((entry) => entry.label || entry.url)
+    .slice(0, 8);
+}
+
+function normalizePrivacySettings(settings = {}) {
+  const source = settings && typeof settings === "object" ? settings : {};
+  return {
+    allowDirectMessages: source.allowDirectMessages !== false,
+    showActivityStatus: source.showActivityStatus !== false,
+    showMemberSince: source.showMemberSince !== false,
+    showSocialLinks: source.showSocialLinks !== false
+  };
+}
+
+function normalizeRecoveryProvider(provider = "") {
+  const normalized = String(provider || "").trim().toLowerCase();
+  return ["", "google", "outlook", "apple", "discord", "other"].includes(normalized)
+    ? normalized
+    : "";
+}
+
+function normalizeRecoveryAccount(value = "") {
+  return String(value || "").trim().slice(0, 160);
 }
 
 function sanitizeUsername(candidate = "") {
@@ -117,6 +153,19 @@ async function expectData(queryPromise, fallbackMessage = "Error consultando Sup
 }
 
 export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
+  async getNextGuildMembershipPosition(userId) {
+    const memberships = await expectData(
+      this.client.from("guild_members").select("position").eq("user_id", userId)
+    );
+
+    return (
+      memberships.reduce(
+        (max, membership) => Math.max(max, Number(membership.position || 0)),
+        -1
+      ) + 1
+    );
+  }
+
   async buildMessageSnapshot({ channel, message, replyTarget = null, userId }) {
     if (!channel || !message) {
       return null;
@@ -598,10 +647,13 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
       ])
     );
 
+    const ownerPosition = await this.getNextGuildMembershipPosition(ownerId);
+
     await expectData(
       this.client.from("guild_members").insert({
         guild_id: guildId,
         user_id: ownerId,
+        position: ownerPosition,
         role_ids: [everyoneRoleId, ownerRoleId],
         nickname: "",
         joined_at: now
@@ -777,6 +829,126 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
     return category;
   }
 
+  async moveChannel({
+    channelId,
+    createdBy,
+    guildId,
+    parentId = null,
+    placement = "after",
+    relativeToChannelId = null
+  }) {
+    const guildRows = await expectData(
+      this.client.from("guilds").select("id").eq("id", guildId).limit(1)
+    );
+    if (!guildRows[0]) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    const permissionBits = await this.getPermissionBits(guildId, createdBy);
+    if ((permissionBits & PERMISSIONS.ADMINISTRATOR) !== PERMISSIONS.ADMINISTRATOR) {
+      throw createError("Solo el administrador puede cambiar la estructura del servidor.", 403);
+    }
+
+    const channels = await expectData(
+      this.client
+        .from("channels")
+        .select("id,guild_id,type,parent_id,position")
+        .eq("guild_id", guildId)
+    );
+
+    let patches = [];
+    try {
+      patches = buildChannelMovePatchPlan({
+        channelId,
+        channels,
+        guildId,
+        parentId,
+        placement,
+        relativeToChannelId
+      });
+    } catch (error) {
+      throw createError(error.message, 400);
+    }
+
+    if (!patches.length) {
+      return channels.find((channel) => channel.id === channelId) || null;
+    }
+
+    const now = new Date().toISOString();
+    await Promise.all(
+      patches.map((patch) =>
+        expectData(
+          this.client
+            .from("channels")
+            .update({
+              parent_id: patch.parent_id,
+              position: patch.position,
+              updated_at: now
+            })
+            .eq("id", patch.id)
+        )
+      )
+    );
+
+    const updatedRows = await expectData(
+      this.client.from("channels").select("*").eq("id", channelId).limit(1)
+    );
+    return updatedRows[0] || null;
+  }
+
+  async moveGuild({
+    createdBy,
+    guildId,
+    placement = "after",
+    relativeToGuildId = null
+  }) {
+    const guildRows = await expectData(
+      this.client.from("guilds").select("id,owner_id").eq("id", guildId).limit(1)
+    );
+    const guild = guildRows[0] || null;
+    if (!guild) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    const guildMemberships = await expectData(
+      this.client
+        .from("guild_members")
+        .select("guild_id,user_id,position,joined_at")
+        .eq("user_id", createdBy)
+    );
+
+    let patches = [];
+    try {
+      patches = buildGuildMovePatchPlan({
+        guildId,
+        guildMemberships,
+        placement,
+        relativeToGuildId,
+        userId: createdBy
+      });
+    } catch (error) {
+      throw createError(error.message, 400);
+    }
+
+    if (!patches.length) {
+      return guild;
+    }
+
+    await Promise.all(
+      patches.map((patch) =>
+        expectData(
+          this.client
+            .from("guild_members")
+            .update({ position: patch.position })
+            .eq("guild_id", patch.guild_id)
+            .eq("user_id", patch.user_id)
+        )
+      )
+    );
+
+    return guild;
+  }
+
   async updateGuild({
     bannerColor,
     bannerImageUrl,
@@ -828,6 +1000,81 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
     );
 
     return updatedRows[0] || guild;
+  }
+
+  async listGuildRoles({ guildId, userId }) {
+    const guildRows = await expectData(
+      this.client.from("guilds").select(GUILD_PERMISSION_SELECT).eq("id", guildId).limit(1)
+    );
+    if (!guildRows[0]) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    const permissionBits = await this.getPermissionBits(guildId, userId);
+    if ((permissionBits & PERMISSIONS.ADMINISTRATOR) !== PERMISSIONS.ADMINISTRATOR) {
+      throw createError("Solo el administrador puede ver los roles del servidor.", 403);
+    }
+
+    const [roles, guildMembers] = await Promise.all([
+      expectData(
+        this.client
+          .from("roles")
+          .select(ROLE_PERMISSION_SELECT)
+          .eq("guild_id", guildId)
+          .order("position", { ascending: false })
+      ),
+      expectData(this.client.from("guild_members").select("role_ids").eq("guild_id", guildId))
+    ]);
+
+    return roles.map((role) => ({
+      ...role,
+      is_admin: Boolean(role.permissions & PERMISSIONS.ADMINISTRATOR),
+      member_count: guildMembers.filter((member) =>
+        Array.isArray(member.role_ids) && member.role_ids.includes(role.id)
+      ).length
+    }));
+  }
+
+  async listGuildInvites({ guildId, userId }) {
+    const guildRows = await expectData(
+      this.client.from("guilds").select(GUILD_PERMISSION_SELECT).eq("id", guildId).limit(1)
+    );
+    if (!guildRows[0]) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    const permissionBits = await this.getPermissionBits(guildId, userId);
+    if ((permissionBits & PERMISSIONS.ADMINISTRATOR) !== PERMISSIONS.ADMINISTRATOR) {
+      throw createError("Solo el administrador puede ver las invitaciones del servidor.", 403);
+    }
+
+    const invites = await expectData(
+      this.client
+        .from("invites")
+        .select("*")
+        .eq("guild_id", guildId)
+        .order("created_at", { ascending: false })
+    );
+
+    const creatorIds = [...new Set(invites.map((invite) => invite.creator_id).filter(Boolean))];
+    const creators = creatorIds.length
+      ? await expectData(
+          this.client
+            .from("profiles")
+            .select("id,username,avatar_url")
+            .in("id", creatorIds)
+        )
+      : [];
+    const creatorById = new Map(creators.map((creator) => [creator.id, creator]));
+
+    return invites.map((invite) => {
+      const creator = creatorById.get(invite.creator_id);
+      return {
+        ...invite,
+        creator_name: creator?.username || "Umbra",
+        creator_avatar_url: creator?.avatar_url || ""
+      };
+    });
   }
 
   async createInvite({ guildId, userId }) {
@@ -928,11 +1175,13 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
     if (!alreadyJoined) {
       const everyoneRole = roles.find((role) => role.name === "@everyone");
       const joinedAt = new Date().toISOString();
+      const nextPosition = await this.getNextGuildMembershipPosition(userId);
 
       await expectData(
         this.client.from("guild_members").insert({
           guild_id: guild.id,
           user_id: userId,
+          position: nextPosition,
           role_ids: everyoneRole ? [everyoneRole.id] : [],
           nickname: "",
           joined_at: joinedAt
@@ -1028,6 +1277,25 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
       });
 
       if (exact) {
+        const ownerMembership = candidateMemberships.find(
+          (item) => item.channel_id === exact.id && item.user_id === ownerId
+        );
+
+        await expectData(
+          this.client
+            .from("channel_members")
+            .upsert(
+              {
+                channel_id: exact.id,
+                user_id: ownerId,
+                hidden: false,
+                joined_at: ownerMembership?.joined_at || new Date().toISOString(),
+                last_read_at: ownerMembership?.last_read_at || null,
+                last_read_message_id: ownerMembership?.last_read_message_id || null
+              },
+              { onConflict: "channel_id,user_id" }
+            )
+        );
         return exact;
       }
     }
@@ -1132,6 +1400,25 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
         });
 
         if (exact) {
+          const ownerMembership = candidateMemberships.find(
+            (item) => item.channel_id === exact.id && item.user_id === ownerId
+          );
+
+          await expectData(
+            this.client
+              .from("channel_members")
+              .upsert(
+                {
+                  channel_id: exact.id,
+                  user_id: ownerId,
+                  hidden: false,
+                  joined_at: ownerMembership?.joined_at || new Date().toISOString(),
+                  last_read_at: ownerMembership?.last_read_at || null,
+                  last_read_message_id: ownerMembership?.last_read_message_id || null
+                },
+                { onConflict: "channel_id,user_id" }
+              )
+          );
           return exact;
         }
       }
@@ -1188,6 +1475,42 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
         this.dmLocks.delete(dmKey);
       }
     }
+  }
+
+  async setDmVisibility({ channelId, hidden, userId }) {
+    const channel = await this.getChannel(channelId);
+    if (!channel || ![CHANNEL_TYPES.DM, CHANNEL_TYPES.GROUP_DM].includes(channel.type)) {
+      throw createError("Conversacion no encontrada.", 404);
+    }
+
+    const membershipRows = await expectData(
+      this.client
+        .from("channel_members")
+        .select("*")
+        .eq("channel_id", channelId)
+        .eq("user_id", userId)
+        .limit(1)
+    );
+    const membership = membershipRows[0] || null;
+
+    if (!membership) {
+      throw createError("No puedes cambiar esta conversacion.", 403);
+    }
+
+    await expectData(
+      this.client
+        .from("channel_members")
+        .update({
+          hidden: Boolean(hidden)
+        })
+        .eq("channel_id", channelId)
+        .eq("user_id", userId)
+    );
+
+    return {
+      channel_id: channelId,
+      hidden: Boolean(hidden)
+    };
   }
 
   async createGroupDm({ name = "", ownerId, recipientIds }) {
@@ -1676,7 +1999,11 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
     bannerImageUrl,
     bio,
     customStatus,
+    privacySettings,
     profileColor,
+    recoveryAccount,
+    recoveryProvider,
+    socialLinks,
     userId,
     username
   }) {
@@ -1719,6 +2046,22 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
             profileColor,
             profile.profile_color || "#5865F2"
           ),
+          recovery_account:
+            recoveryAccount !== undefined
+              ? normalizeRecoveryAccount(recoveryAccount)
+              : normalizeRecoveryAccount(profile.recovery_account),
+          recovery_provider:
+            recoveryProvider !== undefined
+              ? normalizeRecoveryProvider(recoveryProvider)
+              : normalizeRecoveryProvider(profile.recovery_provider),
+          privacy_settings:
+            privacySettings !== undefined
+              ? normalizePrivacySettings(privacySettings)
+              : normalizePrivacySettings(profile.privacy_settings),
+          social_links:
+            socialLinks !== undefined
+              ? normalizeSocialLinks(socialLinks)
+              : normalizeSocialLinks(profile.social_links),
           updated_at: new Date().toISOString()
         })
         .eq("id", userId)

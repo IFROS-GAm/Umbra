@@ -11,6 +11,8 @@ import { createSeedData } from "../seed-data.js";
 import {
   buildInvitePreview,
   buildBootstrapState,
+  buildChannelMovePatchPlan,
+  buildGuildMovePatchPlan,
   computePermissionBits,
   createId,
   enrichMessages,
@@ -53,6 +55,40 @@ function normalizeProfileColor(candidate, fallback = "#5865F2") {
   }
 
   return fallback;
+}
+
+function normalizeSocialLinks(entries = []) {
+  const source = Array.isArray(entries) ? entries : [];
+  return source
+    .map((entry, index) => ({
+      id: String(entry?.id || `social-${index}`),
+      label: String(entry?.label || "").trim().slice(0, 48),
+      platform: String(entry?.platform || "website").trim() || "website",
+      url: String(entry?.url || "").trim().slice(0, 240)
+    }))
+    .filter((entry) => entry.label || entry.url)
+    .slice(0, 8);
+}
+
+function normalizePrivacySettings(settings = {}) {
+  const source = settings && typeof settings === "object" ? settings : {};
+  return {
+    allowDirectMessages: source.allowDirectMessages !== false,
+    showActivityStatus: source.showActivityStatus !== false,
+    showMemberSince: source.showMemberSince !== false,
+    showSocialLinks: source.showSocialLinks !== false
+  };
+}
+
+function normalizeRecoveryProvider(provider = "") {
+  const normalized = String(provider || "").trim().toLowerCase();
+  return ["", "google", "outlook", "apple", "discord", "other"].includes(normalized)
+    ? normalized
+    : "";
+}
+
+function normalizeRecoveryAccount(value = "") {
+  return String(value || "").trim().slice(0, 160);
 }
 
 function sanitizeChannelName(candidate = "") {
@@ -122,16 +158,32 @@ export class DemoStore {
     }
 
     this.db.profiles = (this.db.profiles || []).map((profile) => ({
-      avatar_url: "",
-      profile_banner_url: "",
-      profile_color: "#5865F2",
-      ...profile
+      ...profile,
+      avatar_url: profile?.avatar_url || "",
+      privacy_settings: normalizePrivacySettings(profile?.privacy_settings),
+      profile_banner_url: profile?.profile_banner_url || "",
+      profile_color: profile?.profile_color || "#5865F2",
+      recovery_account: normalizeRecoveryAccount(profile?.recovery_account),
+      recovery_provider: normalizeRecoveryProvider(profile?.recovery_provider),
+      social_links: normalizeSocialLinks(profile?.social_links)
     }));
     this.db.guilds = (this.db.guilds || []).map((guild) => ({
       icon_url: "",
       banner_image_url: "",
       ...guild
     }));
+    const membershipOrderByUser = new Map();
+    this.db.guild_members = (this.db.guild_members || []).map((membership) => {
+      const nextPosition = membershipOrderByUser.get(membership.user_id) ?? 0;
+      membershipOrderByUser.set(membership.user_id, nextPosition + 1);
+
+      return {
+        ...membership,
+        position: Number.isFinite(Number(membership.position))
+          ? Number(membership.position)
+          : nextPosition
+      };
+    });
     this.db.friendships = this.db.friendships || [];
     this.db.friend_requests = this.db.friend_requests || [];
     this.db.invites = this.db.invites || [];
@@ -233,6 +285,14 @@ export class DemoStore {
 
   assertCanManageGuild(guildId, userId) {
     this.assertCanManageChannels(guildId, userId);
+  }
+
+  getNextGuildMembershipPosition(userId) {
+    return (
+      this.db.guild_members
+        .filter((membership) => membership.user_id === userId)
+        .reduce((max, membership) => Math.max(max, Number(membership.position || 0)), -1) + 1
+    );
   }
 
   async bootstrap(userId) {
@@ -544,6 +604,7 @@ export class DemoStore {
 
     this.db.guild_members.push({
       guild_id: guildId,
+      position: this.getNextGuildMembershipPosition(ownerId),
       user_id: ownerId,
       role_ids: [everyoneRoleId, ownerRoleId],
       nickname: "",
@@ -712,6 +773,55 @@ export class DemoStore {
     return category;
   }
 
+  async moveChannel({
+    channelId,
+    createdBy,
+    guildId,
+    parentId = null,
+    placement = "after",
+    relativeToChannelId = null
+  }) {
+    const guild = this.db.guilds.find((item) => item.id === guildId);
+    if (!guild) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    this.assertCanManageChannels(guildId, createdBy);
+
+    let patches = [];
+    try {
+      patches = buildChannelMovePatchPlan({
+        channelId,
+        channels: this.db.channels,
+        guildId,
+        parentId,
+        placement,
+        relativeToChannelId
+      });
+    } catch (error) {
+      throw createError(error.message, 400);
+    }
+
+    if (!patches.length) {
+      return this.db.channels.find((channel) => channel.id === channelId) || null;
+    }
+
+    const now = new Date().toISOString();
+    patches.forEach((patch) => {
+      const target = this.db.channels.find((channel) => channel.id === patch.id);
+      if (!target) {
+        return;
+      }
+
+      target.parent_id = patch.parent_id;
+      target.position = patch.position;
+      target.updated_at = now;
+    });
+
+    await this.save();
+    return this.db.channels.find((channel) => channel.id === channelId) || null;
+  }
+
   async updateGuild({
     bannerColor,
     bannerImageUrl,
@@ -751,6 +861,88 @@ export class DemoStore {
 
     await this.save();
     return guild;
+  }
+
+  async moveGuild({
+    createdBy,
+    guildId,
+    placement = "after",
+    relativeToGuildId = null
+  }) {
+    const guild = this.db.guilds.find((item) => item.id === guildId);
+    if (!guild) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    let patches = [];
+    try {
+      patches = buildGuildMovePatchPlan({
+        guildId,
+        guildMemberships: this.db.guild_members,
+        placement,
+        relativeToGuildId,
+        userId: createdBy
+      });
+    } catch (error) {
+      throw createError(error.message, 400);
+    }
+
+    if (!patches.length) {
+      return guild;
+    }
+
+    patches.forEach((patch) => {
+      const membership = this.db.guild_members.find(
+        (item) => item.guild_id === patch.guild_id && item.user_id === patch.user_id
+      );
+      if (membership) {
+        membership.position = patch.position;
+      }
+    });
+
+    await this.save();
+    return guild;
+  }
+
+  async listGuildRoles({ guildId, userId }) {
+    const guild = this.db.guilds.find((item) => item.id === guildId);
+    if (!guild) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    this.assertCanManageGuild(guildId, userId);
+
+    return this.db.roles
+      .filter((role) => role.guild_id === guildId)
+      .sort((left, right) => Number(right.position || 0) - Number(left.position || 0))
+      .map((role) => ({
+        ...role,
+        is_admin: Boolean(role.permissions & PERMISSIONS.ADMINISTRATOR),
+        member_count: this.db.guild_members.filter((member) =>
+          Array.isArray(member.role_ids) && member.role_ids.includes(role.id)
+        ).length
+      }));
+  }
+
+  async listGuildInvites({ guildId, userId }) {
+    const guild = this.db.guilds.find((item) => item.id === guildId);
+    if (!guild) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    this.assertCanManageGuild(guildId, userId);
+
+    return (this.db.invites || [])
+      .filter((invite) => invite.guild_id === guildId)
+      .sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime())
+      .map((invite) => {
+        const creator = this.db.profiles.find((profile) => profile.id === invite.creator_id);
+        return {
+          ...invite,
+          creator_name: creator?.username || "Umbra",
+          creator_avatar_url: creator?.avatar_url || ""
+        };
+      });
   }
 
   async sendFriendRequest({ recipientId, requesterId }) {
@@ -1037,6 +1229,7 @@ export class DemoStore {
 
       this.db.guild_members.push({
         guild_id: guild.id,
+        position: this.getNextGuildMembershipPosition(userId),
         user_id: userId,
         role_ids: everyoneRole ? [everyoneRole.id] : [],
         nickname: "",
@@ -1094,6 +1287,27 @@ export class DemoStore {
     });
 
     if (existing) {
+      upsertChannelMembership(this.db, {
+        channel_id: existing.id,
+        hidden: false,
+        joined_at:
+          this.db.channel_members.find(
+            (membership) =>
+              membership.channel_id === existing.id && membership.user_id === ownerId
+          )?.joined_at || new Date().toISOString(),
+        last_read_at:
+          this.db.channel_members.find(
+            (membership) =>
+              membership.channel_id === existing.id && membership.user_id === ownerId
+          )?.last_read_at || null,
+        last_read_message_id:
+          this.db.channel_members.find(
+            (membership) =>
+              membership.channel_id === existing.id && membership.user_id === ownerId
+          )?.last_read_message_id || null,
+        user_id: ownerId
+      });
+      await this.save();
       return existing;
     }
 
@@ -1167,6 +1381,27 @@ export class DemoStore {
       });
 
       if (existing) {
+        upsertChannelMembership(this.db, {
+          channel_id: existing.id,
+          hidden: false,
+          joined_at:
+            this.db.channel_members.find(
+              (membership) =>
+                membership.channel_id === existing.id && membership.user_id === ownerId
+            )?.joined_at || new Date().toISOString(),
+          last_read_at:
+            this.db.channel_members.find(
+              (membership) =>
+                membership.channel_id === existing.id && membership.user_id === ownerId
+            )?.last_read_at || null,
+          last_read_message_id:
+            this.db.channel_members.find(
+              (membership) =>
+                membership.channel_id === existing.id && membership.user_id === ownerId
+            )?.last_read_message_id || null,
+          user_id: ownerId
+        });
+        await this.save();
         return existing;
       }
 
@@ -1222,6 +1457,35 @@ export class DemoStore {
         this.dmLocks.delete(dmKey);
       }
     }
+  }
+
+  async setDmVisibility({ channelId, hidden, userId }) {
+    const channel = this.getChannel(channelId);
+    if (!channel || ![CHANNEL_TYPES.DM, CHANNEL_TYPES.GROUP_DM].includes(channel.type)) {
+      throw createError("Conversacion no encontrada.", 404);
+    }
+
+    const existingMembership = this.db.channel_members.find(
+      (membership) => membership.channel_id === channelId && membership.user_id === userId
+    );
+    if (!existingMembership) {
+      throw createError("No puedes cambiar esta conversacion.", 403);
+    }
+
+    upsertChannelMembership(this.db, {
+      channel_id: channelId,
+      hidden: Boolean(hidden),
+      joined_at: existingMembership.joined_at || new Date().toISOString(),
+      last_read_at: existingMembership.last_read_at || null,
+      last_read_message_id: existingMembership.last_read_message_id || null,
+      user_id: userId
+    });
+    await this.save();
+
+    return {
+      channel_id: channelId,
+      hidden: Boolean(hidden)
+    };
   }
 
   async createGroupDm({ name = "", ownerId, recipientIds }) {
@@ -1394,7 +1658,11 @@ export class DemoStore {
     bannerImageUrl,
     bio,
     customStatus,
+    privacySettings,
     profileColor,
+    recoveryAccount,
+    recoveryProvider,
+    socialLinks,
     userId,
     username
   }) {
@@ -1422,6 +1690,18 @@ export class DemoStore {
     if (bannerImageUrl !== undefined) {
       profile.profile_banner_url = String(bannerImageUrl || "").trim();
     }
+    if (socialLinks !== undefined) {
+      profile.social_links = normalizeSocialLinks(socialLinks);
+    }
+    if (privacySettings !== undefined) {
+      profile.privacy_settings = normalizePrivacySettings(privacySettings);
+    }
+    if (recoveryAccount !== undefined) {
+      profile.recovery_account = normalizeRecoveryAccount(recoveryAccount);
+    }
+    if (recoveryProvider !== undefined) {
+      profile.recovery_provider = normalizeRecoveryProvider(recoveryProvider);
+    }
     profile.profile_color = normalizeProfileColor(
       profileColor,
       profile.profile_color || "#5865F2"
@@ -1430,6 +1710,79 @@ export class DemoStore {
     await this.save();
 
     return profile;
+  }
+
+  async resendEmailConfirmation({ userId }) {
+    const profile = this.db.profiles.find((item) => item.id === userId);
+    if (!profile) {
+      throw createError("Usuario no encontrado.", 404);
+    }
+
+    if (!profile.email) {
+      throw createError("No hay un correo principal asociado a esta cuenta.", 400);
+    }
+
+    if (String(profile.auth_provider || "email").toLowerCase() !== "email") {
+      throw createError("El correo de confirmacion solo aplica para accesos por email.", 400);
+    }
+
+    return {
+      email: profile.email,
+      kind: "confirmation",
+      mode: "demo",
+      ok: true,
+      target: "primary"
+    };
+  }
+
+  async sendEmailCheck({ target, userId }) {
+    const profile = this.db.profiles.find((item) => item.id === userId);
+    if (!profile) {
+      throw createError("Usuario no encontrado.", 404);
+    }
+
+    const normalizedTarget = String(target || "primary").trim().toLowerCase();
+    if (normalizedTarget !== "primary" && normalizedTarget !== "recovery") {
+      throw createError("Destino de verificacion no valido.", 400);
+    }
+
+    if (normalizedTarget === "primary") {
+      if (!profile.email) {
+        throw createError("No hay un correo principal asociado a esta cuenta.", 400);
+      }
+
+      return {
+        email: profile.email,
+        kind:
+          String(profile.auth_provider || "email").toLowerCase() === "email" &&
+          !profile.email_confirmed_at
+            ? "confirmation"
+            : "check",
+        mode: "demo",
+        ok: true,
+        target: "primary"
+      };
+    }
+
+    const recoveryEmail = normalizeRecoveryAccount(profile.recovery_account);
+    if (!recoveryEmail) {
+      throw createError("No hay un correo de respaldo configurado.", 400);
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recoveryEmail)) {
+      throw createError(
+        "El respaldo debe ser un correo valido para poder enviar una comprobacion.",
+        400
+      );
+    }
+
+    return {
+      email: recoveryEmail,
+      kind: "check",
+      mode: "demo",
+      ok: true,
+      target: "recovery"
+    };
   }
 
   async storeAttachments(files = []) {

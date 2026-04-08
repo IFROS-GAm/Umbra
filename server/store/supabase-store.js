@@ -39,6 +39,10 @@ function normalizeProfileColor(candidate, fallback = "#5865F2") {
   return fallback;
 }
 
+function isEmailAddress(candidate = "") {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(candidate || "").trim());
+}
+
 const DEFAULT_VOICE_CHANNELS = ["Lounge", "Sala de estudio 1", "Sala de estudio 2"];
 
 async function expectData(queryPromise, fallbackMessage = "Error consultando Supabase.") {
@@ -305,6 +309,8 @@ export class SupabaseStore {
           avatar_url: "",
           profile_banner_url: "",
           profile_color: "#5865F2",
+          recovery_account: "",
+          recovery_provider: "",
           bio: "Nuevo usuario en Umbra.",
           status: "online",
           custom_status: "",
@@ -331,6 +337,114 @@ export class SupabaseStore {
     const viewerId = userId || (await this.getDefaultUserId());
     const snapshot = await this.loadBootstrapSnapshot(viewerId);
     return buildBootstrapState(snapshot, viewerId);
+  }
+
+  async resendEmailConfirmation({ emailRedirectTo, userId }) {
+    const profile = await this.getProfileById(userId);
+    if (!profile) {
+      throw createError("Usuario no encontrado.", 404);
+    }
+
+    if (!profile.email) {
+      throw createError("No hay un correo principal asociado a esta cuenta.", 400);
+    }
+
+    if (String(profile.auth_provider || "email").toLowerCase() !== "email") {
+      throw createError("El correo de confirmacion solo aplica para accesos por email.", 400);
+    }
+
+    const { error } = await this.client.auth.resend({
+      type: "signup",
+      email: profile.email,
+      options: emailRedirectTo
+        ? {
+            emailRedirectTo: String(emailRedirectTo).trim()
+          }
+        : undefined
+    });
+
+    if (error) {
+      throw createError(error.message || "No se pudo reenviar el correo de confirmacion.", 400);
+    }
+
+    return {
+      email: profile.email,
+      kind: "confirmation",
+      ok: true,
+      target: "primary"
+    };
+  }
+
+  async sendEmailCheck({ emailRedirectTo, target, userId }) {
+    const profile = await this.getProfileById(userId);
+    if (!profile) {
+      throw createError("Usuario no encontrado.", 404);
+    }
+
+    const normalizedTarget = String(target || "primary").trim().toLowerCase();
+    if (normalizedTarget !== "primary" && normalizedTarget !== "recovery") {
+      throw createError("Destino de verificacion no valido.", 400);
+    }
+
+    const redirectOptions = emailRedirectTo
+      ? {
+          redirectTo: String(emailRedirectTo).trim()
+        }
+      : undefined;
+
+    if (normalizedTarget === "primary") {
+      if (!profile.email) {
+        throw createError("No hay un correo principal asociado a esta cuenta.", 400);
+      }
+
+      if (
+        String(profile.auth_provider || "email").toLowerCase() === "email" &&
+        !profile.email_confirmed_at
+      ) {
+        return this.resendEmailConfirmation({ emailRedirectTo, userId });
+      }
+
+      const { error } = await this.client.auth.resetPasswordForEmail(
+        profile.email,
+        redirectOptions
+      );
+
+      if (error) {
+        throw createError(error.message || "No se pudo enviar la comprobacion al correo principal.", 400);
+      }
+
+      return {
+        email: profile.email,
+        kind: "check",
+        ok: true,
+        target: "primary"
+      };
+    }
+
+    const recoveryEmail = normalizeRecoveryAccount(profile.recovery_account);
+    if (!recoveryEmail) {
+      throw createError("No hay un correo de respaldo configurado.", 400);
+    }
+
+    if (!isEmailAddress(recoveryEmail)) {
+      throw createError(
+        "El respaldo debe ser un correo valido para poder enviar una comprobacion.",
+        400
+      );
+    }
+
+    const { error } = await this.client.auth.resetPasswordForEmail(recoveryEmail, redirectOptions);
+
+    if (error) {
+      throw createError(error.message || "No se pudo enviar la comprobacion al correo de respaldo.", 400);
+    }
+
+    return {
+      email: recoveryEmail,
+      kind: "check",
+      ok: true,
+      target: "recovery"
+    };
   }
 
   async loadBootstrapSnapshot(userId) {

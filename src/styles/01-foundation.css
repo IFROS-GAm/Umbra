@@ -890,6 +890,14 @@ button {
   justify-content: space-between;
 }
 
+.channel-row[draggable="true"] {
+  cursor: grab;
+}
+
+.channel-row[draggable="true"]:active {
+  cursor: grabbing;
+}
+
 .channel-row.has-unread,
 .dm-row.has-unread {
   background: linear-gradient(90deg, rgba(123, 212, 255, 0.08), rgba(255, 255, 255, 0.04));
@@ -913,6 +921,10 @@ button {
 .channel-row.is-read:not(.active),
 .dm-row.is-read:not(.active) {
   color: rgba(219, 222, 225, 0.46);
+}
+
+.dm-row.is-muted:not(.active) {
+  opacity: 0.76;
 }
 
 .channel-row.is-read:not(.active) .channel-label span,

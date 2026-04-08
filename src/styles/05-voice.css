@@ -562,6 +562,22 @@
   border-color: rgba(88, 101, 242, 0.4);
 }
 
+.settings-inline-select {
+  appearance: none;
+  background: #111214;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  color: var(--text-0);
+  font: inherit;
+  min-height: 46px;
+  outline: none;
+  padding: 0 14px;
+}
+
+.settings-inline-select:focus {
+  border-color: rgba(88, 101, 242, 0.4);
+}
+
 .settings-range-row {
   align-items: center;
   display: flex;
@@ -737,5 +753,113 @@
   padding: 14px 16px;
   text-align: left;
   width: 100%;
+}
+
+.settings-social-list,
+.settings-toggle-list,
+.settings-connection-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.settings-social-row {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 160px minmax(0, 1fr) minmax(0, 1.15fr) auto;
+}
+
+.settings-social-row.compact {
+  align-items: stretch;
+  grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
+}
+
+.settings-toggle-row input[type="checkbox"] {
+  accent-color: var(--accent);
+  height: 18px;
+  width: 18px;
+}
+
+.settings-device-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.settings-device-card {
+  background: #111216;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px;
+}
+
+.settings-device-card > span {
+  color: var(--text-2);
+  font-size: 0.85rem;
+}
+
+.settings-device-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.settings-device-item {
+  align-items: center;
+  background: #17191f;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+}
+
+.settings-device-item > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.settings-device-item strong,
+.settings-device-item small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-device-item small {
+  color: var(--text-2);
+}
+
+.settings-empty-state {
+  background: #111216;
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px;
+}
+
+.settings-empty-state strong {
+  color: var(--text-0);
+}
+
+.settings-empty-state span {
+  color: var(--text-2);
+}
+
+.settings-empty-state.compact {
+  min-height: 92px;
+}
+
+.settings-form-actions.inline {
+  justify-content: flex-start;
 }
 

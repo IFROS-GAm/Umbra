@@ -9,6 +9,12 @@ import { DesktopTopbar } from "./workspace/DesktopTopbar.jsx";
 import { MembersPanel } from "./workspace/MembersPanel.jsx";
 import { WorkspaceNavigation } from "./workspace/WorkspaceNavigation.jsx";
 import {
+  applyServerFolderAction,
+  reorderGuildList,
+  sanitizeServerFolders,
+  toggleServerFolder
+} from "./workspace/serverFolders.js";
+import {
   buildMemberGroups,
   buildVoiceStageTone,
   findDirectDmByUserId,
@@ -63,11 +69,11 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
     replyMentionEnabled, replyTarget, setActiveSelection, setBooting, setComposer,
     setComposerAttachments, setComposerMenuOpen, setComposerPicker, setDialog, setEditingMessage,
     setHeaderPanel, setHoveredVoiceChannelId, setInboxTab, setMembersPanelVisible,
-    setMessageMenuFor, setProfileCard, setReactionPickerFor, setAppError,
+    setMessageMenuFor, setProfileCard, setReactionPickerFor, setAppError, setWorkspace,
     setReplyMentionEnabled, setReplyTarget, setSettingsOpen, setTheme, theme, settingsOpen,
     showUiNotice, toggleHeaderPanel, toggleVoiceMenu, toggleVoiceState, topbarActionsRef,
     typingUsers, uiNotice, updateVoiceSetting, uploadingAttachments, voiceDevices, voiceMenu,
-    voiceSessions, voiceState, voiceUserIds, voiceInputLevel, voiceInputStatus, workspace,
+    voiceSessions, voiceState, voiceUserIds, voiceInputLevel, voiceInputSpeaking, voiceInputStatus, workspace,
     cycleVoiceDevice, getSelectedDeviceLabel, selectedVoiceDevices
   } = useUmbraWorkspaceCore({ accessToken, initialSelection, onSignOut });
   const [voiceInputPanel, setVoiceInputPanel] = useState(null);
@@ -103,6 +109,15 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
       return {};
     }
   });
+  const [dmMenuPrefs, setDmMenuPrefs] = useState(() => {
+    try {
+      const saved = localStorage.getItem("umbra-dm-menu-prefs");
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+  const [serverFolders, setServerFolders] = useState([]);
   const openingDmRequestsRef = useRef(new Map());
   const desktopShellRef = useRef(null);
   const appShellRef = useRef(null);
@@ -135,6 +150,48 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
   useEffect(() => {
     localStorage.setItem("umbra-guild-menu-prefs", JSON.stringify(guildMenuPrefs));
   }, [guildMenuPrefs]);
+
+  useEffect(() => {
+    localStorage.setItem("umbra-dm-menu-prefs", JSON.stringify(dmMenuPrefs));
+  }, [dmMenuPrefs]);
+
+  useEffect(() => {
+    if (!currentUserId) {
+      setServerFolders([]);
+      return;
+    }
+
+    try {
+      const saved = localStorage.getItem(`umbra-server-folders-${currentUserId}`);
+      const parsed = saved ? JSON.parse(saved) : [];
+      setServerFolders(sanitizeServerFolders(parsed, workspace?.guilds || []));
+    } catch {
+      setServerFolders([]);
+    }
+  }, [currentUserId]);
+
+  useEffect(() => {
+    if (!workspace?.guilds) {
+      return;
+    }
+
+    setServerFolders((previous) => sanitizeServerFolders(previous, workspace.guilds));
+  }, [workspace?.guilds]);
+
+  useEffect(() => {
+    if (!currentUserId) {
+      return;
+    }
+
+    try {
+      localStorage.setItem(
+        `umbra-server-folders-${currentUserId}`,
+        JSON.stringify(serverFolders)
+      );
+    } catch {
+      // Ignore local preference persistence issues.
+    }
+  }, [currentUserId, serverFolders]);
 
   useEffect(() => {
     try {
@@ -237,6 +294,28 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
     }));
   }
 
+  function normalizeProfileSocialLinks(entries = []) {
+    const source = Array.isArray(entries) ? entries : [];
+    return source
+      .map((entry, index) => ({
+        href: String(entry?.url || "").trim(),
+        id: String(entry?.id || `profile-link-${index}`),
+        label: String(entry?.label || "").trim(),
+        platform: String(entry?.platform || "website").trim() || "website"
+      }))
+      .filter((entry) => entry.href || entry.label);
+  }
+
+  function normalizeProfilePrivacy(settings = {}) {
+    const source = settings && typeof settings === "object" ? settings : {};
+    return {
+      allowDirectMessages: source.allowDirectMessages !== false,
+      showActivityStatus: source.showActivityStatus !== false,
+      showMemberSince: source.showMemberSince !== false,
+      showSocialLinks: source.showSocialLinks !== false
+    };
+  }
+
   function buildProfileCardData(targetUser, displayNameOverride = null) {
     if (!workspace || !targetUser?.id) {
       return null;
@@ -299,11 +378,32 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
       activeParticipant?.bio ||
       fallbackProfile?.bio ||
       "";
+    const privacySettings = normalizeProfilePrivacy(
+      targetUser.privacy_settings || fallbackProfile?.privacy_settings
+    );
     const infoLines = bio
       .split(/\r?\n+/)
       .map((line) => line.trim())
       .filter(Boolean);
     const extractedLinks = extractProfileLinks(bio);
+    const socialLinks = normalizeProfileSocialLinks(
+      targetUser.social_links || fallbackProfile?.social_links
+    );
+    const visibleConnections = privacySettings.showSocialLinks
+      ? socialLinks.length
+        ? socialLinks.map((link) => ({
+            href: link.href,
+            id: link.id,
+            kind: "link",
+            label: link.label || link.href.replace(/^https?:\/\//i, ""),
+            meta: link.platform
+          }))
+        : extractedLinks.map((link) => ({
+            ...link,
+            kind: "link",
+            meta: "Enlace compartido en su perfil"
+          }))
+      : [];
 
     return {
       id: targetUser.id,
@@ -334,18 +434,15 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
             ? `Miembro desde ${formatMemberSinceLabel(guild.joinedAt)}`
             : `${guild.memberCount} miembros visibles`
         })),
-        ...extractedLinks.map((link) => ({
-          ...link,
-          kind: "link",
-          meta: "Enlace compartido en su perfil"
-        }))
+        ...visibleConnections
       ],
-      customStatus:
-        targetUser.custom_status ||
-        activeGuildMember?.custom_status ||
-        activeParticipant?.custom_status ||
-        fallbackProfile?.custom_status ||
-        "",
+      customStatus: privacySettings.showActivityStatus
+        ? targetUser.custom_status ||
+          activeGuildMember?.custom_status ||
+          activeParticipant?.custom_status ||
+          fallbackProfile?.custom_status ||
+          ""
+        : "",
       discriminator:
         targetUser.discriminator || fallbackProfile?.discriminator || null,
       displayName:
@@ -365,7 +462,7 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
       isCurrentUser: workspace.current_user.id === targetUser.id,
       isBlockedByMe: (workspace.blocked_users || []).some((user) => user.id === targetUser.id),
       isFriend: (workspace.friends || []).some((friend) => friend.id === targetUser.id),
-      memberSinceLabel,
+      memberSinceLabel: privacySettings.showMemberSince ? memberSinceLabel : "",
       primaryTag: activeGuildMember ? activeGuild?.name || "Miembro" : sharedGuilds[0]?.name || null,
       profileColor:
         targetUser.profile_color ||
@@ -374,6 +471,7 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
         fallbackProfile?.profile_color ||
         "#5865F2",
       roleColor: targetUser.role_color || activeGuildMember?.role_color || null,
+      privacySettings,
       commonFriends,
       sharedGuilds: sharedGuildEntries,
       sharedDmCount: sharedDms.length,
@@ -895,9 +993,23 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
         isStreaming: user.id === currentUserId && voiceState.screenShareEnabled,
         isCameraOn: user.id === currentUserId && voiceState.cameraEnabled,
         localCameraStream: user.id === currentUserId ? cameraStream : null,
+        isSpeaking:
+          user.id === currentUserId &&
+          !voiceState.micMuted &&
+          !voiceState.deafen &&
+          voiceInputSpeaking,
         stageStyle: buildVoiceStageTone(user.avatar_hue || 220)
       })),
-    [cameraStream, currentUserId, voiceState.cameraEnabled, voiceState.screenShareEnabled, voiceUsers]
+    [
+      cameraStream,
+      currentUserId,
+      voiceInputSpeaking,
+      voiceState.cameraEnabled,
+      voiceState.deafen,
+      voiceState.micMuted,
+      voiceState.screenShareEnabled,
+      voiceUsers
+    ]
   );
   const headerSearchPlaceholder = activeGuild
     ? `Buscar ${activeGuild.name}`
@@ -1678,6 +1790,92 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
     }
   }
 
+  async function handleMoveGuildChannel({
+    channelId,
+    guildId,
+    parentId = null,
+    placement = "after",
+    relativeToChannelId = null
+  }) {
+    if (!channelId || !guildId) {
+      return;
+    }
+
+    try {
+      await api.moveChannel({
+        channelId,
+        guildId,
+        parentId,
+        placement,
+        relativeToChannelId
+      });
+      await loadBootstrap(activeSelection);
+      setAppError("");
+    } catch (error) {
+      setAppError(error.message);
+      showUiNotice(error.message);
+    }
+  }
+
+  async function handleMoveGuild({
+    guildId,
+    placement = "after",
+    relativeToGuildId = null,
+    nextFolderAction = null
+  }) {
+    if (!guildId) {
+      return;
+    }
+
+    const previousWorkspace = workspace;
+    const previousFolders = serverFolders;
+    const currentGuilds = workspace?.guilds || [];
+    const optimisticGuilds = reorderGuildList(currentGuilds, {
+      guildId,
+      placement,
+      relativeToGuildId
+    });
+
+    setWorkspace((previous) => {
+      if (!previous?.guilds?.length) {
+        return previous;
+      }
+
+      return {
+        ...previous,
+        guilds: optimisticGuilds
+      };
+    });
+
+    if (nextFolderAction) {
+      setServerFolders((previous) =>
+        applyServerFolderAction(previous, optimisticGuilds, {
+          guildId,
+          nextFolderAction
+        })
+      );
+    }
+
+    try {
+      await api.moveGuild({
+        guildId,
+        placement,
+        relativeToGuildId
+      });
+      setAppError("");
+    } catch (error) {
+      setWorkspace(previousWorkspace);
+      setServerFolders(previousFolders);
+      await loadBootstrap(activeSelection);
+      setAppError(error.message);
+      showUiNotice(error.message);
+    }
+  }
+
+  function handleToggleServerFolder(folderId) {
+    setServerFolders((previous) => toggleServerFolder(previous, folderId));
+  }
+
   function handleUpdateGuildMenuPref(guildId, key, value = null) {
     if (!guildId || !key) {
       return;
@@ -1698,6 +1896,106 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
         }
       };
     });
+  }
+
+  function handleToggleDmMenuPref(dmOrId) {
+    const dmId = typeof dmOrId === "string" ? dmOrId : dmOrId?.id;
+    if (!dmId) {
+      return;
+    }
+
+    setDmMenuPrefs((previous) => {
+      const current = previous[dmId] || {
+        muted: false
+      };
+
+      return {
+        ...previous,
+        [dmId]: {
+          ...current,
+          muted: !current.muted
+        }
+      };
+    });
+  }
+
+  async function handleMarkDmRead(dm) {
+    if (!dm?.id) {
+      return;
+    }
+
+    try {
+      await api.markRead({
+        channelId: dm.id,
+        lastReadMessageId: dm.last_message_id || null
+      });
+      await loadBootstrap(activeSelection);
+      showUiNotice(`Todo al dia en ${dm.display_name || "la conversacion"}.`);
+    } catch (error) {
+      setAppError(error.message);
+    }
+  }
+
+  async function handleCopyDmId(dm) {
+    if (!dm?.id) {
+      showUiNotice("No hay ID visible para copiar.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(String(dm.id));
+      showUiNotice("ID del chat copiado.");
+    } catch {
+      showUiNotice("No se pudo copiar el ID del chat.");
+    }
+  }
+
+  async function handleCloseDm(dm) {
+    if (!dm?.id) {
+      return;
+    }
+
+    const nextVisibleDms = (workspace?.dms || []).filter((item) => item.id !== dm.id);
+    const fallbackDm = nextVisibleDms[0] || null;
+    const nextSelection =
+      activeSelection.kind === "dm" && activeSelection.channelId === dm.id
+        ? fallbackDm
+          ? {
+              channelId: fallbackDm.id,
+              guildId: null,
+              kind: "dm"
+            }
+          : {
+              channelId: null,
+              guildId: null,
+              kind: "home"
+            }
+        : activeSelection;
+
+    setWorkspace((previous) =>
+      previous
+        ? {
+            ...previous,
+            dms: (previous.dms || []).filter((item) => item.id !== dm.id)
+          }
+        : previous
+    );
+
+    if (nextSelection !== activeSelection) {
+      setActiveSelection(nextSelection);
+    }
+
+    try {
+      await api.setDmVisibility({
+        channelId: dm.id,
+        hidden: true
+      });
+      await loadBootstrap(nextSelection);
+      showUiNotice(`Se oculto ${dm.display_name || "el DM"} del lateral.`);
+    } catch (error) {
+      await loadBootstrap(activeSelection);
+      setAppError(error.message);
+    }
   }
 
   async function handleMarkGuildRead(guild) {
@@ -1949,6 +2247,7 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
             activeSelection={activeSelection}
             currentUserLabel={currentUserLabel}
             directUnreadCount={directUnreadCount}
+            dmMenuPrefs={dmMenuPrefs}
             guildMenuPrefs={guildMenuPrefs}
             hoveredVoiceChannelId={hoveredVoiceChannelId}
             inputMenuNode={voiceMenu === "input" && !isVoiceChannel ? renderInputMenu() : null}
@@ -1960,22 +2259,36 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
             onOpenDialog={openDialog}
             onOpenGuildPrivacy={handleOpenGuildPrivacy}
             onOpenGuildSettings={handleOpenGuildSettings}
+            onOpenFullProfile={openFullProfile}
             onOpenInviteModal={openInviteModal}
             onOpenProfileCard={openProfileCard}
             onOpenSettings={() => setSettingsOpen(true)}
+            onCloseDm={handleCloseDm}
+            onCopyDmId={handleCopyDmId}
             onCopyGuildId={handleCopyGuildId}
+            onBlockUser={handleBlockUser}
             onLeaveGuild={handleLeaveGuild}
+            onMarkDmRead={handleMarkDmRead}
             onMarkGuildRead={handleMarkGuildRead}
+            onAcceptFriendRequest={handleAcceptFriendRequest}
+            onRemoveFriend={handleRemoveFriend}
+            onMoveGuild={handleMoveGuild}
+            onMoveGuildChannel={handleMoveGuildChannel}
+            onReportUser={handleReportUser}
             onSelectDirectLink={handleSelectDirectLink}
             onSelectGuild={handleSelectGuild}
             onSelectGuildChannel={handleSelectGuildChannel}
             onSelectHome={handleSelectHome}
+            onSendFriendRequest={handleSendFriendRequest}
             onSetHoveredVoiceChannelId={setHoveredVoiceChannelId}
             onShowNotice={showUiNotice}
+            onToggleDmMenuPref={handleToggleDmMenuPref}
             onToggleGuildMenuPref={handleUpdateGuildMenuPref}
+            onToggleServerFolder={handleToggleServerFolder}
             onUpdateGuildNotificationLevel={(guildId, level) =>
               handleUpdateGuildMenuPref(guildId, "notificationLevel", level)
             }
+            serverFolders={serverFolders}
             onToggleVoiceMenu={toggleVoiceMenu}
             onToggleVoiceState={toggleVoiceState}
             voiceMenu={voiceMenu}
@@ -2054,6 +2367,7 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
                     onToggleVoiceState={toggleVoiceState}
                     shareMenuNode={voiceMenu === "share" ? renderShareMenu() : null}
                     voiceMenu={voiceMenu}
+                    voiceInputLevel={voiceInputLevel}
                     voiceStageParticipants={voiceStageParticipants}
                     voiceState={voiceState}
                     workspace={workspace}
