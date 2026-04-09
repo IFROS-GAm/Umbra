@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 
+import { translate } from "../../i18n.js";
 import { Icon } from "../Icon.jsx";
 import { resolveGuildIcon } from "./workspaceHelpers.js";
 
@@ -11,18 +12,10 @@ function truncateServerName(name) {
   return name.length > 24 ? `${name.slice(0, 21)}...` : name;
 }
 
-const MENU_ITEMS = [
-  { id: "invite", icon: "userAdd", label: "Invitar al servidor" },
-  { id: "settings", icon: "settings", label: "Ajustes del servidor" },
-  { id: "channel", icon: "add", label: "Crear un canal" },
-  { id: "category", icon: "threads", label: "Crear categoria" },
-  { id: "profile", icon: "edit", label: "Editar perfil de servidor" },
-  { id: "copy-id", icon: "copy", label: "Copiar ID del servidor" }
-];
-
 export function ServerAdminMenu({
   canManageGuild,
   guild,
+  language = "es",
   onCopyId,
   onCreateCategory,
   onCreateChannel,
@@ -32,6 +25,15 @@ export function ServerAdminMenu({
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
   const guildIcon = resolveGuildIcon(guild);
+  const t = (key, fallback) => translate(language, key, fallback);
+  const menuItems = [
+    { id: "invite", icon: "userAdd", label: t("server.admin.invite", "Invitar al servidor") },
+    { id: "settings", icon: "settings", label: t("server.admin.settings", "Ajustes del servidor") },
+    { id: "channel", icon: "add", label: t("server.admin.channel", "Crear un canal") },
+    { id: "category", icon: "threads", label: t("server.admin.category", "Crear categoria") },
+    { id: "profile", icon: "edit", label: t("server.admin.profile", "Editar perfil de servidor") },
+    { id: "copy-id", icon: "copy", label: t("server.admin.copyId", "Copiar ID del servidor") }
+  ];
 
   useEffect(() => {
     if (!open) {
@@ -98,7 +100,7 @@ export function ServerAdminMenu({
 
       {open ? (
         <div className="floating-surface server-admin-menu">
-          {MENU_ITEMS.map((item, index) => (
+          {menuItems.map((item, index) => (
             <React.Fragment key={item.id}>
               {index === 1 || index === 5 ? <div className="server-admin-divider" /> : null}
               <button

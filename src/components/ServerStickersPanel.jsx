@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import { api, resolveAssetUrl } from "../api.js";
+import { translate } from "../i18n.js";
 import { Icon } from "./Icon.jsx";
 
 function normalizeStickerName(value) {
@@ -11,8 +12,13 @@ function normalizeStickerEmoji(value) {
   return String(value || "").trim().slice(0, 16);
 }
 
-export function ServerStickersPanel({ guildId }) {
+function replaceCount(template, count, fallback) {
+  return String(template || fallback).replace("{count}", String(count));
+}
+
+export function ServerStickersPanel({ guildId, language = "es" }) {
   const fileInputRef = useRef(null);
+  const t = (key, fallback) => translate(language, key, fallback);
   const [stickersState, setStickersState] = useState({
     error: "",
     loaded: false,
@@ -121,7 +127,7 @@ export function ServerStickersPanel({ guildId }) {
     if (!file.type.startsWith("image/")) {
       setStickersState((previous) => ({
         ...previous,
-        error: "Selecciona una imagen valida para el sticker."
+        error: t("server.settings.stickers.invalidImage", "Selecciona una imagen valida para el sticker.")
       }));
       return;
     }
@@ -159,7 +165,9 @@ export function ServerStickersPanel({ guildId }) {
         const uploadPayload = await api.uploadAttachments([form.imageFile]);
         imageUrl = uploadPayload.attachments?.[0]?.url || "";
         if (!imageUrl) {
-          throw new Error("No se pudo subir la imagen del sticker.");
+          throw new Error(
+            t("server.settings.stickers.uploadFailed", "No se pudo subir la imagen del sticker.")
+          );
         }
       }
 
@@ -188,7 +196,7 @@ export function ServerStickersPanel({ guildId }) {
           name: ""
         };
       });
-      setNotice("Sticker creado.");
+      setNotice(t("server.settings.stickers.created", "Sticker creado."));
     } catch (error) {
       setStickersState((previous) => ({
         ...previous,
@@ -209,7 +217,7 @@ export function ServerStickersPanel({ guildId }) {
         ...previous,
         stickers: previous.stickers.filter((item) => item.id !== sticker.id)
       }));
-      setNotice("Sticker eliminado.");
+      setNotice(t("server.settings.stickers.deleted", "Sticker eliminado."));
     } catch (error) {
       setStickersState((previous) => ({
         ...previous,
@@ -223,10 +231,25 @@ export function ServerStickersPanel({ guildId }) {
       <div className="server-settings-tab-panel">
         <div className="server-settings-list-header">
           <div>
-            <h3>Stickers</h3>
-            <span>{stickersState.stickers.length} stickers disponibles en este servidor</span>
+            <h3>{t("server.settings.stickers.title", "Stickers")}</h3>
+            <span>
+              {replaceCount(
+                t(
+                  "server.settings.stickers.subtitle",
+                  `${stickersState.stickers.length} stickers disponibles en este servidor`
+                ),
+                stickersState.stickers.length,
+                `${stickersState.stickers.length} stickers disponibles en este servidor`
+              )}
+            </span>
           </div>
-          <span className="server-settings-pill">{customStickerCount} personalizados</span>
+          <span className="server-settings-pill">
+            {replaceCount(
+              t("server.settings.stickers.customCount", `${customStickerCount} personalizados`),
+              customStickerCount,
+              `${customStickerCount} personalizados`
+            )}
+          </span>
         </div>
 
         <form className="server-stickers-form" onSubmit={handleCreateSticker}>
@@ -239,11 +262,11 @@ export function ServerStickersPanel({ guildId }) {
           />
 
           <label className="settings-field">
-            <span>Nombre del sticker</span>
+            <span>{t("server.settings.stickers.name", "Nombre del sticker")}</span>
             <input
               maxLength={32}
               onChange={(event) => updateForm("name", event.target.value)}
-              placeholder="ej. Saludo"
+              placeholder={t("server.settings.stickers.placeholderName", "ej. Saludo")}
               required
               value={form.name}
             />
@@ -251,7 +274,7 @@ export function ServerStickersPanel({ guildId }) {
 
           <div className="server-stickers-form-row">
             <label className="settings-field">
-              <span>Emoji</span>
+              <span>{t("server.settings.stickers.emoji", "Emoji")}</span>
               <input
                 maxLength={16}
                 onChange={(event) => updateForm("emoji", event.target.value)}
@@ -261,7 +284,7 @@ export function ServerStickersPanel({ guildId }) {
             </label>
 
             <div className="settings-field">
-              <span>Imagen</span>
+              <span>{t("server.settings.stickers.image", "Imagen")}</span>
               <div className="server-stickers-upload-row">
                 <button
                   className="ghost-button"
@@ -269,7 +292,11 @@ export function ServerStickersPanel({ guildId }) {
                   type="button"
                 >
                   <Icon name="upload" />
-                  <span>{form.imageFile ? "Cambiar imagen" : "Subir imagen"}</span>
+                  <span>
+                    {form.imageFile
+                      ? t("server.settings.stickers.changeImage", "Cambiar imagen")
+                      : t("server.settings.stickers.uploadImage", "Subir imagen")}
+                  </span>
                 </button>
                 {form.imagePreview ? (
                   <button
@@ -290,7 +317,7 @@ export function ServerStickersPanel({ guildId }) {
                     type="button"
                   >
                     <Icon name="close" />
-                    <span>Quitar</span>
+                    <span>{t("server.settings.stickers.removeImage", "Quitar")}</span>
                   </button>
                 ) : null}
               </div>
@@ -311,13 +338,19 @@ export function ServerStickersPanel({ guildId }) {
           <div className="settings-form-actions">
             <button className="primary-button" disabled={submitting} type="submit">
               <Icon name="sticker" />
-              <span>{submitting ? "Creando..." : "Crear sticker"}</span>
+              <span>
+                {submitting
+                  ? t("server.settings.stickers.creating", "Creando...")
+                  : t("server.settings.stickers.create", "Crear sticker")}
+              </span>
             </button>
           </div>
         </form>
 
         {stickersState.loading ? (
-          <div className="server-settings-empty">Cargando stickers...</div>
+          <div className="server-settings-empty">
+            {t("server.settings.stickers.loading", "Cargando stickers...")}
+          </div>
         ) : (
           <div className="server-stickers-grid">
             {stickersState.stickers.map((sticker) => (
@@ -332,12 +365,17 @@ export function ServerStickersPanel({ guildId }) {
                   </div>
                   <div className="server-sticker-card-copy">
                     <strong>{sticker.name}</strong>
-                    <span>{sticker.emoji || "Sticker del servidor"}</span>
+                    <span>
+                      {sticker.emoji ||
+                        t("server.settings.stickers.serverSticker", "Sticker del servidor")}
+                    </span>
                   </div>
                 </div>
                 <div className="server-settings-badges">
                   {sticker.is_default ? (
-                    <span className="server-settings-pill accent">Predeterminado</span>
+                    <span className="server-settings-pill accent">
+                      {t("server.settings.stickers.default", "Predeterminado")}
+                    </span>
                   ) : (
                     <button
                       className="ghost-button small"
@@ -345,7 +383,7 @@ export function ServerStickersPanel({ guildId }) {
                       type="button"
                     >
                       <Icon name="trash" size={14} />
-                      <span>Eliminar</span>
+                      <span>{t("server.settings.stickers.delete", "Eliminar")}</span>
                     </button>
                   )}
                 </div>
@@ -354,7 +392,10 @@ export function ServerStickersPanel({ guildId }) {
 
             {!stickersState.stickers.length ? (
               <div className="server-settings-empty">
-                Este servidor aun no tiene stickers. Crea uno para usarlo en el chat.
+                {t(
+                  "server.settings.stickers.empty",
+                  "Este servidor aun no tiene stickers. Crea uno para usarlo en el chat."
+                )}
               </div>
             ) : null}
           </div>

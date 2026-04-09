@@ -46,6 +46,7 @@ export const VirtualMessageFeed = memo(function VirtualMessageFeed({
   headerContent,
   handleReaction,
   handleScroll,
+  language = "es",
   listRef,
   loadingMessages,
   messageMenuFor,
@@ -138,6 +139,7 @@ export const VirtualMessageFeed = memo(function VirtualMessageFeed({
               grouped={row.grouped}
               isMenuOpen={messageMenuFor === row.message.id}
               isReactionPickerOpen={reactionPickerFor === row.message.id}
+              language={language}
               message={row.message}
               onHandleReaction={handleReaction}
               onMenuAction={onMenuAction}

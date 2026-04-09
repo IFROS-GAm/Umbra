@@ -1,12 +1,21 @@
 import React from "react";
 import { createPortal } from "react-dom";
 
+import { translate } from "../../i18n.js";
 import { Icon } from "../Icon.jsx";
 import { MESSAGE_TOOLBAR_REACTIONS } from "./workspaceHelpers.js";
 
-export function MessageActionMenu({ anchorRef, message, onAction, onClose, onQuickReact }) {
+export function MessageActionMenu({
+  anchorRef,
+  language = "es",
+  message,
+  onAction,
+  onClose,
+  onQuickReact
+}) {
   const rootRef = React.useRef(null);
   const [menuPosition, setMenuPosition] = React.useState(null);
+  const t = (key, fallback) => translate(language, key, fallback);
 
   React.useEffect(() => {
     function handlePointerDown(event) {
@@ -67,24 +76,24 @@ export function MessageActionMenu({ anchorRef, message, onAction, onClose, onQui
 
   const sections = [
     [
-      { id: "react", label: "Agregar reaccion", icon: "emoji" },
-      { id: "reply", label: "Responder", icon: "replyArrow" },
-      { id: "forward", label: "Reenviar", icon: "forward" },
-      { id: "thread", label: "Crear hilo", icon: "threads" }
+      { id: "react", label: t("message.menu.react", "Agregar reaccion"), icon: "emoji" },
+      { id: "reply", label: t("message.menu.reply", "Responder"), icon: "replyArrow" },
+      { id: "forward", label: t("message.menu.forward", "Reenviar"), icon: "forward" },
+      { id: "thread", label: t("message.menu.thread", "Crear hilo"), icon: "threads" }
     ],
     [
-      { id: "copy-text", label: "Copiar texto", icon: "copy", disabled: !message.content },
-      { id: "pin", label: "Fijar mensaje", icon: "pin" },
-      { id: "unread", label: "Marcar como no leido", icon: "mail" },
-      { id: "copy-link", label: "Copiar enlace del mensaje", icon: "link" }
+      { id: "copy-text", label: t("message.menu.copyText", "Copiar texto"), icon: "copy", disabled: !message.content },
+      { id: "pin", label: t("message.menu.pin", "Fijar mensaje"), icon: "pin" },
+      { id: "unread", label: t("message.menu.unread", "Marcar como no leido"), icon: "mail" },
+      { id: "copy-link", label: t("message.menu.copyLink", "Copiar enlace del mensaje"), icon: "link" }
     ],
     [
-      ...(message.can_edit ? [{ id: "edit", label: "Editar mensaje", icon: "edit" }] : []),
+      ...(message.can_edit ? [{ id: "edit", label: t("message.menu.edit", "Editar mensaje"), icon: "edit" }] : []),
       ...(message.can_delete
-        ? [{ id: "delete", label: "Eliminar mensaje", icon: "trash", danger: true }]
+        ? [{ id: "delete", label: t("message.menu.delete", "Eliminar mensaje"), icon: "trash", danger: true }]
         : [])
     ],
-    [{ id: "copy-id", label: "Copiar ID del mensaje", icon: "copy" }]
+    [{ id: "copy-id", label: t("message.menu.copyId", "Copiar ID del mensaje"), icon: "copy" }]
   ].filter((section) => section.length > 0);
 
   if (!anchorRef?.current) {

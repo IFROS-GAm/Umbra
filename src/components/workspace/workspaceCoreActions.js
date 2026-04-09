@@ -1,0 +1,851 @@
+import { api } from "../../api.js";
+import { getSocket } from "../../socket.js";
+import { findChannelInSession } from "../../utils.js";
+import {
+  applyChannelPreviewToWorkspace,
+  attachmentKey,
+  fallbackDeviceLabel,
+  findDirectDmByUserId,
+  toggleReactionBucket,
+  upsertChannelMessage
+} from "./workspaceHelpers.js";
+
+const DIRECT_CALL_TYPES = new Set(["dm", "group_dm"]);
+
+function buildLocalMessagePreview(content = "", attachments = [], sticker = null) {
+  const normalized = String(content || "").replace(/\s+/g, " ").trim();
+  if (normalized) {
+    return normalized.length > 84 ? `${normalized.slice(0, 81)}...` : normalized;
+  }
+
+  if (sticker?.name) {
+    return `[sticker] ${sticker.name}`;
+  }
+
+  if (!attachments.length) {
+    return "";
+  }
+
+  if (attachments.length === 1) {
+    return attachments[0]?.content_type?.startsWith("image/")
+      ? "[imagen]"
+      : `[${attachments[0]?.name || "archivo"}]`;
+  }
+
+  return `[${attachments.length} adjuntos]`;
+}
+
+function buildOptimisticMessage({
+  activeGuild,
+  attachments,
+  channelId,
+  clientNonce,
+  content,
+  createdAt,
+  currentUser,
+  currentUserDisplayName,
+  replyTo,
+  sticker = null
+}) {
+  return {
+    id: `temp-${clientNonce}`,
+    client_nonce: clientNonce,
+    optimistic: true,
+    channel_id: channelId,
+    guild_id: activeGuild?.id || null,
+    author_id: currentUser?.id || "",
+    content: String(content || "").trim(),
+    reply_to: replyTo?.id || null,
+    sticker,
+    attachments,
+    mention_user_ids: [],
+    edited_at: null,
+    deleted_at: null,
+    created_at: createdAt,
+    author: currentUser
+      ? {
+          id: currentUser.id,
+          username: currentUser.username,
+          discriminator: currentUser.discriminator,
+          avatar_hue: currentUser.avatar_hue,
+          avatar_url: currentUser.avatar_url || "",
+          profile_banner_url: currentUser.profile_banner_url || "",
+          profile_color: currentUser.profile_color || "#5865F2",
+          status: currentUser.status === "invisible" ? "offline" : currentUser.status
+        }
+      : null,
+    display_name: currentUserDisplayName,
+    can_edit: true,
+    can_delete: true,
+    is_mentioning_me: false,
+    reply_preview: replyTo
+      ? {
+          id: replyTo.id,
+          author_name:
+            replyTo.display_name ||
+            replyTo.author?.username ||
+            replyTo.author?.display_name ||
+            "Usuario",
+          content: String(replyTo.content || "").replace(/\s+/g, " ").trim().slice(0, 120)
+        }
+      : null,
+    reactions: []
+  };
+}
+
+export function createWorkspaceCoreActions(context) {
+  const {
+    accessToken,
+    activeGuild,
+    activeSelection,
+    activeSelectionRef,
+    attachmentInputRef,
+    composer,
+    composerAttachments,
+    composerRef,
+    currentUserLabel,
+    dialog,
+    editingMessage,
+    hasMore,
+    isVoiceChannel,
+    joinedVoiceChannelId,
+    lastTypingAtRef,
+    listRef,
+    loadBootstrap,
+    loadMessages,
+    loadingMessages,
+    localReadStateRef,
+    messages,
+    patchChannelMessages,
+    pendingDirectDmRef,
+    readChannelCache,
+    replyMentionEnabled,
+    replyTarget,
+    selectedVoiceDevices,
+    setActiveSelection,
+    setAppError,
+    setComposer,
+    setComposerAttachments,
+    setComposerMenuOpen,
+    setComposerPicker,
+    setDialog,
+    setEditingMessage,
+    setHeaderPanel,
+    setJoinedVoiceChannelId,
+    setProfileCard,
+    setReplyMentionEnabled,
+    setReplyTarget,
+    setSelectedVoiceDevices,
+    setUiNotice,
+    setUploadingAttachments,
+    setVoiceMenu,
+    setVoiceState,
+    setWorkspace,
+    voiceDevices,
+    workspace
+  } = context;
+
+  function scrollToBottom() {
+    requestAnimationFrame(() => {
+      const element = listRef.current;
+      if (element) {
+        element.scrollTop = element.scrollHeight;
+      }
+    });
+  }
+
+  function applyPreview(preview) {
+    if (!preview) {
+      return;
+    }
+
+    setWorkspace((previous) =>
+      applyChannelPreviewToWorkspace(previous, preview, {
+        localReadStateByChannel: localReadStateRef.current,
+        openChannelId: activeSelectionRef.current.channelId
+      })
+    );
+  }
+
+  function showUiNotice(message) {
+    setUiNotice(message);
+  }
+
+  function toggleHeaderPanel(panelName) {
+    setHeaderPanel((previous) => (previous === panelName ? null : panelName));
+  }
+
+  function toggleVoiceState(key) {
+    setVoiceState((previous) => ({
+      ...previous,
+      [key]: !previous[key]
+    }));
+  }
+
+  function toggleVoiceMenu(name) {
+    setVoiceMenu((previous) => (previous === name ? null : name));
+  }
+
+  function updateVoiceSetting(key, value) {
+    setVoiceState((previous) => ({
+      ...previous,
+      [key]: value
+    }));
+  }
+
+  function handleVoiceDeviceChange(kind, value) {
+    setSelectedVoiceDevices((previous) => ({
+      ...previous,
+      [kind]: value
+    }));
+  }
+
+  function cycleVoiceDevice(kind) {
+    const devices = voiceDevices[kind] || [];
+    if (!devices.length) {
+      return;
+    }
+
+    const currentIndex = devices.findIndex(
+      (device) => device.deviceId === selectedVoiceDevices[kind]
+    );
+    const nextDevice = devices[(currentIndex + 1 + devices.length) % devices.length];
+    handleVoiceDeviceChange(kind, nextDevice.deviceId);
+    showUiNotice(
+      `Ahora usando ${nextDevice.label || fallbackDeviceLabel(kind, (currentIndex + 1) % devices.length)}.`
+    );
+  }
+
+  function getSelectedDeviceLabel(kind) {
+    const selectedId = selectedVoiceDevices[kind];
+    const devices = voiceDevices[kind] || [];
+    const index = devices.findIndex((device) => device.deviceId === selectedId);
+    const device = index >= 0 ? devices[index] : devices[0];
+
+    if (!device) {
+      return "Configuracion predeterminada";
+    }
+
+    return device.label || fallbackDeviceLabel(kind, Math.max(index, 0));
+  }
+
+  function appendToComposer(token) {
+    setComposer((previous) => {
+      const prefix = previous && !previous.endsWith(" ") ? `${previous} ` : previous;
+      return `${prefix}${token}`;
+    });
+
+    requestAnimationFrame(() => {
+      composerRef.current?.focus();
+    });
+  }
+
+  function handleComposerChange(value) {
+    setComposer(value);
+    const now = Date.now();
+    if (
+      activeSelection.channelId &&
+      workspace?.current_user &&
+      now - lastTypingAtRef.current > 1200
+    ) {
+      getSocket(accessToken).emit("typing:start", {
+        channelId: activeSelection.channelId
+      });
+      lastTypingAtRef.current = now;
+    }
+  }
+
+  function handleComposerShortcut(shortcut) {
+    setComposerMenuOpen(false);
+    if (shortcut.id === "upload") {
+      if (editingMessage) {
+        showUiNotice("Por ahora los adjuntos nuevos se agregan solo en mensajes nuevos.");
+        return;
+      }
+
+      if (isVoiceChannel) {
+        showUiNotice("Los canales de voz no aceptan mensajes ni adjuntos.");
+        return;
+      }
+
+      attachmentInputRef.current?.click();
+      return;
+    }
+
+    showUiNotice(shortcut.description);
+  }
+
+  function handlePickerInsert(value) {
+    appendToComposer(value);
+    setComposerPicker(null);
+  }
+
+  function handleScroll() {
+    const element = listRef.current;
+    if (!element || loadingMessages || !hasMore || !messages.length) {
+      return;
+    }
+    if (element.scrollTop < 80) {
+      loadMessages({
+        before: messages[0].id,
+        prepend: true
+      });
+    }
+  }
+
+  async function handleSubmitMessage(event) {
+    event.preventDefault();
+    if ((!composer.trim() && !composerAttachments.length) || !activeSelection.channelId || isVoiceChannel) {
+      return;
+    }
+
+    const draftComposer = composer;
+    const draftAttachments = composerAttachments;
+    const draftReplyTarget = replyTarget;
+    const draftReplyMentionEnabled = replyMentionEnabled;
+    let pendingClientNonce = null;
+
+    try {
+      if (editingMessage) {
+        await api.updateMessage({
+          content: composer,
+          messageId: editingMessage.id
+        });
+      } else {
+        const clientNonce =
+          globalThis.crypto?.randomUUID?.() ||
+          `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        pendingClientNonce = clientNonce;
+        const createdAt = new Date().toISOString();
+        const currentUser = workspace?.current_user || null;
+        const currentUserDisplayName =
+          activeGuild?.members.find((member) => member.id === currentUser?.id)?.display_name ||
+          currentUserLabel;
+        const optimisticMessage = buildOptimisticMessage({
+          activeGuild,
+          attachments: draftAttachments,
+          channelId: activeSelection.channelId,
+          clientNonce,
+          content: draftComposer,
+          createdAt,
+          currentUser,
+          currentUserDisplayName,
+          replyTo: draftReplyTarget
+        });
+        const optimisticPreview = {
+          id: activeSelection.channelId,
+          last_message_id: optimisticMessage.id,
+          last_message_author_id: currentUser?.id || null,
+          last_message_preview: buildLocalMessagePreview(draftComposer, draftAttachments),
+          last_message_at: createdAt
+        };
+
+        patchChannelMessages(activeSelection.channelId, (previous) =>
+          upsertChannelMessage(previous, optimisticMessage)
+        );
+        applyPreview(optimisticPreview);
+        scrollToBottom();
+
+        setComposer("");
+        setComposerAttachments([]);
+        setReplyTarget(null);
+        setReplyMentionEnabled(true);
+        setEditingMessage(null);
+
+        const payload = await api.createMessage({
+          attachments: draftAttachments,
+          channelId: activeSelection.channelId,
+          clientNonce,
+          content: draftComposer,
+          replyMentionUserId:
+            draftReplyTarget && draftReplyMentionEnabled
+              ? draftReplyTarget.author?.id || null
+              : null,
+          replyTo: draftReplyTarget?.id || null
+        });
+
+        applyPreview(payload?.preview);
+
+        if (payload?.message) {
+          patchChannelMessages(activeSelection.channelId, (previous) =>
+            previous.map((item) =>
+              item.client_nonce === clientNonce ? payload.message : item
+            )
+          );
+        }
+      }
+
+      if (editingMessage) {
+        setComposer("");
+        setComposerAttachments([]);
+        setReplyTarget(null);
+        setReplyMentionEnabled(true);
+        setEditingMessage(null);
+      }
+      setAppError("");
+    } catch (error) {
+      if (!editingMessage) {
+        patchChannelMessages(activeSelection.channelId, (previous) =>
+          previous.filter((item) => item.client_nonce !== pendingClientNonce)
+        );
+        setComposer(draftComposer);
+        setComposerAttachments(draftAttachments);
+        setReplyTarget(draftReplyTarget);
+        setReplyMentionEnabled(draftReplyMentionEnabled);
+        await loadBootstrap(activeSelectionRef.current);
+      }
+      setAppError(error.message);
+    }
+  }
+
+  async function handleDeleteMessage(message) {
+    if (!window.confirm("Eliminar este mensaje?")) {
+      return;
+    }
+
+    try {
+      await api.deleteMessage({
+        messageId: message.id
+      });
+    } catch (error) {
+      setAppError(error.message);
+    }
+  }
+
+  async function handleReaction(messageId, emoji) {
+    const channelId = activeSelectionRef.current.channelId;
+    const currentUserId = workspace?.current_user?.id;
+    const cachedMessage = (readChannelCache(channelId)?.messages || []).find(
+      (message) => message.id === messageId
+    );
+
+    if (channelId && currentUserId) {
+      patchChannelMessages(channelId, (previous) =>
+        toggleReactionBucket(previous, {
+          emoji,
+          messageId,
+          userId: currentUserId
+        })
+      );
+    }
+
+    try {
+      const payload = await api.toggleReaction({
+        emoji,
+        messageId
+      });
+
+      if (payload?.message?.channel_id) {
+        patchChannelMessages(payload.message.channel_id, (previous) =>
+          previous.map((item) => (item.id === payload.message.id ? payload.message : item))
+        );
+      }
+    } catch (error) {
+      if (channelId && cachedMessage) {
+        patchChannelMessages(channelId, (previous) =>
+          previous.map((message) => (message.id === messageId ? cachedMessage : message))
+        );
+      }
+      setAppError(error.message);
+    }
+  }
+
+  async function handleStatusChange(status) {
+    try {
+      await api.updateStatus({
+        status
+      });
+      setProfileCard((previous) =>
+        previous?.profile?.id === workspace?.current_user?.id
+          ? {
+              ...previous,
+              profile: {
+                ...previous.profile,
+                status
+              }
+            }
+          : previous
+      );
+      await loadBootstrap(activeSelection);
+    } catch (error) {
+      setAppError(error.message);
+    }
+  }
+
+  async function handleProfileUpdate(nextProfile) {
+    try {
+      const {
+        avatarFile,
+        avatarUrl: requestedAvatarUrl,
+        bannerFile,
+        bannerImageUrl: requestedBannerImageUrl,
+        clearAvatar,
+        clearBanner,
+        ...profilePatch
+      } = nextProfile;
+      let avatarUrl = requestedAvatarUrl;
+      let bannerImageUrl = requestedBannerImageUrl;
+
+      if (avatarFile) {
+        const uploadPayload = await api.uploadAttachments([avatarFile]);
+        avatarUrl = uploadPayload.attachments?.[0]?.url;
+
+        if (!avatarUrl) {
+          throw new Error("No se pudo subir la foto de perfil.");
+        }
+      } else if (clearAvatar) {
+        avatarUrl = "";
+      }
+
+      if (bannerFile) {
+        const uploadPayload = await api.uploadAttachments([bannerFile]);
+        bannerImageUrl = uploadPayload.attachments?.[0]?.url;
+
+        if (!bannerImageUrl) {
+          throw new Error("No se pudo subir la imagen del panel.");
+        }
+      } else if (clearBanner) {
+        bannerImageUrl = "";
+      }
+
+      await api.updateProfile({
+        ...profilePatch,
+        avatarUrl,
+        bannerImageUrl
+      });
+      await loadBootstrap(activeSelectionRef.current);
+
+      if (activeSelectionRef.current.channelId) {
+        await loadMessages({
+          channelId: activeSelectionRef.current.channelId
+        });
+      }
+
+      setAppError("");
+      showUiNotice("Perfil actualizado.");
+    } catch (error) {
+      setAppError(error.message);
+      throw error;
+    }
+  }
+
+  async function handleDialogSubmit(values) {
+    if (!dialog) {
+      return;
+    }
+
+    try {
+      if (dialog.type === "guild") {
+        const payload = await api.createGuild({
+          description: values.description,
+          name: values.name,
+          templateId: values.templateId
+        });
+        await loadBootstrap({
+          channelId: payload.channel_id,
+          guildId: payload.guild_id,
+          kind: "guild"
+        });
+      }
+
+      if (dialog.type === "channel") {
+        if (!activeGuild?.permissions?.can_manage_channels) {
+          throw new Error("Solo el administrador puede cambiar la estructura del servidor.");
+        }
+
+        const payload = await api.createChannel({
+          guildId: activeGuild.id,
+          kind: values.kind,
+          name: values.name,
+          parentId: values.parentId,
+          topic: values.topic
+        });
+        await loadBootstrap({
+          channelId: payload.channel.id,
+          guildId: activeGuild.id,
+          kind: "guild"
+        });
+      }
+
+      if (dialog.type === "category") {
+        if (!activeGuild?.permissions?.can_manage_channels) {
+          throw new Error("Solo el administrador puede cambiar la estructura del servidor.");
+        }
+
+        await api.createCategory({
+          guildId: activeGuild.id,
+          name: values.name
+        });
+        await loadBootstrap({
+          channelId: activeSelectionRef.current.channelId,
+          guildId: activeGuild.id,
+          kind: "guild"
+        });
+      }
+
+      if (dialog.type === "dm") {
+        const recipientId = values.recipientId;
+        const existingDm = findDirectDmByUserId(
+          workspace?.dms || [],
+          workspace?.current_user?.id,
+          recipientId
+        );
+
+        if (existingDm) {
+          await loadBootstrap({
+            channelId: existingDm.id,
+            guildId: null,
+            kind: "dm"
+          });
+        } else {
+          if (pendingDirectDmRef.current.has(recipientId)) {
+            return;
+          }
+
+          pendingDirectDmRef.current.add(recipientId);
+
+          try {
+            const payload = await api.createDm({
+              recipientId
+            });
+            await loadBootstrap({
+              channelId: payload.channel.id,
+              guildId: null,
+              kind: "dm"
+            });
+          } finally {
+            pendingDirectDmRef.current.delete(recipientId);
+          }
+        }
+      }
+
+      if (dialog.type === "dm_group") {
+        const payload = await api.createGroupDm({
+          name: values.name,
+          recipientIds: values.recipientIds
+        });
+        await loadBootstrap({
+          channelId: payload.channel.id,
+          guildId: null,
+          kind: "dm"
+        });
+      }
+
+      setDialog(null);
+      setAppError("");
+    } catch (error) {
+      setAppError(error.message);
+      throw error;
+    }
+  }
+
+  async function handleStickerSelect(sticker) {
+    if (!sticker?.id) {
+      return;
+    }
+
+    if (editingMessage) {
+      showUiNotice("Por ahora los stickers se envian como mensajes nuevos.");
+      return;
+    }
+
+    if (activeSelection.kind !== "guild" || !activeSelection.channelId || isVoiceChannel) {
+      showUiNotice("Los stickers del servidor solo funcionan en canales de texto del servidor.");
+      return;
+    }
+
+    const draftReplyTarget = replyTarget;
+    const draftReplyMentionEnabled = replyMentionEnabled;
+    const clientNonce =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `nonce-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const createdAt = new Date().toISOString();
+    const currentUser = workspace?.current_user || null;
+    const currentUserDisplayName =
+      activeGuild?.members.find((member) => member.id === currentUser?.id)?.display_name ||
+      currentUserLabel;
+    const optimisticMessage = buildOptimisticMessage({
+      activeGuild,
+      attachments: [],
+      channelId: activeSelection.channelId,
+      clientNonce,
+      content: "",
+      createdAt,
+      currentUser,
+      currentUserDisplayName,
+      replyTo: draftReplyTarget,
+      sticker
+    });
+    const optimisticPreview = {
+      id: activeSelection.channelId,
+      last_message_id: optimisticMessage.id,
+      last_message_author_id: currentUser?.id || null,
+      last_message_preview: buildLocalMessagePreview("", [], sticker),
+      last_message_at: createdAt
+    };
+
+    patchChannelMessages(activeSelection.channelId, (previous) =>
+      upsertChannelMessage(previous, optimisticMessage)
+    );
+    applyPreview(optimisticPreview);
+    scrollToBottom();
+
+    setComposerPicker(null);
+    setReplyTarget(null);
+    setReplyMentionEnabled(true);
+
+    try {
+      const payload = await api.createMessage({
+        attachments: [],
+        channelId: activeSelection.channelId,
+        clientNonce,
+        content: "",
+        stickerId: sticker.id,
+        replyMentionUserId:
+          draftReplyTarget && draftReplyMentionEnabled
+            ? draftReplyTarget.author?.id || null
+            : null,
+        replyTo: draftReplyTarget?.id || null
+      });
+
+      applyPreview(payload?.preview);
+
+      if (payload?.message) {
+        patchChannelMessages(activeSelection.channelId, (previous) =>
+          previous.map((item) =>
+            item.client_nonce === clientNonce ? payload.message : item
+          )
+        );
+      }
+
+      setAppError("");
+    } catch (error) {
+      patchChannelMessages(activeSelection.channelId, (previous) =>
+        previous.filter((item) => item.client_nonce !== clientNonce)
+      );
+      setReplyTarget(draftReplyTarget);
+      setReplyMentionEnabled(draftReplyMentionEnabled);
+      await loadBootstrap(activeSelectionRef.current);
+      setAppError(error.message);
+    }
+  }
+
+  async function handleAttachmentSelection(event) {
+    const files = [...(event.target.files || [])];
+    event.target.value = "";
+
+    if (!files.length) {
+      return;
+    }
+
+    try {
+      setUploadingAttachments(true);
+      const payload = await api.uploadAttachments(files);
+      setComposerAttachments((previous) =>
+        [...previous, ...(payload.attachments || [])].slice(0, 8)
+      );
+      showUiNotice(
+        `${payload.attachments?.length || files.length} adjunto(s) listos para enviar.`
+      );
+      setAppError("");
+    } catch (error) {
+      setAppError(error.message);
+    } finally {
+      setUploadingAttachments(false);
+    }
+  }
+
+  function removeComposerAttachment(targetAttachment) {
+    setComposerAttachments((previous) =>
+      previous.filter((attachment) => attachmentKey(attachment) !== attachmentKey(targetAttachment))
+    );
+  }
+
+  function handleSelectGuildChannel(channel) {
+    setVoiceMenu(null);
+    setActiveSelection({
+      channelId: channel.id,
+      guildId: activeGuild.id,
+      kind: "guild"
+    });
+
+    if (channel.is_voice && accessToken) {
+      getSocket(accessToken).emit("voice:join", {
+        channelId: channel.id
+      });
+      setJoinedVoiceChannelId(channel.id);
+    }
+  }
+
+  function handleJoinDirectCall({ enableCamera = false } = {}) {
+    const selectedChannel = activeSelectionRef.current?.channelId
+      ? findChannelInSession(workspace, activeSelectionRef.current.channelId)?.channel
+      : null;
+
+    if (
+      !accessToken ||
+      activeSelectionRef.current?.kind !== "dm" ||
+      !selectedChannel ||
+      !DIRECT_CALL_TYPES.has(selectedChannel.type)
+    ) {
+      return;
+    }
+
+    setVoiceMenu(null);
+    if (enableCamera) {
+      setVoiceState((previous) => ({
+        ...previous,
+        cameraEnabled: true
+      }));
+    }
+
+    getSocket(accessToken).emit("voice:join", {
+      channelId: selectedChannel.id
+    });
+    setJoinedVoiceChannelId(selectedChannel.id);
+  }
+
+  function handleVoiceLeave() {
+    if (!joinedVoiceChannelId || !accessToken) {
+      return;
+    }
+
+    getSocket(accessToken).emit("voice:leave");
+    setVoiceMenu(null);
+    setJoinedVoiceChannelId(null);
+    setVoiceState((previous) => ({
+      ...previous,
+      cameraEnabled: false,
+      screenShareEnabled: false
+    }));
+  }
+
+  return {
+    appendToComposer,
+    cycleVoiceDevice,
+    getSelectedDeviceLabel,
+    handleAttachmentSelection,
+    handleComposerChange,
+    handleComposerShortcut,
+    handleDeleteMessage,
+    handleDialogSubmit,
+    handleJoinDirectCall,
+    handlePickerInsert,
+    handleProfileUpdate,
+    handleReaction,
+    handleScroll,
+    handleSelectGuildChannel,
+    handleStatusChange,
+    handleStickerSelect,
+    handleSubmitMessage,
+    handleVoiceDeviceChange,
+    handleVoiceLeave,
+    removeComposerAttachment,
+    showUiNotice,
+    toggleHeaderPanel,
+    toggleVoiceMenu,
+    toggleVoiceState,
+    updateVoiceSetting
+  };
+}

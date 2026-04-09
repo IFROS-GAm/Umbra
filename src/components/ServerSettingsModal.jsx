@@ -1,8 +1,106 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import { api, resolveAssetUrl } from "../api.js";
+import { translate } from "../i18n.js";
 import { Icon } from "./Icon.jsx";
 import { ServerStickersPanel } from "./ServerStickersPanel.jsx";
+
+function resolveLanguageLocale(language) {
+  switch (language) {
+    case "en":
+      return "en-US";
+    case "fr":
+      return "fr-FR";
+    case "es":
+    default:
+      return "es-CO";
+  }
+}
+
+function getServerSettingsCopy(language) {
+  const t = (key, fallback) => translate(language, key, fallback);
+
+  return {
+    admin: t("server.settings.role.admin", "Admin"),
+    banner: t("server.settings.profile.banner", "Cartel"),
+    changeBanner: t("server.settings.profile.changeBanner", "Cambiar imagen del cartel"),
+    changeIcon: t("server.settings.profile.changeIcon", "Cambiar icono del servidor"),
+    close: t("common.close", "Cerrar"),
+    copy: t("common.copy", "Copiar"),
+    createInvite: t("server.settings.invites.create", "Nueva invitacion"),
+    creating: t("common.creating", "Creando..."),
+    createdBy: t("server.settings.invites.createdBy", "Creada por {name}"),
+    description: t("server.settings.profile.description", "Descripcion"),
+    editProfile: t("server.settings.nav.profile", "Perfil de servidor"),
+    emptyDescription: t("server.settings.preview.emptyDescription", "Sin descripcion todavia."),
+    headerInvites: t("server.settings.header.invites", "Invitaciones"),
+    headerInvitesBody: t(
+      "server.settings.header.invitesBody",
+      "Genera enlaces y revisa los accesos activos de tu servidor."
+    ),
+    headerMembers: t("server.settings.header.members", "Miembros"),
+    headerMembersBody: t(
+      "server.settings.header.membersBody",
+      "Gestiona y revisa la gente que forma parte de tu espacio."
+    ),
+    headerProfile: t("server.settings.header.profile", "Perfil de servidor"),
+    headerProfileBody: t(
+      "server.settings.header.profileBody",
+      "Personaliza como aparece tu servidor dentro de Umbra."
+    ),
+    headerRoles: t("server.settings.header.roles", "Roles"),
+    headerRolesBody: t(
+      "server.settings.header.rolesBody",
+      "Consulta la estructura visual y de permisos del servidor."
+    ),
+    headerStickers: t("server.settings.header.stickers", "Stickers"),
+    headerStickersBody: t(
+      "server.settings.header.stickersBody",
+      "Crea stickers propios y manten a mano los predeterminados del servidor."
+    ),
+    hideBanner: t("server.settings.profile.removeBanner", "Quitar imagen del cartel"),
+    hideIcon: t("server.settings.profile.removeIcon", "Eliminar icono"),
+    invites: t("server.settings.nav.invites", "Invitaciones"),
+    inviteCopied: t("server.settings.invites.copied", "Invitacion copiada."),
+    invitesEmpty: t("server.settings.invites.empty", "No hay invitaciones creadas todavia. Genera una para compartir este servidor."),
+    invitesLoading: t("server.settings.invites.loading", "Cargando invitaciones..."),
+    invitesSubtitle: t("server.settings.invites.subtitle", "Genera y comparte accesos al servidor"),
+    invalidBanner: t(
+      "server.settings.profile.invalidBanner",
+      "Selecciona una imagen valida para el cartel del servidor."
+    ),
+    invalidIcon: t(
+      "server.settings.profile.invalidIcon",
+      "Selecciona una imagen valida para el icono del servidor."
+    ),
+    members: t("server.settings.nav.members", "Miembros"),
+    membersCount: t("server.settings.members.count", "personas en este servidor"),
+    membersEmpty: t("server.settings.members.empty", "No se encontraron miembros con ese filtro."),
+    membersHeaderSubtitle: t(
+      "server.settings.header.membersBody",
+      "Gestiona y revisa la gente que forma parte de tu espacio."
+    ),
+    membersVisible: t("server.settings.preview.visibleMembers", "miembros visibles"),
+    name: t("server.settings.profile.name", "Nombre"),
+    noDate: t("common.noDate", "Sin fecha"),
+    noRoles: t("server.settings.roles.empty", "No hay roles configurados todavia."),
+    noRolesMatch: t("server.settings.roles.noMatch", "No se encontraron roles con ese filtro."),
+    owner: t("server.settings.role.owner", "Owner"),
+    profileDescription: t("server.settings.profile.subtitle", "Personaliza como aparece tu servidor dentro de Umbra."),
+    roles: t("server.settings.nav.roles", "Roles"),
+    rolesLoading: t("server.settings.roles.loading", "Cargando roles..."),
+    rolesSubtitle: t("server.settings.roles.subtitle", "Jerarquia y acceso visual del servidor"),
+    rolesMemberCount: t("server.settings.roles.memberCount", "{count} miembros"),
+    saveChanges: t("server.settings.profile.save", "Guardar cambios"),
+    saving: t("common.saving", "Guardando..."),
+    searchMembers: t("server.settings.members.search", "Buscar miembros"),
+    searchRoles: t("server.settings.roles.search", "Buscar roles"),
+    serverUpdated: t("server.settings.profile.saved", "Servidor actualizado."),
+    stickerTab: t("server.settings.nav.stickers", "Stickers"),
+    uploadBanner: t("server.settings.profile.uploadBanner", "Subir cartel"),
+    uses: t("server.settings.invites.uses", "{count} usos")
+  };
+}
 
 function normalizeColorInput(candidate, fallback = "#5865F2") {
   const normalized = String(candidate || "")
@@ -47,38 +145,52 @@ function buildGuildInitials(name) {
   return parts.map((part) => part[0]?.toUpperCase() || "").join("") || "UM";
 }
 
-function formatRelativeDate(value) {
+function formatRelativeDate(value, language = "es") {
   if (!value) {
-    return "Sin fecha";
+    return getServerSettingsCopy(language).noDate;
   }
 
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
-    return "Sin fecha";
+    return getServerSettingsCopy(language).noDate;
   }
 
-  return new Intl.DateTimeFormat("es-CO", {
+  return new Intl.DateTimeFormat(resolveLanguageLocale(language), {
     day: "numeric",
     month: "short",
     year: "numeric"
   }).format(date);
 }
 
-function buildRoleSummary(role) {
+function buildRoleSummary(role, language = "es") {
+  const copy = getServerSettingsCopy(language);
   if (role.is_admin) {
-    return "Administrador";
+    return copy.admin;
   }
 
   if (role.name === "@everyone") {
-    return "Rol base del servidor";
+    return translate(language, "server.settings.role.base", "Rol base del servidor");
   }
 
-  return `${role.member_count || 0} miembros con este rol`;
+  return translate(
+    language,
+    "server.settings.role.memberCount",
+    `${role.member_count || 0} miembros con este rol`
+  ).replace("{count}", String(role.member_count || 0));
 }
 
-export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave }) {
+function replaceCount(template, count, fallback) {
+  return String(template || fallback).replace("{count}", String(count));
+}
+
+function replaceName(template, name, fallback) {
+  return String(template || fallback).replace("{name}", name || "Umbra");
+}
+
+export function ServerSettingsModal({ guild, language = "es", memberCount = 0, onClose, onSave }) {
   const iconInputRef = useRef(null);
   const bannerInputRef = useRef(null);
+  const copy = useMemo(() => getServerSettingsCopy(language), [language]);
 
   const [form, setForm] = useState({
     bannerColor: guild.banner_color || "#5865F2",
@@ -199,7 +311,7 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
     }
 
     return rolesState.roles.filter((role) =>
-      `${role.name || ""} ${buildRoleSummary(role)}`.toLowerCase().includes(normalizedQuery)
+      `${role.name || ""} ${buildRoleSummary(role, language)}`.toLowerCase().includes(normalizedQuery)
     );
   }, [rolesQuery, rolesState.roles]);
 
@@ -317,7 +429,7 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
     }
 
     if (!file.type.startsWith("image/")) {
-      setError("Selecciona una imagen valida para el icono del servidor.");
+      setError(copy.invalidIcon);
       return;
     }
 
@@ -334,7 +446,7 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
     }
 
     if (!file.type.startsWith("image/")) {
-      setError("Selecciona una imagen valida para el cartel del servidor.");
+      setError(copy.invalidBanner);
       return;
     }
 
@@ -362,7 +474,7 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
         iconUrl: clearIcon ? "" : undefined,
         name: form.name
       });
-      setSaved("Servidor actualizado.");
+      setSaved(copy.serverUpdated);
       setIconFile(null);
       setBannerFile(null);
       setIconPreview("");
@@ -409,7 +521,7 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
 
     try {
       await navigator.clipboard.writeText(inviteUrl);
-      setSaved("Invitacion copiada.");
+      setSaved(copy.inviteCopied);
       setError("");
     } catch {
       setSaved(`Invitacion: ${inviteUrl}`);
@@ -437,7 +549,7 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
           />
 
           <label className="settings-field">
-            <span>Nombre</span>
+            <span>{copy.name}</span>
             <input
               maxLength={40}
               onChange={(event) => updateForm("name", event.target.value)}
@@ -447,7 +559,7 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
           </label>
 
           <label className="settings-field">
-            <span>Descripcion</span>
+            <span>{copy.description}</span>
             <textarea
               maxLength={180}
               onChange={(event) => updateForm("description", event.target.value)}
@@ -457,7 +569,7 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
           </label>
 
           <div className="settings-field">
-            <span>Icono</span>
+            <span>{translate(language, "server.settings.profile.icon", "Icono")}</span>
             <div className="server-asset-row">
               <div className="server-icon-preview">
                 {previewIcon ? (
@@ -473,7 +585,7 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
                   type="button"
                 >
                   <Icon name="upload" />
-                  <span>Cambiar icono del servidor</span>
+                  <span>{copy.changeIcon}</span>
                 </button>
                 <button
                   className="ghost-button"
@@ -490,14 +602,14 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
                   type="button"
                 >
                   <Icon name="close" />
-                  <span>Eliminar icono</span>
+                  <span>{copy.hideIcon}</span>
                 </button>
               </div>
             </div>
           </div>
 
           <div className="settings-field">
-            <span>Cartel</span>
+            <span>{copy.banner}</span>
             <div className="server-banner-editor">
               <div className="server-banner-preview" style={previewCardStyle}>
                 <button
@@ -506,7 +618,7 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
                   type="button"
                 >
                   <Icon name="camera" />
-                  <span>Subir cartel</span>
+                  <span>{copy.uploadBanner}</span>
                 </button>
               </div>
               <div className="server-asset-actions">
@@ -516,7 +628,7 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
                   type="button"
                 >
                   <Icon name="upload" />
-                  <span>Cambiar imagen del cartel</span>
+                  <span>{copy.changeBanner}</span>
                 </button>
                 <button
                   className="ghost-button"
@@ -533,7 +645,7 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
                   type="button"
                 >
                   <Icon name="close" />
-                  <span>Quitar imagen del cartel</span>
+                  <span>{copy.hideBanner}</span>
                 </button>
                 <label className="settings-color-input compact">
                   <input
@@ -553,11 +665,11 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
           <div className="settings-form-actions">
             <button className="primary-button" disabled={saving} type="submit">
               <Icon name="save" />
-              <span>{saving ? "Guardando..." : "Guardar cambios"}</span>
+              <span>{saving ? copy.saving : copy.saveChanges}</span>
             </button>
             <button className="ghost-button" onClick={onClose} type="button">
               <Icon name="close" />
-              <span>Cerrar</span>
+              <span>{copy.close}</span>
             </button>
           </div>
         </form>
@@ -574,8 +686,8 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
                 )}
               </div>
               <strong>{form.name || guild.name}</strong>
-              <span>{form.description || "Sin descripcion todavia."}</span>
-              <small>{memberCount} miembros visibles</small>
+              <span>{form.description || copy.emptyDescription}</span>
+              <small>{memberCount} {copy.membersVisible}</small>
             </div>
           </div>
         </aside>
@@ -588,15 +700,21 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
       <div className="server-settings-body single-column">
         <div className="server-settings-tab-panel">
           <div className="server-settings-list-header">
-            <h3>Miembros</h3>
-            <span>{sortedMembers.length} personas en este servidor</span>
+            <h3>{copy.members}</h3>
+            <span>
+              {replaceCount(
+                copy.membersCount,
+                sortedMembers.length,
+                `${sortedMembers.length} personas en este servidor`
+              )}
+            </span>
           </div>
 
           <label className="settings-search server-settings-search">
             <Icon name="search" size={16} />
             <input
               onChange={(event) => setMembersQuery(event.target.value)}
-              placeholder="Buscar miembros"
+              placeholder={copy.searchMembers}
               type="text"
               value={membersQuery}
             />
@@ -625,13 +743,15 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
                 </div>
                 <div className="server-settings-badges">
                   {member.id === guild.owner_id ? (
-                    <span className="server-settings-pill accent">Owner</span>
+                    <span className="server-settings-pill accent">{copy.owner}</span>
                   ) : null}
-                  <span className="server-settings-pill">{member.status || "offline"}</span>
+                  <span className="server-settings-pill">
+                    {member.status || translate(language, "presence.offline", "offline")}
+                  </span>
                 </div>
               </div>
             )) : (
-              <div className="server-settings-empty">No se encontraron miembros con ese filtro.</div>
+              <div className="server-settings-empty">{copy.membersEmpty}</div>
             )}
           </div>
         </div>
@@ -644,21 +764,21 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
       <div className="server-settings-body single-column">
         <div className="server-settings-tab-panel">
           <div className="server-settings-list-header">
-            <h3>Roles</h3>
-            <span>Jerarquia y acceso visual del servidor</span>
+            <h3>{copy.roles}</h3>
+            <span>{copy.rolesSubtitle}</span>
           </div>
 
           <label className="settings-search server-settings-search">
             <Icon name="search" size={16} />
             <input
               onChange={(event) => setRolesQuery(event.target.value)}
-              placeholder="Buscar roles"
+              placeholder={copy.searchRoles}
               type="text"
               value={rolesQuery}
             />
           </label>
 
-          {rolesState.loading ? <div className="server-settings-empty">Cargando roles...</div> : null}
+          {rolesState.loading ? <div className="server-settings-empty">{copy.rolesLoading}</div> : null}
           {rolesState.error ? <div className="server-settings-empty error">{rolesState.error}</div> : null}
 
           {!rolesState.loading && !rolesState.error ? (
@@ -673,15 +793,19 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
                       />
                       <div className="server-settings-role-copy">
                         <strong>{role.name}</strong>
-                        <span>{buildRoleSummary(role)}</span>
+                        <span>{buildRoleSummary(role, language)}</span>
                       </div>
                     </div>
                     <div className="server-settings-badges">
                       <span className="server-settings-pill">
-                        {role.member_count || 0} miembros
+                        {replaceCount(
+                          copy.rolesMemberCount,
+                          role.member_count || 0,
+                          `${role.member_count || 0} miembros`
+                        )}
                       </span>
                       {role.is_admin ? (
-                        <span className="server-settings-pill accent">Admin</span>
+                        <span className="server-settings-pill accent">{copy.admin}</span>
                       ) : null}
                     </div>
                   </div>
@@ -689,8 +813,8 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
               ) : (
                 <div className="server-settings-empty">
                   {rolesState.roles.length
-                    ? "No se encontraron roles con ese filtro."
-                    : "No hay roles configurados todavia."}
+                    ? copy.noRolesMatch
+                    : copy.noRoles}
                 </div>
               )}
             </div>
@@ -706,8 +830,8 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
         <div className="server-settings-tab-panel">
           <div className="server-settings-list-header">
             <div>
-              <h3>Invitaciones</h3>
-              <span>Genera y comparte accesos al servidor</span>
+              <h3>{copy.invites}</h3>
+              <span>{copy.invitesSubtitle}</span>
             </div>
             <button
               className="primary-button small"
@@ -716,12 +840,12 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
               type="button"
             >
               <Icon name="userAdd" />
-              <span>{invitesState.creating ? "Creando..." : "Nueva invitacion"}</span>
+              <span>{invitesState.creating ? copy.creating : copy.createInvite}</span>
             </button>
           </div>
 
           {saved ? <p className="settings-form-success">{saved}</p> : null}
-          {invitesState.loading ? <div className="server-settings-empty">Cargando invitaciones...</div> : null}
+          {invitesState.loading ? <div className="server-settings-empty">{copy.invitesLoading}</div> : null}
           {invitesState.error ? <div className="server-settings-empty error">{invitesState.error}</div> : null}
 
           {!invitesState.loading && !invitesState.error ? (
@@ -732,8 +856,12 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
                     <div className="server-settings-invite-copy">
                       <strong>{window.location.origin}/invite/{invite.code}</strong>
                       <span>
-                        Creada por {invite.creator_name || "Umbra"} • {formatRelativeDate(invite.created_at)} •{" "}
-                        {Number(invite.uses || 0)} usos
+                        {replaceName(
+                          copy.createdBy,
+                          invite.creator_name || "Umbra",
+                          `Creada por ${invite.creator_name || "Umbra"}`
+                        )} • {formatRelativeDate(invite.created_at, language)} •{" "}
+                        {replaceCount(copy.uses, Number(invite.uses || 0), `${Number(invite.uses || 0)} usos`)}
                       </span>
                     </div>
                     <button
@@ -742,13 +870,13 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
                       type="button"
                     >
                       <Icon name="copy" />
-                      <span>Copiar</span>
+                      <span>{copy.copy}</span>
                     </button>
                   </div>
                 ))
               ) : (
                 <div className="server-settings-empty">
-                  No hay invitaciones creadas todavia. Genera una para compartir este servidor.
+                  {copy.invitesEmpty}
                 </div>
               )}
             </div>
@@ -764,7 +892,7 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
         <aside className="server-settings-sidebar">
           <div className="server-settings-sidebar-title">
             <small>{guild.name.toUpperCase()}</small>
-            <strong>Perfil de servidor</strong>
+            <strong>{copy.editProfile}</strong>
           </div>
 
           <div className="server-settings-nav">
@@ -773,35 +901,35 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
               onClick={() => setActiveTab("profile")}
               type="button"
             >
-              Perfil de servidor
+              {copy.editProfile}
             </button>
             <button
               className={`server-settings-nav-item ${activeTab === "members" ? "active" : ""}`.trim()}
               onClick={() => setActiveTab("members")}
               type="button"
             >
-              Miembros
+              {copy.members}
             </button>
             <button
               className={`server-settings-nav-item ${activeTab === "roles" ? "active" : ""}`.trim()}
               onClick={() => setActiveTab("roles")}
               type="button"
             >
-              Roles
+              {copy.roles}
             </button>
             <button
               className={`server-settings-nav-item ${activeTab === "invites" ? "active" : ""}`.trim()}
               onClick={() => setActiveTab("invites")}
               type="button"
             >
-              Invitaciones
+              {copy.invites}
             </button>
             <button
               className={`server-settings-nav-item ${activeTab === "stickers" ? "active" : ""}`.trim()}
               onClick={() => setActiveTab("stickers")}
               type="button"
             >
-              Stickers
+              {copy.stickerTab}
             </button>
           </div>
         </aside>
@@ -811,25 +939,25 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
             <div>
               <h2>
                 {activeTab === "profile"
-                  ? "Perfil de servidor"
+                  ? copy.headerProfile
                   : activeTab === "members"
-                    ? "Miembros"
+                    ? copy.headerMembers
                     : activeTab === "roles"
-                      ? "Roles"
+                      ? copy.headerRoles
                       : activeTab === "invites"
-                        ? "Invitaciones"
-                        : "Stickers"}
+                        ? copy.headerInvites
+                        : copy.headerStickers}
               </h2>
               <p>
                 {activeTab === "profile"
-                  ? "Personaliza como aparece tu servidor dentro de Umbra."
+                  ? copy.headerProfileBody
                   : activeTab === "members"
-                    ? "Gestiona y revisa la gente que forma parte de tu espacio."
+                    ? copy.headerMembersBody
                     : activeTab === "roles"
-                      ? "Consulta la estructura visual y de permisos del servidor."
+                      ? copy.headerRolesBody
                       : activeTab === "invites"
-                        ? "Genera enlaces y revisa los accesos activos de tu servidor."
-                        : "Crea stickers propios y manten a mano los predeterminados del servidor."}
+                        ? copy.headerInvitesBody
+                        : copy.headerStickersBody}
               </p>
             </div>
             <button className="ghost-button icon-only" onClick={onClose} type="button">
@@ -840,7 +968,7 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
           {activeTab === "members" ? renderMembersTab() : null}
           {activeTab === "roles" ? renderRolesTab() : null}
           {activeTab === "invites" ? renderInvitesTab() : null}
-          {activeTab === "stickers" ? <ServerStickersPanel guildId={guild.id} /> : null}
+          {activeTab === "stickers" ? <ServerStickersPanel guildId={guild.id} language={language} /> : null}
         </section>
       </div>
     </div>

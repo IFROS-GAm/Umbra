@@ -1,23 +1,25 @@
 import React from "react";
 import { createPortal } from "react-dom";
 
+import { translate } from "../../i18n.js";
 import { Icon } from "../Icon.jsx";
 
-function getNotificationLabel(level) {
+function getNotificationLabel(level, t) {
   switch (level) {
     case "all":
-      return "Todos los mensajes";
+      return t("server.context.notifications.all", "Todos los mensajes");
     case "none":
-      return "Nada";
+      return t("server.context.notifications.none", "Nada");
     case "mentions":
     default:
-      return "Solo @mentions";
+      return t("server.context.notifications.mentions", "Solo @mentions");
   }
 }
 
 export function ServerContextMenu({
   canManageGuild,
   guild,
+  language = "es",
   onClose,
   onCopyId,
   onInvite,
@@ -33,6 +35,7 @@ export function ServerContextMenu({
   const rootRef = React.useRef(null);
   const [submenu, setSubmenu] = React.useState(null);
   const [menuPosition, setMenuPosition] = React.useState(position);
+  const t = (key, fallback) => translate(language, key, fallback);
 
   React.useEffect(() => {
     if (!guild) {
@@ -153,7 +156,7 @@ export function ServerContextMenu({
           }}
           type="button"
         >
-          <span>Marcar como leido</span>
+          <span>{t("server.context.markRead", "Marcar como leido")}</span>
         </button>
 
         <div className="server-context-divider" />
@@ -167,7 +170,7 @@ export function ServerContextMenu({
             }}
             type="button"
           >
-            <span>Invitar al servidor</span>
+            <span>{t("server.context.invite", "Invitar al servidor")}</span>
           </button>
         ) : null}
 
@@ -178,7 +181,7 @@ export function ServerContextMenu({
           onClick={() => setSubmenu((previous) => (previous === "notifications" ? null : "notifications"))}
           type="button"
         >
-          <span>Silenciar el servidor</span>
+          <span>{t("server.context.mute", "Silenciar el servidor")}</span>
           <Icon name="arrowRight" size={15} />
         </button>
 
@@ -188,8 +191,8 @@ export function ServerContextMenu({
           type="button"
         >
           <span>
-            <strong>Ajustes de notificaciones</strong>
-            <small>{getNotificationLabel(notificationLevel)}</small>
+            <strong>{t("server.context.notificationSettings", "Ajustes de notificaciones")}</strong>
+            <small>{getNotificationLabel(notificationLevel, t)}</small>
           </span>
           <Icon name="arrowRight" size={15} />
         </button>
@@ -199,7 +202,7 @@ export function ServerContextMenu({
           onClick={() => onTogglePref(guild.id, "hideMutedChannels")}
           type="button"
         >
-          <span>Ocultar los canales silenciados</span>
+          <span>{t("server.context.hideMuted", "Ocultar los canales silenciados")}</span>
           <i className={`server-context-checkbox ${prefs?.hideMutedChannels ? "active" : ""}`.trim()} />
         </button>
 
@@ -208,7 +211,7 @@ export function ServerContextMenu({
           onClick={() => onTogglePref(guild.id, "showAllChannels")}
           type="button"
         >
-          <span>Mostrar todos los canales</span>
+          <span>{t("server.context.showAll", "Mostrar todos los canales")}</span>
           <i className={`server-context-checkbox ${prefs?.showAllChannels ? "active" : ""}`.trim()} />
         </button>
 
@@ -222,7 +225,7 @@ export function ServerContextMenu({
           }}
           type="button"
         >
-          <span>Ajustes de privacidad</span>
+          <span>{t("server.context.privacy", "Ajustes de privacidad")}</span>
         </button>
 
         {canManageGuild ? (
@@ -234,7 +237,7 @@ export function ServerContextMenu({
             }}
             type="button"
           >
-            <span>Editar perfil de servidor</span>
+            <span>{t("server.context.editProfile", "Editar perfil de servidor")}</span>
           </button>
         ) : null}
 
@@ -248,7 +251,7 @@ export function ServerContextMenu({
           }}
           type="button"
         >
-          <span>Abandonar el servidor</span>
+          <span>{t("server.context.leave", "Abandonar el servidor")}</span>
         </button>
 
         <div className="server-context-divider" />
@@ -261,7 +264,7 @@ export function ServerContextMenu({
           }}
           type="button"
         >
-          <span>Copiar ID del servidor</span>
+          <span>{t("server.context.copyId", "Copiar ID del servidor")}</span>
           <b className="server-context-id-chip">ID</b>
         </button>
       </div>
@@ -269,9 +272,9 @@ export function ServerContextMenu({
       {submenu === "notifications" ? (
         <div className="floating-surface server-context-submenu">
           {[
-            { id: "mentions", label: "Solo @mentions" },
-            { id: "all", label: "Todos los mensajes" },
-            { id: "none", label: "Nada" }
+            { id: "mentions", label: t("server.context.notifications.mentions", "Solo @mentions") },
+            { id: "all", label: t("server.context.notifications.all", "Todos los mensajes") },
+            { id: "none", label: t("server.context.notifications.none", "Nada") }
           ].map((option) => (
             <button
               className="server-context-row server-context-row-check"

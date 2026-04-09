@@ -6,12 +6,13 @@ import { UmbraLogo } from "../UmbraLogo.jsx";
 import { ServerAdminMenu } from "./ServerAdminMenu.jsx";
 import { DmContextMenu } from "./DmContextMenu.jsx";
 import { ServerContextMenu } from "./ServerContextMenu.jsx";
+import { WorkspaceChannelList } from "./WorkspaceChannelList.jsx";
+import { WorkspaceDirectHome } from "./WorkspaceDirectHome.jsx";
+import { WorkspaceNavigatorFooter } from "./WorkspaceNavigatorFooter.jsx";
+import { WorkspaceServerRail } from "./WorkspaceServerRail.jsx";
 import {
-  HOME_LINKS,
   buildGuildStructureEntries,
-  formatVoiceCount,
-  getDmSummary,
-  resolveGuildIcon
+  formatVoiceCount
 } from "./workspaceHelpers.js";
 import { buildServerRailItems, findServerFolderByGuildId } from "./serverFolders.js";
 
@@ -24,6 +25,7 @@ export function WorkspaceNavigation({
   directUnreadCount,
   hoveredVoiceChannelId,
   inputMenuNode,
+  language = "es",
   outputMenuNode,
   isVoiceChannel,
   joinedVoiceChannel,
@@ -831,149 +833,30 @@ export function WorkspaceNavigation({
     });
   }
 
-  function renderFolderPreview(folder) {
-    const previewGuilds = folder.guilds.slice(0, 4);
-
-    return (
-      <span className="server-folder-grid">
-        {previewGuilds.map((guild) => {
-          const guildIcon = resolveGuildIcon(guild);
-          return (
-            <span className={`server-folder-cell ${guildIcon ? "has-image" : ""}`.trim()} key={guild.id}>
-              {guildIcon ? (
-                <img alt={guild.name} className="server-folder-cell-image" draggable="false" src={guildIcon} />
-              ) : (
-                <small>{guild.icon_text || guild.name.slice(0, 2).toUpperCase()}</small>
-              )}
-            </span>
-          );
-        })}
-      </span>
-    );
-  }
-
-  function renderGuildPill(guild, { nested = false, folderId = null } = {}) {
-    const guildIcon = resolveGuildIcon(guild);
-    const isDropTarget =
-      guildDropHint?.type === "guild" && guildDropHint.targetId === guild.id;
-
-    return (
-      <button
-        className={`server-pill tooltip-anchor ${guildIcon ? "has-image" : ""} ${
-          nested ? "nested" : ""
-        } ${canDragGuild(guild) ? "draggable-guild" : ""} ${activeGuild?.id === guild.id ? "active" : ""} ${
-          draggedGuildId === guild.id ? "dragging" : ""
-        } ${isDropTarget ? `drop-${guildDropHint.placement}` : ""}`.trim()}
-        data-tooltip={guild.name}
-        data-tooltip-position="right"
-        data-server-drop-kind="guild"
-        data-server-drop-id={guild.id}
-        data-server-folder-id={folderId || ""}
-        key={guild.id}
-        ref={setServerDropTargetNode("guild", guild.id, folderId)}
-        onClick={(event) => handleGuildClick(event, guild)}
-        onContextMenu={(event) => openServerContextMenu(event, guild)}
-        onPointerDown={(event) => beginGuildPointerDrag(event, guild)}
-        type="button"
-      >
-        {guildIcon ? (
-          <img
-            alt={guild.name}
-            className="server-pill-image"
-            draggable="false"
-            src={guildIcon}
-          />
-        ) : (
-          <span>{guild.icon_text || guild.name.slice(0, 2).toUpperCase()}</span>
-        )}
-        {guild.unread_count ? <i>{guild.unread_count}</i> : null}
-      </button>
-    );
-  }
-
-  function renderServerRailItem(item) {
-    if (item.type === "guild") {
-      return renderGuildPill(item.guild);
-    }
-
-    const folder = item.folder;
-    const isActive = folder.guilds.some((guild) => guild.id === activeGuild?.id);
-    const unreadCount = folder.guilds.reduce(
-      (total, guild) => total + Number(guild.unread_count || 0),
-      0
-    );
-    const isDropTarget =
-      guildDropHint?.type === "folder" && guildDropHint.targetId === folder.id;
-
-    return (
-      <div className="server-folder-shell" key={folder.id}>
-        <button
-          className={`server-folder-pill tooltip-anchor ${folder.collapsed ? "collapsed" : "expanded"} ${
-            isActive ? "active" : ""
-          } ${isDropTarget ? `drop-${guildDropHint.placement}` : ""}`.trim()}
-          data-tooltip={folder.name}
-          data-tooltip-position="right"
-          data-server-drop-kind="folder"
-          data-server-drop-id={folder.id}
-          ref={setServerDropTargetNode("folder", folder.id)}
-          onClick={() => onToggleServerFolder?.(folder.id)}
-          type="button"
-        >
-          {renderFolderPreview(folder)}
-          {unreadCount ? <i>{unreadCount}</i> : null}
-          <span className="server-folder-chevron">
-            <Icon name={folder.collapsed ? "arrowRight" : "chevronDown"} size={12} />
-          </span>
-        </button>
-
-        {!folder.collapsed ? (
-          <div className="server-folder-children">
-            {folder.guilds.map((guild) => renderGuildPill(guild, { nested: true, folderId: folder.id }))}
-          </div>
-        ) : null}
-      </div>
-    );
-  }
-
   return (
     <>
-      <aside className="server-rail">
-        <div className="server-rail-stack">
-          <button
-            className={`server-pill tooltip-anchor home ${
-              activeSelection.kind === "dm" || activeSelection.kind === "home" ? "active" : ""
-            }`}
-            data-tooltip="Mensajes directos"
-            data-tooltip-position="right"
-            onClick={onSelectHome}
-            type="button"
-          >
-            <UmbraLogo alt="Mensajes directos" className="server-pill-logo" size={24} />
-            {directUnreadCount ? <i>{directUnreadCount}</i> : null}
-          </button>
-
-          <div className="server-rail-divider" />
-
-          <div className="server-stack">
-            {serverRailItems.map((item) => renderServerRailItem(item))}
-          </div>
-
-          <button
-            className="server-pill add tooltip-anchor"
-            data-tooltip="Crear servidor"
-            data-tooltip-position="right"
-            onClick={() => onOpenDialog("guild")}
-            type="button"
-          >
-            <Icon name="add" />
-          </button>
-        </div>
-      </aside>
+      <WorkspaceServerRail
+        activeGuildId={activeGuild?.id}
+        activeSelectionKind={activeSelection.kind}
+        beginGuildPointerDrag={beginGuildPointerDrag}
+        canDragGuild={canDragGuild}
+        directUnreadCount={directUnreadCount}
+        draggedGuildId={draggedGuildId}
+        guildDropHint={guildDropHint}
+        handleGuildClick={handleGuildClick}
+        onOpenContextMenu={openServerContextMenu}
+        onOpenDialog={onOpenDialog}
+        onSelectHome={onSelectHome}
+        onToggleServerFolder={onToggleServerFolder}
+        serverRailItems={serverRailItems}
+        setServerDropTargetNode={setServerDropTargetNode}
+      />
 
       {serverContextGuild ? (
         <ServerContextMenu
           canManageGuild={Boolean(serverContextGuild?.permissions?.can_manage_guild)}
           guild={serverContextGuild}
+          language={language}
           onClose={() => setServerContextMenu(null)}
           onCopyId={onCopyGuildId}
           onInvite={onOpenInviteModal}
@@ -1035,6 +918,7 @@ export function WorkspaceNavigation({
                   <ServerAdminMenu
                     canManageGuild={canManageGuild}
                     guild={activeGuild}
+                    language={language}
                     onCopyId={onCopyGuildId}
                     onCreateCategory={() => onOpenDialog("category")}
                     onCreateChannel={() => onOpenDialog("channel", { initialKind: "text" })}
@@ -1094,349 +978,50 @@ export function WorkspaceNavigation({
         </div>
 
         {activeGuild ? (
-          <div className="channel-list">
-            {categoryEntries.map((entry) => (
-              <div className="channel-category-group" key={entry.id}>
-                <div
-                  className={`panel-section-label category ${
-                    channelDropHint?.type === "category" && channelDropHint.targetId === entry.category.id
-                      ? "drop-target"
-                      : ""
-                  }`.trim()}
-                  onDragOver={(event) => handleCategoryDragOver(event, entry.category.id)}
-                  onDrop={(event) => handleCategoryDrop(event, entry.category.id, entry.channels)}
-                >
-                  <button
-                    aria-expanded={!collapsedSectionIds[entry.category.id]}
-                    className="category-toggle"
-                    onClick={() => toggleSection(entry.category.id)}
-                    type="button"
-                  >
-                    <Icon
-                      name={collapsedSectionIds[entry.category.id] ? "arrowRight" : "chevronDown"}
-                      size={14}
-                    />
-                    <span>{entry.category.name}</span>
-                  </button>
-                  {canManageStructure ? (
-                    <button
-                      className="ghost-button icon-only category-action"
-                      onClick={() =>
-                        onOpenDialog("channel", {
-                          initialKind: "text",
-                          initialParentId: entry.category.id
-                        })
-                      }
-                      type="button"
-                    >
-                      <Icon name="add" />
-                    </button>
-                  ) : null}
-                </div>
-                {(() => {
-                  const isCollapsed = Boolean(collapsedSectionIds[entry.category.id]);
-                  const activeNestedChannel =
-                    entry.channels.find((channel) => channel.id === activeSelection.channelId) || null;
-                  const visibleChannels = isCollapsed
-                    ? activeNestedChannel
-                      ? [activeNestedChannel]
-                      : []
-                    : entry.channels;
-
-                  if (!visibleChannels.length) {
-                    return (
-                      <div className="category-empty">
-                        {isCollapsed ? "Categoria vacia" : "Sin canales por ahora."}
-                      </div>
-                    );
-                  }
-
-                  return visibleChannels.map((channel) =>
-                    channel.is_voice
-                      ? renderVoiceChannel(channel, { nested: true })
-                      : renderTextChannelRow(channel, { nested: true })
-                  );
-                })()}
-              </div>
-            ))}
-
-            {uncategorizedTextChannels.length ? (
-              <>
-                <div
-                  className={`panel-section-label ${
-                    channelDropHint?.type === "root" && channelDropHint.targetId === "__uncategorized_text__"
-                      ? "drop-target"
-                      : ""
-                  }`.trim()}
-                  onDragOver={(event) => handleRootSectionDragOver(event, "__uncategorized_text__")}
-                  onDrop={(event) => handleRootSectionDrop(event, "text")}
-                >
-                  <button
-                    aria-expanded={!collapsedSectionIds.__uncategorized_text__}
-                    className="category-toggle"
-                    onClick={() => toggleSection("__uncategorized_text__")}
-                    type="button"
-                  >
-                    <Icon
-                      name={collapsedSectionIds.__uncategorized_text__ ? "arrowRight" : "chevronDown"}
-                      size={14}
-                    />
-                    <span>Canales de texto</span>
-                  </button>
-                  {canManageStructure ? (
-                    <button
-                      className="ghost-button icon-only category-action"
-                      onClick={() => onOpenDialog("channel", { initialKind: "text" })}
-                      type="button"
-                    >
-                      <Icon name="add" />
-                    </button>
-                  ) : null}
-                </div>
-                {(() => {
-                  const isCollapsed = Boolean(collapsedSectionIds.__uncategorized_text__);
-                  const activeTextChannel =
-                    uncategorizedTextChannels.find(
-                      (channel) => channel.id === activeSelection.channelId
-                    ) || null;
-                  const visibleChannels = isCollapsed
-                    ? activeTextChannel
-                      ? [activeTextChannel]
-                      : []
-                    : uncategorizedTextChannels;
-
-                  return visibleChannels.map((channel) => renderTextChannelRow(channel));
-                })()}
-              </>
-            ) : null}
-
-            {uncategorizedVoiceChannels.length ? (
-              <>
-                <div
-                  className={`panel-section-label voice ${
-                    channelDropHint?.type === "root" && channelDropHint.targetId === "__uncategorized_voice__"
-                      ? "drop-target"
-                      : ""
-                  }`.trim()}
-                  onDragOver={(event) => handleRootSectionDragOver(event, "__uncategorized_voice__")}
-                  onDrop={(event) => handleRootSectionDrop(event, "voice")}
-                >
-                  <button
-                    aria-expanded={!collapsedSectionIds.__uncategorized_voice__}
-                    className="category-toggle"
-                    onClick={() => toggleSection("__uncategorized_voice__")}
-                    type="button"
-                  >
-                    <Icon
-                      name={collapsedSectionIds.__uncategorized_voice__ ? "arrowRight" : "chevronDown"}
-                      size={14}
-                    />
-                    <span>Canales de voz</span>
-                  </button>
-                  {canManageStructure ? (
-                    <button
-                      className="ghost-button icon-only category-action"
-                      onClick={() => onOpenDialog("channel", { initialKind: "voice" })}
-                      type="button"
-                    >
-                      <Icon name="add" />
-                    </button>
-                  ) : null}
-                </div>
-                {(() => {
-                  const isCollapsed = Boolean(collapsedSectionIds.__uncategorized_voice__);
-                  const activeVoiceChannel =
-                    uncategorizedVoiceChannels.find(
-                      (channel) => channel.id === activeSelection.channelId
-                    ) || null;
-                  const visibleChannels = isCollapsed
-                    ? activeVoiceChannel
-                      ? [activeVoiceChannel]
-                      : []
-                    : uncategorizedVoiceChannels;
-
-                  return visibleChannels.map((channel) => renderVoiceChannel(channel));
-                })()}
-              </>
-            ) : null}
-          </div>
+          <WorkspaceChannelList
+            activeSelection={activeSelection}
+            canManageStructure={canManageStructure}
+            categoryEntries={categoryEntries}
+            channelDropHint={channelDropHint}
+            collapsedSectionIds={collapsedSectionIds}
+            handleCategoryDragOver={handleCategoryDragOver}
+            handleCategoryDrop={handleCategoryDrop}
+            handleRootSectionDragOver={handleRootSectionDragOver}
+            handleRootSectionDrop={handleRootSectionDrop}
+            onOpenDialog={onOpenDialog}
+            renderTextChannelRow={renderTextChannelRow}
+            renderVoiceChannel={renderVoiceChannel}
+            toggleSection={toggleSection}
+            uncategorizedTextChannels={uncategorizedTextChannels}
+            uncategorizedVoiceChannels={uncategorizedVoiceChannels}
+          />
         ) : (
-          <>
-            <div className="direct-home-nav">
-              {HOME_LINKS.map((item) => (
-                <button
-                  className={`direct-home-link ${
-                    (item.id === "home" && activeSelection.kind === "home") ||
-                    (item.id === "requests" && activeSelection.kind === "requests")
-                      ? "active"
-                      : ""
-                  }`}
-                  key={item.id}
-                  onClick={() => onSelectDirectLink(item.id, item.notice)}
-                  type="button"
-                >
-                  <Icon name={item.icon} />
-                  <span>{item.label}</span>
-                </button>
-              ))}
-            </div>
-
-            <div className="dm-list">
-              <div className="panel-section-label">
-                <span>Mensajes directos</span>
-                <button className="ghost-button icon-only" onClick={() => onOpenDialog("dm_group")} type="button">
-                  <Icon name="add" />
-                </button>
-              </div>
-              {workspace.dms.map((dm) => {
-                const other = dm.participants.find(
-                  (participant) => participant.id !== workspace.current_user.id
-                );
-
-                return (
-                  <button
-                    className={`dm-row ${activeSelection.channelId === dm.id ? "active" : ""} ${
-                      dm.unread_count ? "has-unread" : "is-read"
-                    } ${dmMenuPrefs?.[dm.id]?.muted ? "is-muted" : ""}`.trim()}
-                    key={dm.id}
-                    onContextMenu={(event) => openDmContextMenu(event, dm)}
-                    onClick={() => onSelectDirectLink("dm", null, dm.id)}
-                    type="button"
-                  >
-                    <Avatar
-                      hue={other?.avatar_hue || 210}
-                      label={dm.display_name}
-                      size={38}
-                      src={other?.avatar_url}
-                      status={dm.type === "dm" ? other?.status : null}
-                    />
-                    <div className="dm-copy">
-                      <strong title={dm.display_name}>{dm.display_name}</strong>
-                      <span title={getDmSummary(dm, workspace.current_user.id)}>
-                        {getDmSummary(dm, workspace.current_user.id)}
-                      </span>
-                    </div>
-                    {dm.unread_count ? <i>{dm.unread_count}</i> : null}
-                  </button>
-                );
-              })}
-            </div>
-          </>
+          <WorkspaceDirectHome
+            activeSelection={activeSelection}
+            dmMenuPrefs={dmMenuPrefs}
+            onOpenDialog={onOpenDialog}
+            onOpenDmContextMenu={openDmContextMenu}
+            onSelectDirectLink={onSelectDirectLink}
+            workspace={workspace}
+          />
         )}
 
-        <div className="navigator-footer">
-          {joinedVoiceChannel ? (
-            <div className="joined-voice-chip">
-              <button
-                className="joined-voice-main"
-                onClick={() => onSelectGuildChannel(joinedVoiceChannel)}
-                type="button"
-              >
-                <Icon name="headphones" size={15} />
-                <span>
-                  <strong title={joinedVoiceChannel.name}>{joinedVoiceChannel.name}</strong>
-                  <small>{(voiceSessions[joinedVoiceChannel.id] || []).length} conectado(s)</small>
-                </span>
-              </button>
-              <button
-                aria-label="Salir del canal de voz"
-                className="ghost-button icon-only small"
-                onClick={onHandleVoiceLeave}
-                type="button"
-              >
-                <Icon name="close" size={14} />
-              </button>
-            </div>
-          ) : null}
-
-          {inputMenuNode}
-          {outputMenuNode}
-
-          <div className="user-dock">
-            <button
-              className="profile-card profile-card-button user-dock-profile"
-              onClick={onOpenSettings}
-              type="button"
-            >
-              <Avatar
-                hue={workspace.current_user.avatar_hue}
-                label={workspace.current_user.username}
-                size={36}
-                src={workspace.current_user.avatar_url}
-                status={workspace.current_user.status}
-              />
-              <div className="profile-meta">
-                <strong title={currentUserLabel}>{truncatedCurrentUserLabel}</strong>
-                <span>{workspace.current_user.status || "Offline"}</span>
-              </div>
-            </button>
-
-            <div className="footer-actions footer-voice-actions">
-              <div
-                className={`dock-split-control ${
-                  voiceState.micMuted ? "danger active" : voiceMenu === "input" ? "active" : ""
-                }`}
-              >
-                <button
-                  aria-label={voiceState.micMuted ? "Activar microfono" : "Silenciar microfono"}
-                  className={`dock-split-main tooltip-anchor ${voiceState.micMuted ? "danger active" : ""}`}
-                  data-tooltip={voiceState.micMuted ? "Activar microfono" : "Silenciar"}
-                  data-tooltip-position="top"
-                  onClick={() => onToggleVoiceState("micMuted")}
-                  type="button"
-                >
-                  <Icon name={voiceState.micMuted ? "micOff" : "mic"} />
-                </button>
-                <button
-                  aria-label="Opciones del microfono"
-                  className={`dock-split-caret tooltip-anchor ${voiceMenu === "input" ? "active" : ""}`}
-                  data-tooltip="Opciones de entrada"
-                  data-tooltip-position="top"
-                  onClick={() => onToggleVoiceMenu("input")}
-                  type="button"
-                >
-                  <Icon name="chevronDown" size={14} />
-                </button>
-              </div>
-              <div
-                className={`dock-split-control ${
-                  voiceState.deafen ? "danger active" : voiceMenu === "output" ? "active" : ""
-                }`}
-              >
-                <button
-                  aria-label={voiceState.deafen ? "Activar audio" : "Ensordecer"}
-                  className={`dock-split-main tooltip-anchor ${voiceState.deafen ? "danger active" : ""}`}
-                  data-tooltip={voiceState.deafen ? "Activar audio" : "Ensordecer"}
-                  data-tooltip-position="top"
-                  onClick={() => onToggleVoiceState("deafen")}
-                  type="button"
-                >
-                  <Icon name={voiceState.deafen ? "deafen" : "headphones"} />
-                </button>
-                <button
-                  aria-label="Opciones de audio"
-                  className={`dock-split-caret tooltip-anchor ${voiceMenu === "output" ? "active" : ""}`}
-                  data-tooltip="Opciones de salida"
-                  data-tooltip-position="top"
-                  onClick={() => onToggleVoiceMenu("output")}
-                  type="button"
-                >
-                  <Icon name="chevronDown" size={14} />
-                </button>
-              </div>
-              <button
-                aria-label="Abrir ajustes"
-                className="ghost-button icon-only tooltip-anchor"
-                data-tooltip="Ajustes"
-                data-tooltip-position="top"
-                onClick={onOpenSettings}
-                type="button"
-              >
-                <Icon name="settings" />
-              </button>
-            </div>
-          </div>
-        </div>
+        <WorkspaceNavigatorFooter
+          currentUserLabel={currentUserLabel}
+          inputMenuNode={inputMenuNode}
+          joinedVoiceChannel={joinedVoiceChannel}
+          onHandleVoiceLeave={onHandleVoiceLeave}
+          onOpenSettings={onOpenSettings}
+          onSelectGuildChannel={onSelectGuildChannel}
+          onToggleVoiceMenu={onToggleVoiceMenu}
+          onToggleVoiceState={onToggleVoiceState}
+          outputMenuNode={outputMenuNode}
+          truncatedCurrentUserLabel={truncatedCurrentUserLabel}
+          voiceMenu={voiceMenu}
+          voiceSessions={voiceSessions}
+          voiceState={voiceState}
+          workspace={workspace}
+        />
       </aside>
     </>
   );

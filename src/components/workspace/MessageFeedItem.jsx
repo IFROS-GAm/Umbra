@@ -1,6 +1,7 @@
 import React, { memo } from "react";
 
 import { resolveAssetUrl } from "../../api.js";
+import { translate } from "../../i18n.js";
 import { REACTION_OPTIONS, formatMessageHtml, relativeTime } from "../../utils.js";
 import { Avatar } from "../Avatar.jsx";
 import { Icon } from "../Icon.jsx";
@@ -16,6 +17,7 @@ export const MessageFeedItem = memo(function MessageFeedItem({
   grouped,
   isMenuOpen,
   isReactionPickerOpen,
+  language = "es",
   message,
   onHandleReaction,
   onMenuAction,
@@ -26,6 +28,7 @@ export const MessageFeedItem = memo(function MessageFeedItem({
   openProfileCard
 }) {
   const toolbarRef = React.useRef(null);
+  const t = (key, fallback) => translate(language, key, fallback);
   const authorProfile = {
     ...message.author,
     bio: availableUsersById?.[message.author?.id]?.bio
@@ -68,7 +71,7 @@ export const MessageFeedItem = memo(function MessageFeedItem({
               {message.display_name}
             </button>
             <span>{relativeTime(message.created_at)}</span>
-            {message.edited_at ? <em>(editado)</em> : null}
+            {message.edited_at ? <em>{t("message.edited", "(editado)")}</em> : null}
           </div>
         ) : null}
 
@@ -150,7 +153,7 @@ export const MessageFeedItem = memo(function MessageFeedItem({
             {MESSAGE_TOOLBAR_REACTIONS.map((emoji) => (
               <button
                 className="message-toolbar-reaction tooltip-anchor"
-                data-tooltip="Reaccion rapida"
+                data-tooltip={t("message.tooltip.quickReaction", "Reaccion rapida")}
                 data-tooltip-position="top"
                 key={`${message.id}-toolbar-${emoji}`}
                 onClick={() => onHandleReaction(message.id, emoji)}
@@ -164,7 +167,7 @@ export const MessageFeedItem = memo(function MessageFeedItem({
 
             <button
               className="message-toolbar-icon tooltip-anchor"
-              data-tooltip="Agregar reaccion"
+              data-tooltip={t("message.menu.react", "Agregar reaccion")}
               data-tooltip-position="top"
               onClick={() => {
                 onSetMessageMenuFor(null);
@@ -176,7 +179,7 @@ export const MessageFeedItem = memo(function MessageFeedItem({
             </button>
             <button
               className="message-toolbar-icon tooltip-anchor"
-              data-tooltip="Responder"
+              data-tooltip={t("message.menu.reply", "Responder")}
               data-tooltip-position="top"
               onClick={() => onStartReply(message)}
               type="button"
@@ -185,7 +188,7 @@ export const MessageFeedItem = memo(function MessageFeedItem({
             </button>
             <button
               className="message-toolbar-icon tooltip-anchor"
-              data-tooltip="Reenviar"
+              data-tooltip={t("message.menu.forward", "Reenviar")}
               data-tooltip-position="top"
               onClick={() => onMenuAction("forward", message)}
               type="button"
@@ -194,7 +197,7 @@ export const MessageFeedItem = memo(function MessageFeedItem({
             </button>
             <button
               className={`message-toolbar-icon tooltip-anchor ${isMenuOpen ? "active" : ""}`}
-              data-tooltip="Mas"
+              data-tooltip={t("message.tooltip.more", "Mas")}
               data-tooltip-position="top"
               onClick={() =>
                 onSetMessageMenuFor((previous) => (previous === message.id ? null : message.id))
@@ -208,6 +211,7 @@ export const MessageFeedItem = memo(function MessageFeedItem({
           {isMenuOpen ? (
             <MessageActionMenu
               anchorRef={toolbarRef}
+              language={language}
               message={message}
               onAction={onMenuAction}
               onClose={() => onSetMessageMenuFor(null)}

@@ -1,4 +1,9 @@
-import { SpeexWorkletNode, loadSpeex } from "@sapphi-red/web-noise-suppressor";
+import {
+  NoiseGateWorkletNode,
+  SpeexWorkletNode,
+  loadSpeex
+} from "@sapphi-red/web-noise-suppressor";
+import noiseGateWorkletUrl from "@sapphi-red/web-noise-suppressor/noiseGateWorklet.js?url";
 import speexWasmUrl from "@sapphi-red/web-noise-suppressor/speex.wasm?url";
 import speexWorkletUrl from "@sapphi-red/web-noise-suppressor/speexWorklet.js?url";
 
@@ -27,9 +32,29 @@ function buildAudioConstraints({ deviceId, noiseSuppressionEnabled }) {
   };
 }
 
+function clampPercent(value, fallback = 0) {
+  const numeric = Number.isFinite(Number(value)) ? Number(value) : fallback;
+  return Math.max(0, Math.min(100, numeric));
+}
+
+function resolveNoiseGateProfile(amount) {
+  const normalized = clampPercent(amount, 44) / 100;
+  const openThreshold = -72 + normalized * 22;
+  const closeThreshold = openThreshold - (7 + (1 - normalized) * 4);
+  const holdMs = 150 + (1 - normalized) * 80;
+
+  return {
+    closeThreshold,
+    holdMs,
+    openThreshold
+  };
+}
+
 export async function createVoiceInputProcessingSession({
   deviceId,
   inputVolume = 100,
+  monitorEnabled = false,
+  noiseSuppressionAmount = 44,
   noiseSuppressionEnabled = true,
   onLevelChange,
   onSpeakingChange
@@ -66,35 +91,51 @@ export async function createVoiceInputProcessingSession({
   analyser.fftSize = 1024;
   analyser.smoothingTimeConstant = 0.55;
 
-  const sink = context.createGain();
-  sink.gain.value = 0;
+  const monitorGain = context.createGain();
+  monitorGain.gain.value = monitorEnabled ? 0.92 : 0;
 
   let engine = noiseSuppressionEnabled ? "native" : "off";
   let noiseNode = null;
+  let gateNode = null;
+  let processedOutput = inputGain;
 
   source.connect(inputGain);
 
   if (supportsWorklet) {
     try {
       const wasmBinary = await getSpeexBinary();
+      await context.audioWorklet.addModule(noiseGateWorkletUrl);
       await context.audioWorklet.addModule(speexWorkletUrl);
-      noiseNode = new SpeexWorkletNode(context, {
-        maxChannels: 1,
-        wasmBinary
-      });
-      inputGain.connect(noiseNode);
-      noiseNode.connect(analyser);
-      engine = "speex";
+      if (noiseSuppressionEnabled) {
+        noiseNode = new SpeexWorkletNode(context, {
+          maxChannels: 1,
+          wasmBinary
+        });
+        inputGain.connect(noiseNode);
+        processedOutput = noiseNode;
+        engine = "speex";
+      }
+
+      if (noiseSuppressionEnabled) {
+        const gateProfile = resolveNoiseGateProfile(noiseSuppressionAmount);
+        gateNode = new NoiseGateWorkletNode(context, {
+          closeThreshold: gateProfile.closeThreshold,
+          holdMs: gateProfile.holdMs,
+          maxChannels: 1,
+          openThreshold: gateProfile.openThreshold
+        });
+        processedOutput.connect(gateNode);
+        processedOutput = gateNode;
+      }
     } catch {
-      inputGain.connect(analyser);
       engine = noiseSuppressionEnabled ? "native" : "off";
+      processedOutput = inputGain;
     }
-  } else {
-    inputGain.connect(analyser);
   }
 
-  analyser.connect(sink);
-  sink.connect(context.destination);
+  processedOutput.connect(analyser);
+  processedOutput.connect(monitorGain);
+  monitorGain.connect(context.destination);
 
   const timeDomainData = new Float32Array(analyser.fftSize);
   let frameId = 0;
@@ -118,6 +159,7 @@ export async function createVoiceInputProcessingSession({
 
     const rms = Math.sqrt(sumSquares / timeDomainData.length) || 0;
     const now = performance.now();
+    const suppressionBias = clampPercent(noiseSuppressionAmount, 44) / 100;
 
     if (!speaking) {
       const noiseBlend = rms < noiseFloor ? 0.12 : 0.01;
@@ -127,8 +169,14 @@ export async function createVoiceInputProcessingSession({
     }
 
     const floor = Math.max(noiseFloor, 0.0035);
-    const speakThreshold = Math.max(floor * 2.7, 0.012);
-    const releaseThreshold = Math.max(floor * 1.9, 0.009);
+    const speakThreshold = Math.max(
+      floor * (2.05 + suppressionBias * 0.95),
+      0.0085 + suppressionBias * 0.0065
+    );
+    const releaseThreshold = Math.max(
+      floor * (1.55 + suppressionBias * 0.6),
+      0.0068 + suppressionBias * 0.0045
+    );
     const speechDetected = rms > speakThreshold || peak > speakThreshold * 3.4;
 
     if (speechDetected) {
@@ -162,6 +210,11 @@ export async function createVoiceInputProcessingSession({
     setInputVolume(value) {
       inputGain.gain.value = Math.max(0, Math.min(1, Number(value || 0) / 100));
     },
+    setMonitoringEnabled(nextEnabled) {
+      monitorGain.gain.cancelScheduledValues(context.currentTime);
+      monitorGain.gain.setValueAtTime(monitorGain.gain.value, context.currentTime);
+      monitorGain.gain.linearRampToValueAtTime(nextEnabled ? 0.92 : 0, context.currentTime + 0.08);
+    },
     async destroy() {
       window.cancelAnimationFrame(frameId);
       onLevelChange?.(0);
@@ -174,10 +227,17 @@ export async function createVoiceInputProcessingSession({
       }
 
       try {
-        sink.disconnect();
+        gateNode?.disconnect?.();
+      } catch {
+        // Ignore gate teardown edge cases.
+      }
+
+      try {
+        monitorGain.disconnect();
         analyser.disconnect();
         inputGain.disconnect();
         source.disconnect();
+        noiseNode?.disconnect?.();
       } catch {
         // Ignore disconnection issues during teardown.
       }

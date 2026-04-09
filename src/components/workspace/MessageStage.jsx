@@ -1,5 +1,6 @@
 import React from "react";
 
+import { translate } from "../../i18n.js";
 import { DirectMessageHero } from "./DirectMessagePanels.jsx";
 import { MessageComposer } from "./MessageComposer.jsx";
 import { VirtualMessageFeed } from "./VirtualMessageFeed.jsx";
@@ -26,6 +27,7 @@ export function MessageStage(props) {
     handleScroll,
     handleSubmitMessage,
     guildStickers,
+    language = "es",
     listRef,
     loadingMessages,
     messageMenuFor,
@@ -56,10 +58,11 @@ export function MessageStage(props) {
     uploadingAttachments,
     availableUsersById
   } = props;
+  const t = (key, fallback) => translate(language, key, fallback);
 
   async function copyToClipboard(value, successMessage) {
     if (!value) {
-      showUiNotice("No hay nada para copiar.");
+      showUiNotice(t("message.notice.nothingToCopy", "No hay nada para copiar."));
       return;
     }
 
@@ -67,7 +70,7 @@ export function MessageStage(props) {
       await navigator.clipboard.writeText(String(value));
       showUiNotice(successMessage);
     } catch {
-      showUiNotice("No se pudo copiar al portapapeles.");
+      showUiNotice(t("message.notice.copyFailed", "No se pudo copiar al portapapeles."));
     }
   }
 
@@ -82,24 +85,24 @@ export function MessageStage(props) {
         onSetReactionPickerFor((previous) => (previous === message.id ? null : message.id));
         return;
       case "forward":
-        showUiNotice("Reenviar llegara con mensajes compartidos en una siguiente pasada.");
+        showUiNotice(t("message.notice.forwardPending", "Reenviar llegara con mensajes compartidos en una siguiente pasada."));
         return;
       case "thread":
-        showUiNotice("Los hilos del mensaje quedan listos para una siguiente capa.");
+        showUiNotice(t("message.notice.threadPending", "Los hilos del mensaje quedan listos para una siguiente capa."));
         return;
       case "copy-text":
-        await copyToClipboard(message.content, "Texto del mensaje copiado.");
+        await copyToClipboard(message.content, t("message.notice.textCopied", "Texto del mensaje copiado."));
         return;
       case "pin":
-        showUiNotice("Fijar mensajes quedara conectado a backend en una siguiente pasada.");
+        showUiNotice(t("message.notice.pinPending", "Fijar mensajes quedara conectado a backend en una siguiente pasada."));
         return;
       case "unread":
-        showUiNotice("Marcar como no leido llega con tracking fino de lectura.");
+        showUiNotice(t("message.notice.unreadPending", "Marcar como no leido llega con tracking fino de lectura."));
         return;
       case "copy-link":
         await copyToClipboard(
           `${window.location.origin}${window.location.pathname}#message-${message.id}`,
-          "Enlace del mensaje copiado."
+          t("message.notice.linkCopied", "Enlace del mensaje copiado.")
         );
         return;
       case "edit":
@@ -109,7 +112,7 @@ export function MessageStage(props) {
         await handleDeleteMessage(message);
         return;
       case "copy-id":
-        await copyToClipboard(message.id, "ID del mensaje copiado.");
+        await copyToClipboard(message.id, t("message.notice.idCopied", "ID del mensaje copiado."));
         return;
       default:
     }
@@ -147,6 +150,7 @@ export function MessageStage(props) {
         headerContent={headerContent}
         handleReaction={handleReaction}
         handleScroll={handleScroll}
+        language={language}
         listRef={listRef}
         loadingMessages={loadingMessages}
         messageMenuFor={messageMenuFor}
@@ -176,6 +180,7 @@ export function MessageStage(props) {
         handleStickerSelect={handleStickerSelect}
         handleSubmitMessage={handleSubmitMessage}
         guildStickers={guildStickers}
+        language={language}
         onCancelEdit={onCancelEdit}
         onCancelReply={onCancelReply}
         onSetComposerMenuOpen={onSetComposerMenuOpen}

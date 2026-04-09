@@ -1,28 +1,33 @@
-import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
+import React, { Suspense, lazy, useEffect, useMemo, useRef } from "react";
 
 import { api } from "../api.js";
-import { Icon } from "./Icon.jsx";
 import { UserProfileCard } from "./UserProfileCard.jsx";
 import { UserProfileModal } from "./UserProfileModal.jsx";
+import { ChatHeaderPanel } from "./workspace/ChatHeaderPanel.jsx";
 import { ChatHeader } from "./workspace/ChatHeader.jsx";
 import { DesktopTopbar } from "./workspace/DesktopTopbar.jsx";
 import { MembersPanel } from "./workspace/MembersPanel.jsx";
+import {
+  WorkspaceCameraMenu,
+  WorkspaceInputMenu,
+  WorkspaceOutputMenu,
+  WorkspaceShareMenu
+} from "./workspace/WorkspaceVoiceMenus.jsx";
 import { WorkspaceNavigation } from "./workspace/WorkspaceNavigation.jsx";
 import {
   applyServerFolderAction,
   reorderGuildList,
-  sanitizeServerFolders,
   toggleServerFolder
 } from "./workspace/serverFolders.js";
 import {
   buildMemberGroups,
   buildVoiceStageTone,
-  findDirectDmByUserId,
-  fallbackDeviceLabel,
   isVisibleStatus,
-  resolveGuildIcon
 } from "./workspace/workspaceHelpers.js";
+import { buildWorkspaceProfileCardData } from "./workspace/workspaceProfileCard.js";
+import { createWorkspaceSocialActions } from "./workspace/workspaceSocialActions.js";
 import { useUmbraWorkspaceCore } from "./workspace/useUmbraWorkspaceCore.js";
+import { useWorkspaceShellState } from "./workspace/useWorkspaceShellState.js";
 
 const lazyNamed = (loader, exportName) =>
   lazy(() => loader().then((module) => ({ default: module[exportName] })));
@@ -77,59 +82,47 @@ export function UmbraWorkspace({
     setComposerAttachments, setComposerMenuOpen, setComposerPicker, setDialog, setEditingMessage,
     setHeaderPanel, setHoveredVoiceChannelId, setInboxTab, setMembersPanelVisible,
     setMessageMenuFor, setProfileCard, setReactionPickerFor, setAppError, setWorkspace,
-    setReplyMentionEnabled, setReplyTarget, setSettingsOpen, setTheme, theme, settingsOpen,
+    setReplyMentionEnabled, setReplyTarget, setSettingsOpen, setTheme, setVoiceMenu, theme, settingsOpen,
     showUiNotice, toggleHeaderPanel, toggleVoiceMenu, toggleVoiceState, topbarActionsRef,
     typingUsers, uiNotice, updateVoiceSetting, uploadingAttachments, voiceDevices, voiceMenu,
     voiceSessions, voiceState, voiceUserIds, voiceInputLevel, voiceInputSpeaking, voiceInputStatus, workspace,
     cycleVoiceDevice, getSelectedDeviceLabel, selectedVoiceDevices
   } = useUmbraWorkspaceCore({ accessToken, initialSelection, onSignOut });
-  const [voiceInputPanel, setVoiceInputPanel] = useState(null);
-  const [voiceOutputPanel, setVoiceOutputPanel] = useState(null);
-  const [fullProfile, setFullProfile] = useState(null);
-  const [isResizingMembersPanel, setIsResizingMembersPanel] = useState(false);
-  const [viewportWidth, setViewportWidth] = useState(() =>
-    typeof window !== "undefined" ? window.visualViewport?.width || window.innerWidth : 1440
-  );
-  const [membersPanelWidth, setMembersPanelWidth] = useState(() => {
-    try {
-      const saved = Number(localStorage.getItem("umbra-members-panel-width"));
-      return Number.isFinite(saved) && saved >= 340 && saved <= 520 ? saved : 356;
-    } catch {
-      return 356;
-    }
-  });
-  const [serverSettingsGuildId, setServerSettingsGuildId] = useState(null);
-  const [leaveGuildTarget, setLeaveGuildTarget] = useState(null);
-  const [leavingGuild, setLeavingGuild] = useState(false);
-  const [inviteModalState, setInviteModalState] = useState({
-    error: "",
-    guildId: null,
-    invite: null,
-    loading: false,
-    open: false
-  });
-  const [guildMenuPrefs, setGuildMenuPrefs] = useState(() => {
-    try {
-      const saved = localStorage.getItem("umbra-guild-menu-prefs");
-      return saved ? JSON.parse(saved) : {};
-    } catch {
-      return {};
-    }
-  });
-  const [dmMenuPrefs, setDmMenuPrefs] = useState(() => {
-    try {
-      const saved = localStorage.getItem("umbra-dm-menu-prefs");
-      return saved ? JSON.parse(saved) : {};
-    } catch {
-      return {};
-    }
-  });
-  const [serverFolders, setServerFolders] = useState([]);
   const openingDmRequestsRef = useRef(new Map());
-  const desktopShellRef = useRef(null);
-  const appShellRef = useRef(null);
-  const membersResizeRef = useRef(null);
-  const membersResizeCleanupRef = useRef(null);
+  const {
+    appShellRef,
+    desktopShellRef,
+    dmMenuPrefs,
+    fullProfile,
+    guildMenuPrefs,
+    inviteModalState,
+    isResizingMembersPanel,
+    leaveGuildTarget,
+    leavingGuild,
+    membersPanelWidth,
+    membersResizeCleanupRef,
+    membersResizeRef,
+    serverFolders,
+    serverSettingsGuildId,
+    setDmMenuPrefs,
+    setFullProfile,
+    setGuildMenuPrefs,
+    setInviteModalState,
+    setIsResizingMembersPanel,
+    setLeaveGuildTarget,
+    setLeavingGuild,
+    setMembersPanelWidth,
+    setServerFolders,
+    setServerSettingsGuildId,
+    setVoiceInputPanel,
+    setVoiceOutputPanel,
+    viewportWidth,
+    voiceInputPanel,
+    voiceOutputPanel
+  } = useWorkspaceShellState({
+    currentUserId: workspace?.current_user?.id || "",
+    guilds: workspace?.guilds
+  });
 
   const currentUser = workspace?.current_user || null;
   const currentUserId = currentUser?.id || "";
@@ -137,10 +130,6 @@ export function UmbraWorkspace({
   const isGroupDirectConversation = isDirectConversation && activeChannel?.type === "group_dm";
   const isCallableDirectConversation =
     isDirectConversation && ["dm", "group_dm"].includes(activeChannel?.type || "");
-  const serverSettingsGuild =
-    workspace?.guilds.find((guild) => guild.id === serverSettingsGuildId) || null;
-  const inviteTargetGuild =
-    workspace?.guilds.find((guild) => guild.id === inviteModalState.guildId) || null;
   const isSingleDirectMessagePanel =
     membersPanelVisible && isDirectConversation && activeChannel?.type === "dm";
   const resolvedMembersPanelWidth = isSingleDirectMessagePanel ? membersPanelWidth : 292;
@@ -157,99 +146,10 @@ export function UmbraWorkspace({
     minimumChatStageWidth;
   const effectiveMembersPanelVisible =
     membersPanelVisible && viewportWidth >= requiredViewportWidth;
-
-  useEffect(() => {
-    localStorage.setItem("umbra-guild-menu-prefs", JSON.stringify(guildMenuPrefs));
-  }, [guildMenuPrefs]);
-
-  useEffect(() => {
-    localStorage.setItem("umbra-dm-menu-prefs", JSON.stringify(dmMenuPrefs));
-  }, [dmMenuPrefs]);
-
-  useEffect(() => {
-    if (!currentUserId) {
-      setServerFolders([]);
-      return;
-    }
-
-    try {
-      const saved = localStorage.getItem(`umbra-server-folders-${currentUserId}`);
-      const parsed = saved ? JSON.parse(saved) : [];
-      setServerFolders(sanitizeServerFolders(parsed, workspace?.guilds || []));
-    } catch {
-      setServerFolders([]);
-    }
-  }, [currentUserId]);
-
-  useEffect(() => {
-    if (!workspace?.guilds) {
-      return;
-    }
-
-    setServerFolders((previous) => sanitizeServerFolders(previous, workspace.guilds));
-  }, [workspace?.guilds]);
-
-  useEffect(() => {
-    if (!currentUserId) {
-      return;
-    }
-
-    try {
-      localStorage.setItem(
-        `umbra-server-folders-${currentUserId}`,
-        JSON.stringify(serverFolders)
-      );
-    } catch {
-      // Ignore local preference persistence issues.
-    }
-  }, [currentUserId, serverFolders]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("umbra-members-panel-width", String(membersPanelWidth));
-    } catch {
-      // Ignore local-only persistence issues.
-    }
-  }, [membersPanelWidth]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return undefined;
-    }
-
-    function updateViewportWidth() {
-      const measuredWidth =
-        appShellRef.current?.getBoundingClientRect?.().width ||
-        desktopShellRef.current?.getBoundingClientRect?.().width ||
-        window.visualViewport?.width ||
-        window.innerWidth;
-      setViewportWidth((previous) =>
-        Math.abs(previous - measuredWidth) > 1 ? measuredWidth : previous
-      );
-    }
-
-    updateViewportWidth();
-
-    let resizeObserver;
-    if (typeof ResizeObserver !== "undefined") {
-      resizeObserver = new ResizeObserver(() => updateViewportWidth());
-      if (desktopShellRef.current) {
-        resizeObserver.observe(desktopShellRef.current);
-      }
-      if (appShellRef.current) {
-        resizeObserver.observe(appShellRef.current);
-      }
-    }
-
-    window.addEventListener("resize", updateViewportWidth);
-    window.visualViewport?.addEventListener("resize", updateViewportWidth);
-    return () => {
-      window.removeEventListener("resize", updateViewportWidth);
-      window.visualViewport?.removeEventListener("resize", updateViewportWidth);
-      resizeObserver?.disconnect();
-    };
-  }, []);
-
+  const serverSettingsGuild =
+    workspace?.guilds.find((guild) => guild.id === serverSettingsGuildId) || null;
+  const inviteTargetGuild =
+    workspace?.guilds.find((guild) => guild.id === inviteModalState.guildId) || null;
   const shellGridTemplateColumns = useMemo(() => {
     const columns = ["78px"];
 
@@ -285,243 +185,14 @@ export function UmbraWorkspace({
     []
   );
 
-  function formatMemberSinceLabel(isoDate) {
-    if (!isoDate) {
-      return "";
-    }
-
-    return new Intl.DateTimeFormat("es-CO", {
-      day: "numeric",
-      month: "short",
-      year: "numeric"
-    }).format(new Date(isoDate));
-  }
-
-  function extractProfileLinks(text = "") {
-    return [...String(text).matchAll(/https?:\/\/[^\s]+/gi)].map((match, index) => ({
-      href: match[0],
-      id: `link-${index}`,
-      label: match[0].replace(/^https?:\/\//i, "")
-    }));
-  }
-
-  function normalizeProfileSocialLinks(entries = []) {
-    const source = Array.isArray(entries) ? entries : [];
-    return source
-      .map((entry, index) => ({
-        href: String(entry?.url || "").trim(),
-        id: String(entry?.id || `profile-link-${index}`),
-        label: String(entry?.label || "").trim(),
-        platform: String(entry?.platform || "website").trim() || "website"
-      }))
-      .filter((entry) => entry.href || entry.label);
-  }
-
-  function normalizeProfilePrivacy(settings = {}) {
-    const source = settings && typeof settings === "object" ? settings : {};
-    return {
-      allowDirectMessages: source.allowDirectMessages !== false,
-      showActivityStatus: source.showActivityStatus !== false,
-      showMemberSince: source.showMemberSince !== false,
-      showSocialLinks: source.showSocialLinks !== false
-    };
-  }
-
   function buildProfileCardData(targetUser, displayNameOverride = null) {
-    if (!workspace || !targetUser?.id) {
-      return null;
-    }
-
-    const fallbackProfile =
-      workspace.available_users.find((item) => item.id === targetUser.id) ||
-      (workspace.current_user.id === targetUser.id ? workspace.current_user : null);
-
-    const activeGuildMember =
-      activeGuild?.members.find((member) => member.id === targetUser.id) || null;
-    const activeParticipant =
-      activeChannel?.participants?.find((participant) => participant.id === targetUser.id) || null;
-    const sharedGuilds = workspace.guilds.filter((guild) =>
-      (guild.members || []).some((member) => member.id === targetUser.id)
-    );
-    const sharedDms = workspace.dms.filter((dm) =>
-      dm.participants.some((participant) => participant.id === targetUser.id)
-    );
-    const sharedGuildEntries = sharedGuilds.map((guild) => {
-      const member = (guild.members || []).find((item) => item.id === targetUser.id) || null;
-
-      return {
-        id: guild.id,
-        iconUrl: resolveGuildIcon(guild),
-        joinedAt: member?.joined_at || null,
-        memberCount: guild.member_count || guild.members?.length || 0,
-        name: guild.name
-      };
+    return buildWorkspaceProfileCardData({
+      activeChannel,
+      activeGuild,
+      displayNameOverride,
+      targetUser,
+      workspace
     });
-    const commonFriends = (workspace.friends || [])
-      .filter((friend) => {
-        if (!friend?.id || friend.id === targetUser.id || friend.id === workspace.current_user.id) {
-          return false;
-        }
-
-        return sharedGuilds.some((guild) =>
-          (guild.members || []).some((member) => member.id === friend.id)
-        );
-      })
-      .slice(0, 8);
-    const friendRequestSent =
-      (workspace.friend_requests_sent || []).find(
-        (request) => (request.user?.id || request.recipient_id) === targetUser.id
-      ) || null;
-    const friendRequestReceived =
-      (workspace.friend_requests_received || []).find(
-        (request) => (request.user?.id || request.requester_id) === targetUser.id
-      ) || null;
-    const accountCreatedAt =
-      targetUser.created_at ||
-      fallbackProfile?.created_at ||
-      activeGuildMember?.created_at ||
-      activeParticipant?.created_at ||
-      null;
-    const memberSinceLabel = formatMemberSinceLabel(accountCreatedAt);
-    const bio =
-      targetUser.bio ||
-      activeGuildMember?.bio ||
-      activeParticipant?.bio ||
-      fallbackProfile?.bio ||
-      "";
-    const privacySettings = normalizeProfilePrivacy(
-      targetUser.privacy_settings || fallbackProfile?.privacy_settings
-    );
-    const infoLines = bio
-      .split(/\r?\n+/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-    const extractedLinks = extractProfileLinks(bio);
-    const socialLinks = normalizeProfileSocialLinks(
-      targetUser.social_links || fallbackProfile?.social_links
-    );
-    const visibleConnections = privacySettings.showSocialLinks
-      ? socialLinks.length
-        ? socialLinks.map((link) => ({
-            href: link.href,
-            id: link.id,
-            kind: "link",
-            label: link.label || link.href.replace(/^https?:\/\//i, ""),
-            meta: link.platform
-          }))
-        : extractedLinks.map((link) => ({
-            ...link,
-            kind: "link",
-            meta: "Enlace compartido en su perfil"
-          }))
-      : [];
-
-    return {
-      id: targetUser.id,
-      authProvider:
-        targetUser.auth_provider || fallbackProfile?.auth_provider || null,
-      avatarHue:
-        targetUser.avatar_hue || activeGuildMember?.avatar_hue || fallbackProfile?.avatar_hue || 210,
-      avatarUrl:
-        targetUser.avatar_url ||
-        activeGuildMember?.avatar_url ||
-        activeParticipant?.avatar_url ||
-        fallbackProfile?.avatar_url ||
-        "",
-      profileBannerUrl:
-        targetUser.profile_banner_url ||
-        activeGuildMember?.profile_banner_url ||
-        activeParticipant?.profile_banner_url ||
-        fallbackProfile?.profile_banner_url ||
-        "",
-      bio,
-      connections: [
-        ...sharedGuildEntries.slice(0, 6).map((guild) => ({
-          iconUrl: guild.iconUrl,
-          id: `guild-${guild.id}`,
-          kind: "guild",
-          label: guild.name,
-          meta: guild.joinedAt
-            ? `Miembro desde ${formatMemberSinceLabel(guild.joinedAt)}`
-            : `${guild.memberCount} miembros visibles`
-        })),
-        ...visibleConnections
-      ],
-      customStatus: privacySettings.showActivityStatus
-        ? targetUser.custom_status ||
-          activeGuildMember?.custom_status ||
-          activeParticipant?.custom_status ||
-          fallbackProfile?.custom_status ||
-          ""
-        : "",
-      discriminator:
-        targetUser.discriminator || fallbackProfile?.discriminator || null,
-      displayName:
-        displayNameOverride ||
-        targetUser.display_name ||
-        activeGuildMember?.display_name ||
-        targetUser.username ||
-        fallbackProfile?.username ||
-        "Umbra user",
-      friendRequestId: friendRequestReceived?.id || friendRequestSent?.id || null,
-      friendRequestState: friendRequestReceived
-        ? "received"
-        : friendRequestSent
-          ? "sent"
-          : null,
-      infoLines,
-      isCurrentUser: workspace.current_user.id === targetUser.id,
-      isBlockedByMe: (workspace.blocked_users || []).some((user) => user.id === targetUser.id),
-      isFriend: (workspace.friends || []).some((friend) => friend.id === targetUser.id),
-      memberSinceLabel: privacySettings.showMemberSince ? memberSinceLabel : "",
-      primaryTag: activeGuildMember ? activeGuild?.name || "Miembro" : sharedGuilds[0]?.name || null,
-      profileColor:
-        targetUser.profile_color ||
-        activeGuildMember?.profile_color ||
-        activeParticipant?.profile_color ||
-        fallbackProfile?.profile_color ||
-        "#5865F2",
-      roleColor: targetUser.role_color || activeGuildMember?.role_color || null,
-      privacySettings,
-      commonFriends,
-      sharedGuilds: sharedGuildEntries,
-      sharedDmCount: sharedDms.length,
-      sharedGuildCount: sharedGuilds.length,
-      status:
-        targetUser.status ||
-        activeGuildMember?.status ||
-        activeParticipant?.status ||
-        fallbackProfile?.status ||
-        "offline",
-      statusLabel:
-        (targetUser.status ||
-          activeGuildMember?.status ||
-          activeParticipant?.status ||
-          fallbackProfile?.status ||
-          "offline") === "online"
-          ? "Online"
-          : (targetUser.status ||
-                activeGuildMember?.status ||
-                activeParticipant?.status ||
-                fallbackProfile?.status ||
-                "offline") === "idle"
-            ? "Ausente"
-            : (targetUser.status ||
-                  activeGuildMember?.status ||
-                  activeParticipant?.status ||
-                  fallbackProfile?.status ||
-                  "offline") === "dnd"
-              ? "No molestar"
-              : (targetUser.status ||
-                    activeGuildMember?.status ||
-                    activeParticipant?.status ||
-                    fallbackProfile?.status ||
-                    "offline") === "invisible"
-                ? "Invisible"
-                : "Offline",
-      username:
-        targetUser.username || fallbackProfile?.username || targetUser.display_name || "umbra_user"
-    };
   }
 
   async function handleCopyProfileId(profile) {
@@ -607,250 +278,32 @@ export function UmbraWorkspace({
 
     setFullProfile(resolved);
   }
-
-  async function ensureDirectDmChannel(profile, { loadConversation = true } = {}) {
-    if (!profile?.id) {
-      return null;
-    }
-
-    if (profile.isCurrentUser) {
-      setSettingsOpen(true);
-      setProfileCard(null);
-      return null;
-    }
-
-    const existingDm = findDirectDmByUserId(workspace?.dms || [], currentUserId, profile.id);
-    if (existingDm) {
-      if (loadConversation) {
-        setProfileCard(null);
-        setActiveSelection({
-          channelId: existingDm.id,
-          guildId: null,
-          kind: "dm"
-        });
-        await loadBootstrap({
-          channelId: existingDm.id,
-          guildId: null,
-          kind: "dm"
-        });
-      }
-      return existingDm;
-    }
-
-    let pendingRequest = openingDmRequestsRef.current.get(profile.id);
-    if (!pendingRequest) {
-      pendingRequest = api
-        .createDm({
-          recipientId: profile.id
-        })
-        .then((payload) => payload.channel)
-        .finally(() => {
-          if (openingDmRequestsRef.current.get(profile.id) === pendingRequest) {
-            openingDmRequestsRef.current.delete(profile.id);
-          }
-        });
-      openingDmRequestsRef.current.set(profile.id, pendingRequest);
-    }
-
-    const channel = await pendingRequest;
-
-    if (loadConversation && channel) {
-      setProfileCard(null);
-      setActiveSelection({
-        channelId: channel.id,
-        guildId: null,
-        kind: "dm"
-      });
-      await loadBootstrap({
-        channelId: channel.id,
-        guildId: null,
-        kind: "dm"
-      });
-    }
-
-    return channel;
-  }
-
-  async function handleOpenDmFromCard(profile) {
-    try {
-      await ensureDirectDmChannel(profile, {
-        loadConversation: true
-      });
-    } catch (error) {
-      setAppError(error.message);
-    }
-  }
-
-  async function handleSendDmFromCard(profile, content) {
-    const trimmed = String(content || "").trim();
-    if (!trimmed) {
-      return;
-    }
-
-    try {
-      const channel = await ensureDirectDmChannel(profile, {
-        loadConversation: false
-      });
-
-      if (!channel?.id) {
-        return;
-      }
-
-      await api.createMessage({
-        attachments: [],
-        channelId: channel.id,
-        content: trimmed,
-        replyMentionUserId: null,
-        replyTo: null
-      });
-
-      setProfileCard(null);
-      setActiveSelection({
-        channelId: channel.id,
-        guildId: null,
-        kind: "dm"
-      });
-      await loadBootstrap({
-        channelId: channel.id,
-        guildId: null,
-        kind: "dm"
-      });
-    } catch (error) {
-      setAppError(error.message);
-    }
-  }
-
-  async function refreshSocialSelection(notice = "") {
-    await loadBootstrap({
-      channelId: activeSelection.channelId,
-      guildId: activeSelection.guildId,
-      kind: activeSelection.kind
-    });
-    if (notice) {
-      showUiNotice(notice);
-    }
-  }
-
-  async function handleSendFriendRequest(profile) {
-    if (!profile?.id || profile.isCurrentUser || profile.isBlockedByMe || profile.isFriend) {
-      return;
-    }
-
-    try {
-      if (profile.friendRequestState === "received" && profile.friendRequestId) {
-        await api.acceptFriendRequest({ requestId: profile.friendRequestId });
-        await refreshSocialSelection("Ahora son sombras.");
-        return;
-      }
-
-      if (profile.friendRequestState === "sent") {
-        return;
-      }
-
-      const payload = await api.sendFriendRequest({ recipientId: profile.id });
-      if (payload?.status === "accepted") {
-        await refreshSocialSelection("Ahora son sombras.");
-        return;
-      }
-
-      await refreshSocialSelection(`Solicitud enviada a ${profile.displayName || profile.username}.`);
-    } catch (error) {
-      setAppError(error.message);
-    }
-  }
-
-  async function handleAcceptFriendRequest(requestOrProfile) {
-    const requestId = requestOrProfile?.id || requestOrProfile?.friendRequestId;
-    if (!requestId) {
-      return;
-    }
-
-    try {
-      await api.acceptFriendRequest({ requestId });
-      await refreshSocialSelection("Ahora son sombras.");
-    } catch (error) {
-      setAppError(error.message);
-    }
-  }
-
-  async function handleCancelFriendRequest(requestOrProfile) {
-    const requestId = requestOrProfile?.id || requestOrProfile?.friendRequestId;
-    if (!requestId) {
-      return;
-    }
-
-    try {
-      await api.cancelFriendRequest({ requestId });
-      await refreshSocialSelection("Solicitud actualizada.");
-    } catch (error) {
-      setAppError(error.message);
-    }
-  }
-
-  async function handleRemoveFriend(profile) {
-    if (!profile?.id) {
-      return;
-    }
-
-    try {
-      await api.removeFriend({ friendId: profile.id });
-      await refreshSocialSelection("Sombra eliminada.");
-    } catch (error) {
-      setAppError(error.message);
-    }
-  }
-
-  async function handleBlockUser(profile) {
-    if (!profile?.id) {
-      return;
-    }
-
-    try {
-      await api.blockUser({ userId: profile.id });
-      setProfileCard(null);
-      setFullProfile(null);
-      await refreshSocialSelection(`${profile.displayName || profile.username} ha sido bloqueado.`);
-    } catch (error) {
-      setAppError(error.message);
-    }
-  }
-
-  async function handleReportUser(profile, reason = "spam") {
-    if (!profile?.id) {
-      return;
-    }
-
-    try {
-      await api.reportUser({ reason, userId: profile.id });
-      showUiNotice("Reporte enviado.");
-    } catch (error) {
-      setAppError(error.message);
-    }
-  }
-
-  async function handleInboxItemAction(item) {
-    if (!item) {
-      return;
-    }
-
-    if (item.channelId && item.tab !== "for_you") {
-      setHeaderPanel(null);
-      setActiveSelection((previous) => ({
-        channelId: item.channelId,
-        guildId: item.tab === "mentions" ? activeGuild?.id || previous.guildId : null,
-        kind: item.tab === "mentions" ? "guild" : "dm"
-      }));
-      return;
-    }
-
-    if (item.user?.id) {
-      setHeaderPanel(null);
-      await handleOpenDmFromCard({
-        id: item.user.id,
-        isCurrentUser: item.user.id === workspace.current_user.id
-      });
-    }
-  }
+  const {
+    ensureDirectDmChannel,
+    handleAcceptFriendRequest,
+    handleBlockUser,
+    handleCancelFriendRequest,
+    handleInboxItemAction,
+    handleOpenDmFromCard,
+    handleRemoveFriend,
+    handleReportUser,
+    handleSendDmFromCard,
+    handleSendFriendRequest
+  } = createWorkspaceSocialActions({
+    activeGuild,
+    activeSelection,
+    currentUserId,
+    loadBootstrap,
+    openingDmRequestsRef,
+    setActiveSelection,
+    setAppError,
+    setFullProfile,
+    setHeaderPanel,
+    setProfileCard,
+    setSettingsOpen,
+    showUiNotice,
+    workspace
+  });
 
   const friendUsers = useMemo(
     () =>
@@ -1145,18 +598,64 @@ export function UmbraWorkspace({
     showUiNotice(`Perfil de entrada: ${profile.label}.`);
   }
 
-  function buildUniqueDevices(devices, kind) {
-    const seen = new Set();
-
-    return devices.filter((device, index) => {
-      const label = String(device.label || fallbackDeviceLabel(kind, index)).trim().toLowerCase();
-      if (seen.has(label)) {
-        return false;
-      }
-      seen.add(label);
-      return true;
-    });
-  }
+  const inputMenuNode = (
+    <WorkspaceInputMenu
+      activeInputBars={activeInputBars}
+      activeInputProfile={activeInputProfile}
+      activeInputProfileLabel={activeInputProfileLabel}
+      getSelectedDeviceLabel={getSelectedDeviceLabel}
+      handleApplyVoiceProfile={handleApplyVoiceProfile}
+      handleVoiceDeviceChange={handleVoiceDeviceChange}
+      inputMeterBars={inputMeterBars}
+      selectedVoiceDevices={selectedVoiceDevices}
+      setSettingsOpen={setSettingsOpen}
+      setVoiceInputPanel={setVoiceInputPanel}
+      setVoiceMenu={setVoiceMenu}
+      showUiNotice={showUiNotice}
+      toggleVoiceState={toggleVoiceState}
+      updateVoiceSetting={updateVoiceSetting}
+      voiceDevices={voiceDevices}
+      voiceInputPanel={voiceInputPanel}
+      voiceInputStatus={voiceInputStatus}
+      voiceProfileOptions={voiceProfileOptions}
+      voiceState={voiceState}
+      voiceSuppressionCopy={voiceSuppressionCopy}
+      voiceSuppressionLabel={voiceSuppressionLabel}
+    />
+  );
+  const cameraMenuNode = (
+    <WorkspaceCameraMenu
+      cameraStatus={cameraStatus}
+      getSelectedDeviceLabel={getSelectedDeviceLabel}
+      setSettingsOpen={setSettingsOpen}
+      toggleVoiceState={toggleVoiceState}
+      voiceState={voiceState}
+    />
+  );
+  const outputMenuNode = (
+    <WorkspaceOutputMenu
+      getSelectedDeviceLabel={getSelectedDeviceLabel}
+      handleVoiceDeviceChange={handleVoiceDeviceChange}
+      selectedVoiceDevices={selectedVoiceDevices}
+      setSettingsOpen={setSettingsOpen}
+      setVoiceOutputPanel={setVoiceOutputPanel}
+      showUiNotice={showUiNotice}
+      updateVoiceSetting={updateVoiceSetting}
+      voiceDevices={voiceDevices}
+      voiceOutputPanel={voiceOutputPanel}
+      voiceState={voiceState}
+    />
+  );
+  const shareMenuNode = (
+    <WorkspaceShareMenu
+      showUiNotice={showUiNotice}
+      toggleVoiceState={toggleVoiceState}
+      voiceState={voiceState}
+    />
+  );
+  const chatHeaderPanelNode = (
+    <ChatHeaderPanel headerPanel={headerPanel} headerPanelRef={headerPanelRef} />
+  );
 
   if (booting) {
     return <div className="boot-screen">Despertando Umbra...</div>;
@@ -1180,485 +679,6 @@ export function UmbraWorkspace({
             Reintentar
           </button>
         </div>
-      </div>
-    );
-  }
-
-  function renderInputMenu() {
-    const inputDevices = voiceDevices.audioinput || [];
-
-    function renderInputSubmenu() {
-      if (voiceInputPanel === "device") {
-        return (
-          <div className="floating-surface voice-control-menu voice-control-submenu">
-            <div className="voice-control-submenu-header">
-              <div className="voice-control-heading">
-                <strong>Dispositivo de entrada</strong>
-                <small>{getSelectedDeviceLabel("audioinput")}</small>
-              </div>
-            </div>
-
-            <div className="voice-control-option-list">
-              {inputDevices.length ? (
-                inputDevices.map((device, index) => {
-                  const label = device.label || `Microfono ${index + 1}`;
-                  const selected = selectedVoiceDevices.audioinput === device.deviceId;
-
-                  return (
-                    <button
-                      className={`voice-control-option ${selected ? "selected" : ""}`.trim()}
-                      key={device.deviceId || `${label}-${index}`}
-                      onClick={() => {
-                        handleVoiceDeviceChange("audioinput", device.deviceId);
-                        setVoiceInputPanel(null);
-                        showUiNotice(`Ahora usando ${label}.`);
-                      }}
-                      type="button"
-                    >
-                      <span>
-                        <strong>{label}</strong>
-                      </span>
-                      <i className={`voice-control-radio ${selected ? "selected" : ""}`.trim()} />
-                    </button>
-                  );
-                })
-              ) : (
-                <div className="voice-control-empty">No hay microfonos disponibles.</div>
-              )}
-            </div>
-          </div>
-        );
-      }
-
-      if (voiceInputPanel === "profile") {
-        return (
-          <div className="floating-surface voice-control-menu voice-control-submenu">
-            <div className="voice-control-submenu-header">
-              <div className="voice-control-heading">
-                <strong>Perfil de entrada</strong>
-                <small>{activeInputProfileLabel}</small>
-              </div>
-            </div>
-
-            <div className="voice-control-option-list">
-              {voiceProfileOptions.map((profile) => {
-                const selected = activeInputProfile === profile.id;
-
-                return (
-                  <button
-                    className={`voice-control-option ${selected ? "selected" : ""}`.trim()}
-                    key={profile.id}
-                    onClick={() => handleApplyVoiceProfile(profile)}
-                    type="button"
-                  >
-                    <span>
-                      <strong>{profile.label}</strong>
-                      <small>{profile.description}</small>
-                    </span>
-                    <i className={`voice-control-radio ${selected ? "selected" : ""}`.trim()} />
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        );
-      }
-
-      return null;
-    }
-
-    return (
-      <div className="floating-surface voice-control-menu input-menu">
-        <div className="voice-control-menu-header">
-          <div className="voice-control-heading">
-            <strong>Supresion de ruido</strong>
-            <small>{voiceSuppressionLabel}</small>
-          </div>
-          <div className="voice-control-menu-actions">
-            <button
-              aria-label={
-                voiceState.noiseSuppression
-                  ? "Desactivar supresion de ruido"
-                  : "Activar supresion de ruido"
-              }
-              className={`voice-noise-toggle ${voiceState.noiseSuppression ? "active" : ""}`}
-              onClick={() => toggleVoiceState("noiseSuppression")}
-              type="button"
-            >
-              <span />
-            </button>
-            <button
-              className="ghost-button icon-only small"
-              onClick={() => setVoiceMenu(null)}
-              type="button"
-            >
-              <Icon name="close" size={14} />
-            </button>
-          </div>
-        </div>
-
-        <p className={`voice-noise-copy ${voiceInputStatus.error ? "error" : ""}`.trim()}>
-          {voiceSuppressionCopy}
-        </p>
-
-        <div className="voice-control-divider" />
-
-        <button
-          className={`voice-control-link ${voiceInputPanel === "device" ? "panel-open" : ""}`.trim()}
-          onClick={() =>
-            setVoiceInputPanel((previous) => (previous === "device" ? null : "device"))
-          }
-          type="button"
-        >
-          <span>
-            <strong>Dispositivo de entrada</strong>
-            <small>{getSelectedDeviceLabel("audioinput")}</small>
-          </span>
-          <Icon name="arrowRight" size={15} />
-        </button>
-
-        <button
-          className={`voice-control-link ${voiceInputPanel === "profile" ? "panel-open" : ""}`.trim()}
-          onClick={() =>
-            setVoiceInputPanel((previous) => (previous === "profile" ? null : "profile"))
-          }
-          type="button"
-        >
-          <span>
-            <strong>Perfil de entrada</strong>
-            <small>{activeInputProfileLabel}</small>
-          </span>
-          <Icon name="arrowRight" size={15} />
-        </button>
-
-        <div className="voice-control-slider-block">
-          <div className="voice-control-title-row">
-            <strong>Volumen de entrada</strong>
-            <small>{voiceState.inputVolume}%</small>
-          </div>
-          <input
-            max="100"
-            min="0"
-            onChange={(event) => {
-              updateVoiceSetting("inputProfile", "custom");
-              updateVoiceSetting("inputVolume", Number(event.target.value));
-            }}
-            type="range"
-            value={voiceState.inputVolume}
-          />
-          <div className="voice-input-meter">
-            {inputMeterBars.map((bar) => (
-              <i className={bar < activeInputBars ? "active" : ""} key={`input-${bar}`} />
-            ))}
-          </div>
-          <small className="voice-control-slider-caption">
-            {voiceState.micMuted
-              ? "El microfono esta silenciado."
-              : voiceInputStatus.ready
-                ? "Nivel en vivo del microfono."
-                : "Abre este panel o entra a una sala para activar el analizador."}
-          </small>
-        </div>
-
-        <div className="voice-control-divider" />
-
-        <div className="voice-control-footer">
-          <button className="ghost-button small" onClick={() => setSettingsOpen(true)} type="button">
-            Ajustes de voz
-          </button>
-          <button
-            className="ghost-button small"
-            onClick={() =>
-              showUiNotice(
-                voiceInputStatus.engine === "speex"
-                  ? "Speex DSP esta activo sobre tu microfono."
-                  : voiceInputStatus.engine === "native"
-                    ? "Umbra esta usando la supresion nativa del navegador."
-                    : "La supresion esta desactivada."
-              )
-            }
-            type="button"
-          >
-            Ver estado
-          </button>
-        </div>
-
-        {renderInputSubmenu()}
-      </div>
-    );
-  }
-
-  function renderCameraMenu() {
-    return (
-      <div className="floating-surface voice-control-menu camera-menu">
-        <button className="voice-control-link" type="button">
-          <span>
-            <strong>Camara</strong>
-            <small>{getSelectedDeviceLabel("videoinput")}</small>
-          </span>
-          <Icon name="arrowRight" size={15} />
-        </button>
-
-        <div className="voice-control-divider" />
-
-        <button
-          className="voice-control-link"
-          onClick={() => toggleVoiceState("cameraEnabled")}
-          type="button"
-        >
-          <span>
-            <strong>Vista previa de la camara</strong>
-            <small>
-              {cameraStatus.error
-                ? cameraStatus.error
-                : voiceState.cameraEnabled && cameraStatus.ready
-                  ? cameraStatus.label || "Camara activa"
-                  : "Inactiva"}
-            </small>
-          </span>
-          <Icon name="camera" size={16} />
-        </button>
-
-        <button className="voice-control-link" onClick={() => setSettingsOpen(true)} type="button">
-          <span>
-            <strong>Ajustes de video</strong>
-            <small>Configuracion local de Umbra</small>
-          </span>
-          <Icon name="settings" size={16} />
-        </button>
-      </div>
-    );
-  }
-
-  function renderOutputMenu() {
-    const outputDevices = buildUniqueDevices(voiceDevices.audiooutput || [], "audiooutput");
-    const currentOutputLabel = getSelectedDeviceLabel("audiooutput");
-    const isDefaultOutputSelected =
-      selectedVoiceDevices.audiooutput === "default" ||
-      !outputDevices.some((device) => device.deviceId === selectedVoiceDevices.audiooutput);
-
-    function describeOutputRoute(label, { isDefault = false } = {}) {
-      const normalized = String(label || "").toLowerCase();
-
-      if (isDefault) {
-        return {
-          badge: "Windows",
-          description: "Umbra sigue la salida predeterminada del sistema en tiempo real.",
-          tone: "system"
-        };
-      }
-
-      if (/vb-audio|voicemeeter|virtual|cable/.test(normalized)) {
-        return {
-          badge: "Virtual",
-          description: "Ideal para mezclar escenas, streams y rutas sonoras alternativas.",
-          tone: "virtual"
-        };
-      }
-
-      if (/bluetooth|airpods|buds|wireless/.test(normalized)) {
-        return {
-          badge: "Inalambrico",
-          description: "Salida ligera para moverte por Umbra sin cables de por medio.",
-          tone: "wireless"
-        };
-      }
-
-      if (/usb|headset|audif|auric|webcam/.test(normalized)) {
-        return {
-          badge: "USB",
-          description: "Ruta estable para monitoreo directo, llamadas y sesiones largas.",
-          tone: "usb"
-        };
-      }
-
-      if (/speaker|altavoc|realtek|high definition|hd audio/.test(normalized)) {
-        return {
-          badge: "Sistema",
-          description: "Salida principal del equipo, limpia y lista para escuchar el canal.",
-          tone: "system"
-        };
-      }
-
-      return {
-        badge: "Ruta",
-        description: "Una salida disponible para dejar pasar la voz y el ambiente de Umbra.",
-        tone: "umbra"
-      };
-    }
-
-    const currentOutputRoute = describeOutputRoute(currentOutputLabel, {
-      isDefault: isDefaultOutputSelected
-    });
-
-    function renderOutputSubmenu() {
-      if (voiceOutputPanel !== "device") {
-        return null;
-      }
-
-      return (
-        <div className="floating-surface voice-control-menu voice-control-submenu">
-          <div className="voice-control-submenu-header">
-            <div className="voice-control-heading">
-              <strong>Ruta de salida</strong>
-              <small>Escoge por donde Umbra deja caer la voz del canal.</small>
-            </div>
-          </div>
-
-          <div className="voice-control-option-list voice-output-choice-list">
-            <button
-              className={`voice-control-option voice-output-choice ${
-                isDefaultOutputSelected ? "selected" : ""
-              }`.trim()}
-              onClick={() => {
-                handleVoiceDeviceChange("audiooutput", "default");
-                setVoiceOutputPanel(null);
-                showUiNotice("Salida en configuracion predeterminada de Windows.");
-              }}
-              type="button"
-            >
-              <span className="voice-output-choice-copy">
-                <strong>Configuracion predeterminada de Windows</strong>
-                <small>{describeOutputRoute(currentOutputLabel, { isDefault: true }).description}</small>
-              </span>
-              <span className="voice-output-choice-meta">
-                <em className="voice-route-badge system">Windows</em>
-                <i className={`voice-control-radio ${isDefaultOutputSelected ? "selected" : ""}`.trim()} />
-              </span>
-            </button>
-
-            {outputDevices.map((device, index) => {
-              const label = device.label || fallbackDeviceLabel("audiooutput", index);
-              const selected = selectedVoiceDevices.audiooutput === device.deviceId;
-              const route = describeOutputRoute(label);
-
-              return (
-                <button
-                  className={`voice-control-option voice-output-choice ${selected ? "selected" : ""}`.trim()}
-                  key={device.deviceId || `${label}-${index}`}
-                  onClick={() => {
-                    handleVoiceDeviceChange("audiooutput", device.deviceId);
-                    setVoiceOutputPanel(null);
-                    showUiNotice(`Salida: ${label}.`);
-                  }}
-                  type="button"
-                >
-                  <span className="voice-output-choice-copy">
-                    <strong>{label}</strong>
-                    <small>{route.description}</small>
-                  </span>
-                  <span className="voice-output-choice-meta">
-                    <em className={`voice-route-badge ${route.tone}`.trim()}>{route.badge}</em>
-                    <i className={`voice-control-radio ${selected ? "selected" : ""}`.trim()} />
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="floating-surface voice-control-menu output-menu">
-        <button
-          className={`voice-control-link voice-route-card ${
-            voiceOutputPanel === "device" ? "panel-open" : ""
-          }`.trim()}
-          onClick={() =>
-            setVoiceOutputPanel((previous) => (previous === "device" ? null : "device"))
-          }
-          type="button"
-        >
-          <span className="voice-route-card-copy">
-            <small className="voice-route-eyebrow">Ruta sonora</small>
-            <strong>{currentOutputLabel}</strong>
-            <small>{currentOutputRoute.description}</small>
-          </span>
-          <span className="voice-route-card-meta">
-            <em className={`voice-route-badge ${currentOutputRoute.tone}`.trim()}>
-              {currentOutputRoute.badge}
-            </em>
-            <Icon name="arrowRight" size={15} />
-          </span>
-        </button>
-
-        <div className="voice-control-divider" />
-
-        <div className="voice-control-slider-block">
-          <div className="voice-control-title-row">
-            <strong>Volumen de salida</strong>
-            <small>{voiceState.outputVolume}%</small>
-          </div>
-          <input
-            max="100"
-            min="0"
-            onChange={(event) => updateVoiceSetting("outputVolume", Number(event.target.value))}
-            type="range"
-            value={voiceState.outputVolume}
-          />
-        </div>
-
-        <div className="voice-control-divider" />
-
-        <div className="voice-control-footer">
-          <button className="ghost-button small" onClick={() => setSettingsOpen(true)} type="button">
-            Ajustes de voz
-          </button>
-        </div>
-
-        {renderOutputSubmenu()}
-      </div>
-    );
-  }
-
-  function renderShareMenu() {
-    return (
-      <div className="floating-surface voice-control-menu share-menu">
-        <button
-          className={`voice-control-link danger ${voiceState.screenShareEnabled ? "active" : ""}`}
-          onClick={() => toggleVoiceState("screenShareEnabled")}
-          type="button"
-        >
-          <span>
-            <strong>{voiceState.screenShareEnabled ? "Dejar de transmitir" : "Iniciar transmision"}</strong>
-          </span>
-          <Icon name="screenShare" size={16} />
-        </button>
-
-        <button className="voice-control-link" type="button">
-          <span>
-            <strong>Cambiar transmision</strong>
-            <small>Ventana o pantalla local</small>
-          </span>
-          <Icon name="screenShare" size={16} />
-        </button>
-
-        <button className="voice-control-link" type="button">
-          <span>
-            <strong>Calidad de la transmision</strong>
-            <small>720P 30 FPS</small>
-          </span>
-          <Icon name="arrowRight" size={15} />
-        </button>
-
-        <label className="voice-control-check">
-          <span>Compartir audio de la transmision</span>
-          <input
-            checked={voiceState.shareAudio}
-            onChange={() => toggleVoiceState("shareAudio")}
-            type="checkbox"
-          />
-        </label>
-
-        <div className="voice-control-divider" />
-
-        <button className="voice-control-link danger" onClick={() => showUiNotice("Registro de incidencias de transmision pendiente.")} type="button">
-          <span>
-            <strong>Informar problema</strong>
-          </span>
-          <Icon name="help" size={16} />
-        </button>
       </div>
     );
   }
@@ -2156,83 +1176,6 @@ export function UmbraWorkspace({
     }
   }
 
-  function renderChatHeaderPanel() {
-    if (headerPanel === "threads") {
-      return (
-        <div className="floating-surface chat-header-panel compact-panel" ref={headerPanelRef}>
-          <div className="header-panel-title">
-            <Icon name="threads" size={18} />
-            <strong>Hilos</strong>
-          </div>
-          <div className="header-empty-state">
-            <Icon name="threads" size={34} />
-            <strong>No hay hilos activos.</strong>
-            <span>Cuando abras o sigas hilos en este canal apareceran aqui.</span>
-          </div>
-        </div>
-      );
-    }
-
-    if (headerPanel === "notifications") {
-      return (
-        <div className="floating-surface chat-header-panel compact-panel" ref={headerPanelRef}>
-          <div className="header-notification-menu">
-            <button className="header-menu-row" type="button">
-              <span>
-                <strong>Silenciar canal</strong>
-              </span>
-              <Icon name="arrowRight" size={16} />
-            </button>
-            <div className="header-menu-divider" />
-            <div className="header-menu-choice active">
-              <span>
-                <strong>Usar la categoria predeterminada</strong>
-                <small>Todos los mensajes</small>
-              </span>
-              <i />
-            </div>
-            <div className="header-menu-choice">
-              <span>
-                <strong>Todos los mensajes</strong>
-              </span>
-              <i />
-            </div>
-            <div className="header-menu-choice">
-              <span>
-                <strong>Solo @mentions</strong>
-              </span>
-              <i />
-            </div>
-            <div className="header-menu-choice">
-              <span>
-                <strong>Nada</strong>
-              </span>
-              <i />
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    if (headerPanel === "pins") {
-      return (
-        <div className="floating-surface chat-header-panel compact-panel" ref={headerPanelRef}>
-          <div className="header-panel-title">
-            <Icon name="pin" size={18} />
-            <strong>Mensajes fijados</strong>
-          </div>
-          <div className="header-empty-state pins-empty-state">
-            <Icon name="pin" size={38} />
-            <strong>Este canal no tiene ningun mensaje fijado.</strong>
-            <span>Cuando fijes mensajes desde el chat, Umbra los mostrara aqui.</span>
-          </div>
-        </div>
-      );
-    }
-
-    return null;
-  }
-
   return (
     <div className={`desktop-shell theme-${theme}`} ref={desktopShellRef}>
       <DesktopTopbar
@@ -2279,8 +1222,9 @@ export function UmbraWorkspace({
             dmMenuPrefs={dmMenuPrefs}
             guildMenuPrefs={guildMenuPrefs}
             hoveredVoiceChannelId={hoveredVoiceChannelId}
-            inputMenuNode={voiceMenu === "input" && !isVoiceChannel ? renderInputMenu() : null}
-            outputMenuNode={voiceMenu === "output" && !isVoiceChannel ? renderOutputMenu() : null}
+            inputMenuNode={voiceMenu === "input" && !isVoiceChannel ? inputMenuNode : null}
+            language={language}
+            outputMenuNode={voiceMenu === "output" && !isVoiceChannel ? outputMenuNode : null}
             isVoiceChannel={isVoiceChannel}
             joinedVoiceChannel={joinedVoiceChannel}
             joinedVoiceChannelId={joinedVoiceChannelId}
@@ -2367,7 +1311,7 @@ export function UmbraWorkspace({
                 directMessageProfile={directMessageProfile}
                 headerActionsRef={headerActionsRef}
                 headerPanel={headerPanel}
-                headerPanelNode={renderChatHeaderPanel()}
+                headerPanelNode={chatHeaderPanelNode}
                 headerSearchPlaceholder={headerSearchPlaceholder}
                 isDirectConversation={isDirectConversation}
                 isDirectGroupConversation={isGroupDirectConversation}
@@ -2390,8 +1334,8 @@ export function UmbraWorkspace({
                   <VoiceRoomStage
                     activeChannel={activeChannel}
                     cameraStatus={cameraStatus}
-                    cameraMenuNode={voiceMenu === "camera" ? renderCameraMenu() : null}
-                    inputMenuNode={voiceMenu === "input" ? renderInputMenu() : null}
+                    cameraMenuNode={voiceMenu === "camera" ? cameraMenuNode : null}
+                    inputMenuNode={voiceMenu === "input" ? inputMenuNode : null}
                     isDirectCall={isDirectConversation}
                     joinedVoiceChannelId={joinedVoiceChannelId}
                     onHandleVoiceLeave={handleVoiceLeave}
@@ -2404,7 +1348,7 @@ export function UmbraWorkspace({
                     onShowNotice={showUiNotice}
                     onToggleVoiceMenu={toggleVoiceMenu}
                     onToggleVoiceState={toggleVoiceState}
-                    shareMenuNode={voiceMenu === "share" ? renderShareMenu() : null}
+                    shareMenuNode={voiceMenu === "share" ? shareMenuNode : null}
                     voiceMenu={voiceMenu}
                     voiceInputLevel={voiceInputLevel}
                     voiceStageParticipants={voiceStageParticipants}
@@ -2435,6 +1379,7 @@ export function UmbraWorkspace({
                     handleScroll={handleScroll}
                     handleSubmitMessage={handleSubmitMessage}
                     guildStickers={activeGuild?.stickers || []}
+                    language={language}
                     listRef={listRef}
                     loadingMessages={loadingMessages}
                     messageMenuFor={messageMenuFor}
@@ -2584,6 +1529,7 @@ export function UmbraWorkspace({
           <Suspense fallback={<WorkspacePanelFallback compact />}>
             <ServerSettingsModal
               guild={serverSettingsGuild}
+              language={language}
               memberCount={serverSettingsGuild.members?.length || 0}
               onClose={() => setServerSettingsGuildId(null)}
               onSave={handleSaveGuildProfile}
