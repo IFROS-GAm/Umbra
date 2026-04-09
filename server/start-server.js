@@ -403,6 +403,7 @@ export async function startServer(options = {}) {
         channelId: req.params.channelId,
         clientNonce: req.body.clientNonce || null,
         content: req.body.content,
+        stickerId: req.body.stickerId || null,
         replyMentionUserId: req.body.replyMentionUserId || null,
         replyTo: req.body.replyTo || null
       });
@@ -663,6 +664,59 @@ export async function startServer(options = {}) {
     }
   });
 
+  app.get("/api/guilds/:guildId/stickers", requireViewer, async (req, res) => {
+    try {
+      const stickers = await store.listGuildStickers({
+        guildId: req.params.guildId,
+        userId: req.viewer.id
+      });
+
+      res.json({ stickers });
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.post("/api/guilds/:guildId/stickers", requireViewer, async (req, res) => {
+    try {
+      const sticker = await store.createGuildSticker({
+        emoji: req.body.emoji || "",
+        guildId: req.params.guildId,
+        imageUrl: req.body.imageUrl || "",
+        name: req.body.name,
+        userId: req.viewer.id
+      });
+
+      emitNavigationUpdate({
+        guildId: req.params.guildId,
+        type: "guild:update"
+      });
+
+      res.status(201).json({ sticker });
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.delete("/api/guilds/:guildId/stickers/:stickerId", requireViewer, async (req, res) => {
+    try {
+      const payload = await store.deleteGuildSticker({
+        guildId: req.params.guildId,
+        stickerId: req.params.stickerId,
+        userId: req.viewer.id
+      });
+
+      emitNavigationUpdate({
+        guildId: req.params.guildId,
+        type: "guild:update"
+      });
+
+      res.json(payload);
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
   app.post("/api/dms", requireViewer, async (req, res) => {
     try {
       let channel = null;
@@ -892,6 +946,20 @@ export async function startServer(options = {}) {
       });
 
       res.json(payload);
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.post("/api/users/invite-email", requireViewer, async (req, res) => {
+    try {
+      const payload = await store.inviteUserByEmail({
+        email: req.body.email,
+        inviterId: req.viewer.id,
+        redirectTo: req.body.redirectTo
+      });
+
+      res.status(201).json(payload);
     } catch (error) {
       sendError(res, error);
     }

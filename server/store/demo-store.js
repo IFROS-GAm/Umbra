@@ -12,6 +12,7 @@ import {
   buildInvitePreview,
   buildBootstrapState,
   buildChannelMovePatchPlan,
+  buildDefaultGuildStickerRows,
   buildGuildMovePatchPlan,
   computePermissionBits,
   createId,
@@ -55,6 +56,36 @@ function normalizeProfileColor(candidate, fallback = "#5865F2") {
   }
 
   return fallback;
+}
+
+function sanitizeStickerName(candidate = "") {
+  return String(candidate || "").trim().slice(0, 32);
+}
+
+function normalizeStickerEmoji(candidate = "") {
+  return String(candidate || "").trim().slice(0, 8);
+}
+
+function ensureDefaultGuildStickersForDb(db) {
+  db.guild_stickers = db.guild_stickers || [];
+  let changed = false;
+
+  (db.guilds || []).forEach((guild) => {
+    const guildStickers = db.guild_stickers.filter((sticker) => sticker.guild_id === guild.id);
+    if (guildStickers.length) {
+      return;
+    }
+
+    db.guild_stickers.push(
+      ...buildDefaultGuildStickerRows({
+        createdBy: guild.owner_id,
+        guildId: guild.id
+      })
+    );
+    changed = true;
+  });
+
+  return changed;
 }
 
 function normalizeSocialLinks(entries = []) {
@@ -186,11 +217,17 @@ export class DemoStore {
     });
     this.db.friendships = this.db.friendships || [];
     this.db.friend_requests = this.db.friend_requests || [];
+    this.db.guild_stickers = this.db.guild_stickers || [];
     this.db.invites = this.db.invites || [];
     this.db.profile_reports = this.db.profile_reports || [];
     this.db.user_blocks = this.db.user_blocks || [];
 
+    const stickersChanged = ensureDefaultGuildStickersForDb(this.db);
+
     refreshChannelSummaries(this.db);
+    if (stickersChanged) {
+      await this.save();
+    }
     return this;
   }
 
@@ -342,6 +379,7 @@ export class DemoStore {
     channelId,
     clientNonce = null,
     content,
+    stickerId = null,
     replyMentionUserId = null,
     replyTo = null
   }) {
@@ -355,7 +393,22 @@ export class DemoStore {
     }
 
     const trimmed = content?.trim() || "";
-    if (!trimmed && !attachments.length) {
+    const sticker = stickerId
+      ? this.db.guild_stickers.find((item) => item.id === stickerId) || null
+      : null;
+
+    if (stickerId && !sticker) {
+      throw createError("El sticker seleccionado no existe.", 400);
+    }
+
+    if (sticker && !channel.guild_id) {
+      throw createError("Los stickers del servidor solo funcionan dentro de ese servidor.", 400);
+    }
+
+    if (sticker && sticker.guild_id !== channel.guild_id) {
+      throw createError("Ese sticker no pertenece a este servidor.", 400);
+    }
+    if (!trimmed && !attachments.length && !sticker) {
       throw createError("El mensaje no puede estar vacío.", 400);
     }
 
@@ -396,6 +449,7 @@ export class DemoStore {
       guild_id: channel.guild_id,
       author_id: authorId,
       content: trimmed,
+      sticker_id: sticker?.id || null,
       reply_to: replyTo,
       attachments,
       mention_user_ids: mentionUserIds,
@@ -650,6 +704,14 @@ export class DemoStore {
       });
     });
 
+    this.db.guild_stickers.push(
+      ...buildDefaultGuildStickerRows({
+        createdBy: ownerId,
+        guildId,
+        now
+      })
+    );
+
     refreshChannelSummaries(this.db);
     await this.save();
 
@@ -902,6 +964,109 @@ export class DemoStore {
 
     await this.save();
     return guild;
+  }
+
+  async listGuildStickers({ guildId, userId }) {
+    const guild = this.db.guilds.find((item) => item.id === guildId);
+    if (!guild) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    if (
+      !this.db.guild_members.some(
+        (membership) => membership.guild_id === guildId && membership.user_id === userId
+      )
+    ) {
+      throw createError("No perteneces a este servidor.", 403);
+    }
+
+    return (this.db.guild_stickers || [])
+      .filter((sticker) => sticker.guild_id === guildId)
+      .sort((left, right) => Number(left.position || 0) - Number(right.position || 0));
+  }
+
+  async createGuildSticker({ emoji = "", guildId, imageUrl = "", name, userId }) {
+    const guild = this.db.guilds.find((item) => item.id === guildId);
+    if (!guild) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    this.assertCanManageGuild(guildId, userId);
+
+    const trimmedName = sanitizeStickerName(name);
+    const trimmedEmoji = normalizeStickerEmoji(emoji);
+    const normalizedImageUrl = String(imageUrl || "").trim();
+
+    if (!trimmedName) {
+      throw createError("El sticker necesita un nombre.", 400);
+    }
+
+    if (!trimmedEmoji && !normalizedImageUrl) {
+      throw createError("El sticker necesita un emoji o una imagen.", 400);
+    }
+
+    const existingStickers = (this.db.guild_stickers || []).filter(
+      (sticker) => sticker.guild_id === guildId
+    );
+    if (
+      existingStickers.some(
+        (sticker) => String(sticker.name || "").toLowerCase() === trimmedName.toLowerCase()
+      )
+    ) {
+      throw createError("Ya existe un sticker con ese nombre.", 400);
+    }
+
+    const sticker = {
+      id: createId(),
+      guild_id: guildId,
+      name: trimmedName,
+      emoji: trimmedEmoji,
+      image_url: normalizedImageUrl,
+      is_default: false,
+      position:
+        existingStickers.reduce(
+          (max, current) => Math.max(max, Number(current.position || 0)),
+          -1
+        ) + 1,
+      created_by: userId,
+      created_at: new Date().toISOString()
+    };
+
+    this.db.guild_stickers.push(sticker);
+    await this.save();
+    return sticker;
+  }
+
+  async deleteGuildSticker({ guildId, stickerId, userId }) {
+    const guild = this.db.guilds.find((item) => item.id === guildId);
+    if (!guild) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    this.assertCanManageGuild(guildId, userId);
+
+    const sticker = (this.db.guild_stickers || []).find((item) => item.id === stickerId);
+    if (!sticker || sticker.guild_id !== guildId) {
+      throw createError("Sticker no encontrado.", 404);
+    }
+
+    if (sticker.is_default) {
+      throw createError("Los stickers predeterminados no se pueden eliminar.", 400);
+    }
+
+    const hasUsage = this.db.messages.some((message) => message.sticker_id === stickerId);
+    if (hasUsage) {
+      throw createError(
+        "No puedes eliminar un sticker que ya fue usado en mensajes del servidor.",
+        400
+      );
+    }
+
+    this.db.guild_stickers = this.db.guild_stickers.filter((item) => item.id !== stickerId);
+    refreshChannelSummaries(this.db);
+    await this.save();
+
+    return { ok: true, sticker_id: stickerId };
   }
 
   async listGuildRoles({ guildId, userId }) {
@@ -1782,6 +1947,26 @@ export class DemoStore {
       mode: "demo",
       ok: true,
       target: "recovery"
+    };
+  }
+
+  async inviteUserByEmail({ email, inviterId }) {
+    const inviter = this.db.profiles.find((item) => item.id === inviterId);
+    if (!inviter) {
+      throw createError("Invitador no encontrado.", 404);
+    }
+
+    const normalizedEmail = String(email || "").trim().toLowerCase();
+    if (!normalizedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      throw createError("Ingresa un correo valido para enviar la invitacion.", 400);
+    }
+
+    return {
+      email: normalizedEmail,
+      inviter: inviter.username || inviter.display_name || "Umbra",
+      kind: "invite",
+      mode: "demo",
+      ok: true
     };
   }
 

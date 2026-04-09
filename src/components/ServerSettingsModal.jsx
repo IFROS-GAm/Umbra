@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import { api, resolveAssetUrl } from "../api.js";
 import { Icon } from "./Icon.jsx";
+import { ServerStickersPanel } from "./ServerStickersPanel.jsx";
 
 function normalizeColorInput(candidate, fallback = "#5865F2") {
   const normalized = String(candidate || "")
@@ -795,6 +796,13 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
             >
               Invitaciones
             </button>
+            <button
+              className={`server-settings-nav-item ${activeTab === "stickers" ? "active" : ""}`.trim()}
+              onClick={() => setActiveTab("stickers")}
+              type="button"
+            >
+              Stickers
+            </button>
           </div>
         </aside>
 
@@ -808,7 +816,9 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
                     ? "Miembros"
                     : activeTab === "roles"
                       ? "Roles"
-                      : "Invitaciones"}
+                      : activeTab === "invites"
+                        ? "Invitaciones"
+                        : "Stickers"}
               </h2>
               <p>
                 {activeTab === "profile"
@@ -817,7 +827,9 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
                     ? "Gestiona y revisa la gente que forma parte de tu espacio."
                     : activeTab === "roles"
                       ? "Consulta la estructura visual y de permisos del servidor."
-                      : "Genera enlaces y revisa los accesos activos de tu servidor."}
+                      : activeTab === "invites"
+                        ? "Genera enlaces y revisa los accesos activos de tu servidor."
+                        : "Crea stickers propios y manten a mano los predeterminados del servidor."}
               </p>
             </div>
             <button className="ghost-button icon-only" onClick={onClose} type="button">
@@ -828,6 +840,7 @@ export function ServerSettingsModal({ guild, memberCount = 0, onClose, onSave })
           {activeTab === "members" ? renderMembersTab() : null}
           {activeTab === "roles" ? renderRolesTab() : null}
           {activeTab === "invites" ? renderInvitesTab() : null}
+          {activeTab === "stickers" ? <ServerStickersPanel guildId={guild.id} /> : null}
         </section>
       </div>
     </div>

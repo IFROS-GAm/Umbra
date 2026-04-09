@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { AuthScreen } from "./components/AuthScreen.jsx";
 import { InviteJoinScreen } from "./components/InviteJoinScreen.jsx";
 import { UmbraWorkspace } from "./components/UmbraWorkspace.jsx";
+import { applyLanguageToDocument, getStoredLanguage, persistLanguage } from "./i18n.js";
 import { hasSupabaseBrowserConfig, supabase } from "./supabase-browser.js";
 
 function getDesktopBridge() {
@@ -82,9 +83,16 @@ function AppContent() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [passwordRecoveryMode, setPasswordRecoveryMode] = useState(false);
   const [inviteCode, setInviteCode] = useState(() => readInviteCodeFromLocation());
   const [inviteBrowserMode, setInviteBrowserMode] = useState(false);
   const [workspaceInitialSelection, setWorkspaceInitialSelection] = useState(null);
+  const [language, setLanguage] = useState(() => getStoredLanguage());
+
+  useEffect(() => {
+    persistLanguage(language);
+    applyLanguageToDocument(language);
+  }, [language]);
 
   useEffect(() => {
     if (!supabase) {
@@ -104,12 +112,22 @@ function AppContent() {
 
     const {
       data: { subscription }
-    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (event === "PASSWORD_RECOVERY") {
+        setPasswordRecoveryMode(true);
+        setError("");
+        setMessage("Define una nueva contrasena para completar la recuperacion.");
+      }
+
+      if (event === "USER_UPDATED" && passwordRecoveryMode) {
+        setPasswordRecoveryMode(false);
+      }
+
       setSession(nextSession);
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [passwordRecoveryMode]);
 
   useEffect(() => {
     function handlePopState() {
@@ -178,7 +196,14 @@ function AppContent() {
             throw verifyError;
           }
 
-          setMessage("Correo verificado correctamente.");
+          if (authType === "recovery") {
+            setPasswordRecoveryMode(true);
+            setMessage("Define una nueva contrasena para completar la recuperacion.");
+          } else if (authType === "email_change") {
+            setMessage("El nuevo correo fue confirmado correctamente.");
+          } else {
+            setMessage("Correo verificado correctamente.");
+          }
           setError("");
         }
       } catch (callbackError) {
@@ -315,7 +340,7 @@ function AppContent() {
           throw otpError;
         }
       },
-      "Codigo enviado. Revisa tu correo y escribe el token para entrar."
+      "Codigo y enlace magico enviados. Revisa tu correo para entrar a Umbra."
     );
   }
 
@@ -331,6 +356,46 @@ function AppContent() {
         throw verifyError;
       }
     });
+  }
+
+  async function handlePasswordResetRequest({ email }) {
+    await runAuthAction(
+      async () => {
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: getAuthRedirectUrl()
+        });
+
+        if (resetError) {
+          throw resetError;
+        }
+      },
+      "Revisa tu correo para continuar con la recuperacion."
+    );
+  }
+
+  async function handlePasswordResetConfirm({ confirmPassword, password }) {
+    await runAuthAction(
+      async () => {
+        if (String(password || "").length < 8) {
+          throw new Error("La contrasena debe tener al menos 8 caracteres.");
+        }
+
+        if (password !== confirmPassword) {
+          throw new Error("Las contrasenas no coinciden.");
+        }
+
+        const { error: updateError } = await supabase.auth.updateUser({
+          password
+        });
+
+        if (updateError) {
+          throw updateError;
+        }
+
+        setPasswordRecoveryMode(false);
+      },
+      "Contrasena actualizada. Ya puedes seguir usando Umbra."
+    );
   }
 
   async function handleSignOut() {
@@ -379,7 +444,10 @@ function AppContent() {
         onLogin={handleLogin}
         onOtpSend={handleOtpSend}
         onOtpVerify={handleOtpVerify}
+        onPasswordResetConfirm={handlePasswordResetConfirm}
+        onPasswordResetRequest={handlePasswordResetRequest}
         onSignup={handleSignup}
+        passwordResetMode={passwordRecoveryMode}
       />
     );
   }
@@ -398,6 +466,25 @@ function AppContent() {
 
   if (!session?.user || !accessToken) {
     return (
+        <AuthScreen
+          authMessage={message}
+          busy={busy}
+          error={error}
+          language={language}
+          onGoogleSignIn={handleGoogleSignIn}
+          onLogin={handleLogin}
+          onOtpSend={handleOtpSend}
+        onOtpVerify={handleOtpVerify}
+        onPasswordResetConfirm={handlePasswordResetConfirm}
+        onPasswordResetRequest={handlePasswordResetRequest}
+        onSignup={handleSignup}
+        passwordResetMode={passwordRecoveryMode}
+      />
+    );
+  }
+
+  if (passwordRecoveryMode) {
+    return (
       <AuthScreen
         authMessage={message}
         busy={busy}
@@ -406,17 +493,22 @@ function AppContent() {
         onLogin={handleLogin}
         onOtpSend={handleOtpSend}
         onOtpVerify={handleOtpVerify}
+        onPasswordResetConfirm={handlePasswordResetConfirm}
+        onPasswordResetRequest={handlePasswordResetRequest}
         onSignup={handleSignup}
+        passwordResetMode
       />
     );
   }
 
   return (
-    <UmbraWorkspace
-      accessToken={accessToken}
-      initialSelection={workspaceInitialSelection}
-      onSignOut={handleSignOut}
-    />
+        <UmbraWorkspace
+          accessToken={accessToken}
+          initialSelection={workspaceInitialSelection}
+          language={language}
+          onChangeLanguage={setLanguage}
+          onSignOut={handleSignOut}
+        />
   );
 }
 

@@ -55,13 +55,20 @@ function WorkspacePanelFallback({ compact = false }) {
   );
 }
 
-export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut }) {
+export function UmbraWorkspace({
+  accessToken,
+  initialSelection = null,
+  language = "es",
+  onChangeLanguage,
+  onSignOut
+}) {
   const {
     activeChannel, activeGuild, activeGuildTextChannels, activeGuildVoiceChannels, activeSelection,
     appError, attachmentInputRef, booting, cameraStatus, cameraStream, composer, composerAttachments, composerMenuOpen,
     composerPicker, composerRef, currentUserLabel, dialog, directUnreadCount, editingMessage,
     handleAttachmentSelection, handleComposerChange, handleComposerShortcut, handleDeleteMessage,
     handleDialogSubmit, handlePickerInsert, handleProfileUpdate, handleReaction, handleScroll,
+    handleStickerSelect,
     handleSelectGuildChannel, handleStatusChange, handleSubmitMessage, handleVoiceDeviceChange, handleVoiceLeave,
     headerActionsRef, headerCopy, headerPanel, headerPanelRef, hoveredVoiceChannelId, inboxTab,
     isVoiceChannel, joinedVoiceChannelId, listRef, loadBootstrap, loadingMessages, messageMenuFor, messages,
@@ -2391,9 +2398,11 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
                     handleComposerShortcut={handleComposerShortcut}
                     handleDeleteMessage={handleDeleteMessage}
                     handlePickerInsert={handlePickerInsert}
+                    handleStickerSelect={handleStickerSelect}
                     handleReaction={handleReaction}
                     handleScroll={handleScroll}
                     handleSubmitMessage={handleSubmitMessage}
+                    guildStickers={activeGuild?.stickers || []}
                     listRef={listRef}
                     loadingMessages={loadingMessages}
                     messageMenuFor={messageMenuFor}
@@ -2476,7 +2485,9 @@ export function UmbraWorkspace({ accessToken, initialSelection = null, onSignOut
             <SettingsModal
               dmCount={workspace.dms.length}
               guildCount={workspace.guilds.length}
+              language={language}
               onClose={() => setSettingsOpen(false)}
+              onChangeLanguage={onChangeLanguage}
               onSignOut={onSignOut}
               onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
               onUpdateProfile={handleProfileUpdate}

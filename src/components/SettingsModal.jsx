@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import { api, resolveAssetUrl } from "../api.js";
+import { LANGUAGE_OPTIONS, translate } from "../i18n.js";
+import { hasSupabaseBrowserConfig, supabase } from "../supabase-browser.js";
 import { STATUS_OPTIONS, sanitizeUsername } from "../utils.js";
 import { Avatar } from "./Avatar.jsx";
 import { AvatarCropModal } from "./AvatarCropModal.jsx";
@@ -59,8 +61,14 @@ const SETTINGS_NAV_GROUPS = [
     title: "Ajustes de la aplicacion",
     items: [
       { id: "status", icon: "mission", label: "Estado", active: false },
+      { id: "language", icon: "globe", label: "Idiomas", active: false },
       { id: "theme", icon: "sparkles", label: "Tema", toggleTheme: true }
     ]
+  },
+  {
+    title: "Legal",
+    className: "settings-nav-group-legal",
+    items: [{ id: "terms", icon: "help", label: "Terminos y condiciones", active: false }]
   }
 ];
 
@@ -190,6 +198,10 @@ function settingsPanelTitle(tab) {
       return "Dispositivos";
     case "connections":
       return "Conexiones";
+    case "language":
+      return "Idiomas";
+    case "terms":
+      return "Terminos y condiciones";
     case "status":
       return "Estado";
     default:
@@ -200,7 +212,9 @@ function settingsPanelTitle(tab) {
 export function SettingsModal({
   dmCount,
   guildCount,
+  language = "es",
   onClose,
+  onChangeLanguage,
   onSignOut,
   onToggleTheme,
   onUpdateProfile,
@@ -209,6 +223,7 @@ export function SettingsModal({
 }) {
   const avatarInputRef = useRef(null);
   const bannerInputRef = useRef(null);
+  const t = (key, fallback = "") => translate(language, key, fallback);
 
   const [tab, setTab] = useState("security");
   const [editorOpen, setEditorOpen] = useState(false);
@@ -217,6 +232,11 @@ export function SettingsModal({
   const [saved, setSaved] = useState("");
   const [search, setSearch] = useState("");
   const [connectionsBusy, setConnectionsBusy] = useState("");
+  const [authEmailDraft, setAuthEmailDraft] = useState(user.email || "");
+  const [inviteEmailDraft, setInviteEmailDraft] = useState("");
+  const [newPasswordDraft, setNewPasswordDraft] = useState("");
+  const [confirmPasswordDraft, setConfirmPasswordDraft] = useState("");
+  const [reauthNonceDraft, setReauthNonceDraft] = useState("");
 
   const [avatarFile, setAvatarFile] = useState(null);
   const [avatarPreview, setAvatarPreview] = useState("");
@@ -279,6 +299,11 @@ export function SettingsModal({
     setSaved("");
     setSaving(false);
     setConnectionsBusy("");
+    setAuthEmailDraft(user.email || "");
+    setInviteEmailDraft("");
+    setNewPasswordDraft("");
+    setConfirmPasswordDraft("");
+    setReauthNonceDraft("");
   }, [user]);
 
   useEffect(() => {
@@ -384,6 +409,41 @@ export function SettingsModal({
       }
     ],
     [displayName, normalizedProfileColor, previewBannerUrl, user.email, user.username]
+  );
+
+  const translatedNavGroups = useMemo(
+    () =>
+      SETTINGS_NAV_GROUPS.map((group) => ({
+        ...group,
+        title:
+          group.title === "Ajustes de usuario"
+            ? t("settings.group.user", group.title)
+            : group.title === "Ajustes de la aplicacion"
+              ? t("settings.group.app", group.title)
+              : t("settings.group.legal", group.title),
+        items: group.items.map((item) => ({
+          ...item,
+          label:
+            item.id === "security"
+              ? t("settings.nav.security", item.label)
+              : item.id === "social"
+                ? t("settings.nav.social", item.label)
+                : item.id === "privacy"
+                  ? t("settings.nav.privacy", item.label)
+                  : item.id === "devices"
+                    ? t("settings.nav.devices", item.label)
+                    : item.id === "connections"
+                      ? t("settings.nav.connections", item.label)
+                      : item.id === "status"
+                        ? t("settings.nav.status", item.label)
+                        : item.id === "theme"
+                          ? t("settings.nav.theme", item.label)
+                          : item.id === "language"
+                            ? t("settings.nav.language", item.label)
+                            : t("settings.nav.terms", item.label)
+        }))
+      })),
+    [t]
   );
 
   function updateForm(key, value) {
@@ -532,7 +592,22 @@ export function SettingsModal({
   const visibleSocialLinks = buildSocialLinkDrafts(form.socialLinks);
   const publicSocialLinks = normalizeSocialLinks(form.socialLinks);
   const privacySettings = normalizePrivacySettings(form.privacySettings);
-  const panelTitle = settingsPanelTitle(tab);
+  const panelTitle =
+    tab === "security"
+      ? t("settings.panel.security", settingsPanelTitle(tab))
+      : tab === "social"
+        ? t("settings.panel.social", settingsPanelTitle(tab))
+        : tab === "privacy"
+          ? t("settings.panel.privacy", settingsPanelTitle(tab))
+          : tab === "devices"
+            ? t("settings.panel.devices", settingsPanelTitle(tab))
+            : tab === "connections"
+              ? t("settings.panel.connections", settingsPanelTitle(tab))
+              : tab === "status"
+                ? t("settings.panel.status", settingsPanelTitle(tab))
+                : tab === "language"
+                  ? t("settings.panel.language", settingsPanelTitle(tab))
+                  : t("settings.panel.terms", settingsPanelTitle(tab));
   const recoveryProvider = normalizeRecoveryProvider(form.recoveryProvider);
   const recoveryProviderMeta =
     RECOVERY_PROVIDER_OPTIONS.find((option) => option.value === recoveryProvider) ||
@@ -540,6 +615,51 @@ export function SettingsModal({
   const emailConfirmed = Boolean(user.email_confirmed_at);
   const recoveryAccount = normalizeRecoveryAccount(form.recoveryAccount);
   const recoveryLooksLikeEmail = isEmailAddress(recoveryAccount);
+  const authProviderLabel = String(user.auth_provider || "email").toUpperCase();
+  const connectionSummaryItems = useMemo(
+    () => [
+      {
+        id: "primary-email",
+        helper: emailConfirmed ? "Listo para recibir avisos" : "Pendiente de verificar",
+        icon: "mail",
+        label: "Correo principal",
+        value: user.email ? maskEmail(user.email) : "Sin correo"
+      },
+      {
+        id: "provider",
+        helper: emailConfirmed ? "Sesion validada" : "Requiere confirmacion",
+        icon: "settings",
+        label: "Acceso activo",
+        value: authProviderLabel
+      },
+      {
+        id: "recovery",
+        helper: recoveryLooksLikeEmail ? "Puede recibir prueba" : "Agrega una via de apoyo",
+        icon: "link",
+        label: "Respaldo",
+        value: recoveryProvider ? recoveryProviderMeta.label : "No configurado"
+      },
+      {
+        id: "links",
+        helper: privacySettings.showSocialLinks ? "Visible en tu perfil" : "Redes ocultas",
+        icon: "sparkles",
+        label: "Perfil publico",
+        value: privacySettings.showSocialLinks
+          ? `${publicSocialLinks.length} enlace${publicSocialLinks.length === 1 ? "" : "s"}`
+          : "Oculto"
+      }
+    ],
+    [
+      authProviderLabel,
+      emailConfirmed,
+      privacySettings.showSocialLinks,
+      publicSocialLinks.length,
+      recoveryLooksLikeEmail,
+      recoveryProvider,
+      recoveryProviderMeta.label,
+      user.email
+    ]
+  );
 
   async function handleSendPrimaryEmailCheck() {
     if (!user.email) {
@@ -595,6 +715,151 @@ export function SettingsModal({
       setSaved("Correo de prueba enviado al respaldo.");
     } catch (sendError) {
       setError(sendError.message || "No se pudo enviar la comprobacion al correo de respaldo.");
+    } finally {
+      setConnectionsBusy("");
+    }
+  }
+
+  async function handlePrimaryEmailChange() {
+    const nextEmail = String(authEmailDraft || "").trim().toLowerCase();
+    if (!nextEmail) {
+      setError("Ingresa el nuevo correo principal.");
+      return;
+    }
+
+    if (!isEmailAddress(nextEmail)) {
+      setError("Ingresa un correo principal valido.");
+      return;
+    }
+
+    if (!hasSupabaseBrowserConfig || !supabase) {
+      setError("Supabase no esta configurado en este entorno.");
+      return;
+    }
+
+    setConnectionsBusy("change-email");
+    setError("");
+    setSaved("");
+
+    try {
+      const { error: updateError } = await supabase.auth.updateUser(
+        {
+          email: nextEmail
+        },
+        {
+          emailRedirectTo:
+            typeof window !== "undefined" ? window.location.origin : undefined
+        }
+      );
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      setSaved(
+        "Solicitud de cambio de correo enviada. Revisa tu correo actual y el nuevo para confirmar."
+      );
+    } catch (updateError) {
+      setError(updateError.message || "No se pudo iniciar el cambio de correo.");
+    } finally {
+      setConnectionsBusy("");
+    }
+  }
+
+  async function handleSendReauthentication() {
+    if (!hasSupabaseBrowserConfig || !supabase) {
+      setError("Supabase no esta configurado en este entorno.");
+      return;
+    }
+
+    setConnectionsBusy("reauth");
+    setError("");
+    setSaved("");
+
+    try {
+      const { error: reauthError } = await supabase.auth.reauthenticate();
+      if (reauthError) {
+        throw reauthError;
+      }
+
+      setSaved("Codigo de reautenticacion enviado al correo principal.");
+    } catch (reauthError) {
+      setError(reauthError.message || "No se pudo enviar el codigo de reautenticacion.");
+    } finally {
+      setConnectionsBusy("");
+    }
+  }
+
+  async function handlePasswordChange() {
+    if (!hasSupabaseBrowserConfig || !supabase) {
+      setError("Supabase no esta configurado en este entorno.");
+      return;
+    }
+
+    if (String(newPasswordDraft || "").length < 8) {
+      setError("La nueva contrasena debe tener al menos 8 caracteres.");
+      return;
+    }
+
+    if (newPasswordDraft !== confirmPasswordDraft) {
+      setError("Las contrasenas nuevas no coinciden.");
+      return;
+    }
+
+    setConnectionsBusy("password");
+    setError("");
+    setSaved("");
+
+    try {
+      const payload = {
+        password: newPasswordDraft
+      };
+
+      if (String(reauthNonceDraft || "").trim()) {
+        payload.nonce = String(reauthNonceDraft).trim();
+      }
+
+      const { error: passwordError } = await supabase.auth.updateUser(payload);
+      if (passwordError) {
+        throw passwordError;
+      }
+
+      setNewPasswordDraft("");
+      setConfirmPasswordDraft("");
+      setReauthNonceDraft("");
+      setSaved("Contrasena actualizada correctamente.");
+    } catch (passwordError) {
+      setError(passwordError.message || "No se pudo actualizar la contrasena.");
+    } finally {
+      setConnectionsBusy("");
+    }
+  }
+
+  async function handleInviteUmbraByEmail() {
+    const email = String(inviteEmailDraft || "").trim().toLowerCase();
+    if (!email) {
+      setError("Ingresa un correo para enviar la invitacion.");
+      return;
+    }
+
+    if (!isEmailAddress(email)) {
+      setError("Ingresa un correo valido para invitar a Umbra.");
+      return;
+    }
+
+    setConnectionsBusy("invite-user");
+    setError("");
+    setSaved("");
+
+    try {
+      await api.inviteUmbraUser({
+        email,
+        redirectTo: typeof window !== "undefined" ? window.location.origin : undefined
+      });
+      setInviteEmailDraft("");
+      setSaved("Invitacion enviada. La otra persona recibira un acceso para crear su cuenta.");
+    } catch (inviteError) {
+      setError(inviteError.message || "No se pudo enviar la invitacion a Umbra.");
     } finally {
       setConnectionsBusy("");
     }
@@ -888,10 +1153,26 @@ export function SettingsModal({
       <section className="settings-card">
         <div className="settings-card-title">
           <h3>Conexiones</h3>
-          <span>Administra la verificacion del correo y una cuenta de recuperacion de Umbra.</span>
+          <span>
+            Controla como recuperas tu cuenta, que correo recibe avisos y que enlaces quedan
+            visibles dentro de Umbra.
+          </span>
         </div>
 
-        <div className="settings-grid">
+        <div className="settings-summary-grid settings-connections-summary">
+          {connectionSummaryItems.map((item) => (
+            <div className="summary-tile settings-connection-summary-tile" key={item.id}>
+              <span className="settings-row-icon">
+                <Icon name={item.icon} size={18} />
+              </span>
+              <small>{item.label}</small>
+              <strong>{item.value}</strong>
+              <span>{item.helper}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="settings-grid settings-connections-overview">
           <div className="settings-row">
             <div className="settings-row-copy">
               <div>
@@ -943,7 +1224,106 @@ export function SettingsModal({
           </div>
         </div>
 
-        <div className="settings-connection-stack">
+        <div className="settings-connection-stack settings-connection-card settings-connection-card-primary">
+          <div className="settings-card-title">
+            <h3>Cambiar correo principal</h3>
+            <span>Usa un nuevo correo y Umbra disparara el flujo de validacion correspondiente.</span>
+          </div>
+
+          <div className="settings-social-row compact">
+            <label className="settings-field">
+              <span>Nuevo correo</span>
+              <input
+                onChange={(event) => setAuthEmailDraft(event.target.value)}
+                placeholder="nuevo@email.com"
+                type="email"
+                value={authEmailDraft}
+              />
+            </label>
+          </div>
+
+          <div className="settings-form-actions inline">
+            <button
+              className="ghost-button"
+              disabled={connectionsBusy === "change-email"}
+              onClick={handlePrimaryEmailChange}
+              type="button"
+            >
+              <Icon name="mail" />
+              <span>{connectionsBusy === "change-email" ? "Enviando..." : "Cambiar correo"}</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="settings-connection-stack settings-connection-card">
+          <div className="settings-card-title">
+            <h3>Reautenticacion y clave</h3>
+            <span>
+              Envia un codigo de reautenticacion y luego actualiza tu contrasena desde Umbra.
+            </span>
+          </div>
+
+          <div className="settings-form-actions inline">
+            <button
+              className="ghost-button"
+              disabled={connectionsBusy === "reauth"}
+              onClick={handleSendReauthentication}
+              type="button"
+            >
+              <Icon name="mail" />
+              <span>
+                {connectionsBusy === "reauth" ? "Enviando..." : "Enviar codigo de reautenticacion"}
+              </span>
+            </button>
+          </div>
+
+          <div className="settings-social-row settings-connection-security-grid">
+            <label className="settings-field">
+              <span>Codigo de reautenticacion</span>
+              <input
+                onChange={(event) => setReauthNonceDraft(event.target.value)}
+                placeholder="Pegalo aqui si se solicita por correo"
+                value={reauthNonceDraft}
+              />
+            </label>
+            <label className="settings-field">
+              <span>Nueva contrasena</span>
+              <input
+                minLength={8}
+                onChange={(event) => setNewPasswordDraft(event.target.value)}
+                placeholder="Minimo 8 caracteres"
+                type="password"
+                value={newPasswordDraft}
+              />
+            </label>
+            <label className="settings-field">
+              <span>Confirmar contrasena</span>
+              <input
+                minLength={8}
+                onChange={(event) => setConfirmPasswordDraft(event.target.value)}
+                placeholder="Repite la nueva contrasena"
+                type="password"
+                value={confirmPasswordDraft}
+              />
+            </label>
+          </div>
+
+          <div className="settings-form-actions inline">
+            <button
+              className="primary-button"
+              disabled={connectionsBusy === "password"}
+              onClick={handlePasswordChange}
+              type="button"
+            >
+              <Icon name="save" />
+              <span>
+                {connectionsBusy === "password" ? "Guardando..." : "Actualizar contrasena"}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <div className="settings-connection-stack settings-connection-card">
           <div className="settings-card-title">
             <h3>Cuenta de recuperacion</h3>
             <span>
@@ -977,7 +1357,7 @@ export function SettingsModal({
             </label>
           </div>
 
-          <div className="settings-empty-state compact">
+          <div className="settings-empty-state compact settings-empty-state-solid">
             <strong>
               {recoveryProvider
                 ? `Respaldo actual: ${recoveryProviderMeta.label}`
@@ -990,7 +1370,7 @@ export function SettingsModal({
             </span>
           </div>
 
-          <div className="settings-row">
+          <div className="settings-row settings-connection-row">
             <div className="settings-row-copy">
               <div>
                 <strong>Comprobacion del respaldo</strong>
@@ -1013,12 +1393,12 @@ export function SettingsModal({
           </div>
         </div>
 
-        <div className="settings-connection-stack">
+        <div className="settings-connection-stack settings-connection-card">
           <div className="settings-card-title">
             <h3>Redes visibles ahora</h3>
             <span>
               {privacySettings.showSocialLinks
-                ? "Esto es lo que la gente vera en tu perfil completo."
+                ? "Esto es lo que la gente vera en tu perfil completo si tiene acceso a tus conexiones."
                 : "Las redes estan ocultas por tu configuracion de privacidad."}
             </span>
           </div>
@@ -1042,11 +1422,44 @@ export function SettingsModal({
               ))}
             </div>
           ) : (
-            <div className="settings-empty-state">
+            <div className="settings-empty-state settings-empty-state-solid">
               <strong>No hay conexiones publicas configuradas.</strong>
               <span>Usa Contenido y redes para agregar tus enlaces visibles.</span>
             </div>
           )}
+        </div>
+
+        <div className="settings-connection-stack settings-connection-card">
+          <div className="settings-card-title">
+            <h3>Invitar a Umbra</h3>
+            <span>Envia una invitacion por correo para crear una cuenta nueva en Umbra.</span>
+          </div>
+
+          <div className="settings-social-row compact">
+            <label className="settings-field">
+              <span>Correo a invitar</span>
+              <input
+                onChange={(event) => setInviteEmailDraft(event.target.value)}
+                placeholder="alguien@email.com"
+                type="email"
+                value={inviteEmailDraft}
+              />
+            </label>
+          </div>
+
+          <div className="settings-form-actions inline">
+            <button
+              className="ghost-button"
+              disabled={connectionsBusy === "invite-user"}
+              onClick={handleInviteUmbraByEmail}
+              type="button"
+            >
+              <Icon name="userAdd" />
+              <span>
+                {connectionsBusy === "invite-user" ? "Invitando..." : "Enviar invitacion"}
+              </span>
+            </button>
+          </div>
         </div>
 
         <div className="settings-form-actions inline">
@@ -1057,12 +1470,231 @@ export function SettingsModal({
             type="button"
           >
             <Icon name="save" />
-            <span>{connectionsBusy === "recovery" ? "Guardando..." : "Guardar conexiones"}</span>
+            <span>{connectionsBusy === "recovery" ? "Guardando..." : "Guardar respaldo"}</span>
           </button>
         </div>
 
         {visibleError ? <p className="form-error settings-form-error">{visibleError}</p> : null}
         {saved ? <p className="settings-form-success">{saved}</p> : null}
+      </section>
+    </div>
+  );
+
+  const legalSections = [
+    {
+      id: "uso",
+      title: "Uso aceptable",
+      body:
+        "Umbra esta pensada para conversaciones, servidores, mensajes directos, voz, video y comunidades privadas. No puedes usar la plataforma para spam, fraude, acoso, suplantacion, distribucion de malware o automatizacion abusiva."
+    },
+    {
+      id: "cuenta",
+      title: "Cuenta, acceso y seguridad",
+      body:
+        "Eres responsable de la seguridad de tu cuenta, de tus credenciales y de los dispositivos desde los que entras. Debes mantener tu correo principal actualizado y usar los canales de recuperacion disponibles para proteger el acceso."
+    },
+    {
+      id: "contenido",
+      title: "Contenido y convivencia",
+      body:
+        "Cada persona mantiene la responsabilidad sobre lo que publica, comparte, sube o transmite en Umbra. Tambien debe respetar la privacidad, autoria y normas internas de cada servidor, categoria, canal o grupo."
+    },
+    {
+      id: "moderacion",
+      title: "Servidores, moderacion y permisos",
+      body:
+        "Los duenos y administradores de servidores pueden definir estructura, roles, categorias, stickers, invitaciones y reglas de moderacion. Umbra puede limitar funciones o retirar acceso si detecta abuso, evasion de bloqueos o uso peligroso del servicio."
+    },
+    {
+      id: "voz",
+      title: "Llamadas, voz, camara y actividad",
+      body:
+        "Las funciones de microfono, camara, compartir pantalla y presencia solo deben usarse con consentimiento de las personas presentes. No debes grabar, retransmitir o capturar contenido privado sin autorizacion."
+    },
+    {
+      id: "privacidad",
+      title: "Privacidad y datos",
+      body:
+        "Umbra utiliza la informacion minima necesaria para darte acceso, mantener perfiles, conexiones, invitaciones, mensajes, presencia y configuraciones. Tus ajustes de privacidad controlan que partes de tu perfil y actividad se muestran a otros."
+    },
+    {
+      id: "cambios",
+      title: "Cambios, disponibilidad y soporte",
+      body:
+        "Podemos actualizar funciones, plantillas, limites, flujos de autenticacion, estructura del servicio y politicas para mejorar seguridad, rendimiento o experiencia. El uso continuado de Umbra implica aceptacion de estos cambios cuando entren en vigor."
+    }
+  ];
+
+  const termsSettingsContent = (
+    <div className="settings-stack">
+      <section className="settings-card settings-legal-hero">
+        <div className="settings-card-title">
+          <h3>Terminos y condiciones de uso</h3>
+          <span>
+            Este panel resume las reglas base para usar Umbra con seguridad, respeto y
+            responsabilidad.
+          </span>
+        </div>
+
+        <div className="settings-legal-summary">
+          <div className="settings-legal-summary-copy">
+            <strong>Resumen Umbra</strong>
+            <p>
+              Al usar Umbra aceptas una plataforma centrada en comunidad, identidad,
+              privacidad, mensajeria, voz y servidores administrados por sus propias reglas.
+            </p>
+          </div>
+          <div className="settings-legal-summary-note">
+            <strong>Ultima revision</strong>
+            <span>08 abril 2026</span>
+          </div>
+        </div>
+
+        <div className="settings-legal-pill-row">
+          <span className="user-profile-chip">Respeto y convivencia</span>
+          <span className="user-profile-chip">Privacidad</span>
+          <span className="user-profile-chip">Moderacion</span>
+          <span className="user-profile-chip">Uso responsable</span>
+        </div>
+      </section>
+
+      <section className="settings-card settings-legal-card">
+        <div className="settings-card-title">
+          <h3>Condiciones generales</h3>
+          <span>
+            Estos puntos aplican al uso del cliente, la web, los servidores, los mensajes
+            directos y cualquier integracion futura de Umbra.
+          </span>
+        </div>
+
+        <div className="settings-legal-section-list">
+          {legalSections.map((section) => (
+            <article className="settings-legal-section" key={section.id}>
+              <div className="settings-legal-section-header">
+                <span className="settings-row-icon">
+                  <Icon name="help" size={16} />
+                </span>
+                <strong>{section.title}</strong>
+              </div>
+              <p>{section.body}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="settings-card settings-legal-card">
+        <div className="settings-card-title">
+          <h3>Lo que aceptas al usar Umbra</h3>
+          <span>Una version corta y clara de las reglas practicas del servicio.</span>
+        </div>
+
+        <ul className="settings-legal-checklist">
+          <li>No usar Umbra para suplantar identidades ni engañar a otras personas.</li>
+          <li>No automatizar invitaciones, DMs, menciones o llamadas de forma abusiva.</li>
+          <li>No compartir contenido privado de terceros sin permiso.</li>
+          <li>Respetar bloqueos, silencios, baneos y limites de moderacion.</li>
+          <li>Cuidar tus accesos, dispositivos y metodos de recuperacion.</li>
+          <li>Usar de forma responsable stickers, perfiles, servidores y conexiones visibles.</li>
+        </ul>
+      </section>
+
+      <section className="settings-card settings-legal-card">
+        <div className="settings-card-title">
+          <h3>Soporte y contacto</h3>
+          <span>
+            Si una norma de un servidor entra en conflicto con el uso seguro de Umbra,
+            prevalece la seguridad del servicio y de las personas usuarias.
+          </span>
+        </div>
+
+        <div className="settings-empty-state settings-empty-state-solid">
+          <strong>Recomendacion</strong>
+          <span>
+            Usa Conexiones para mantener tu correo principal y tu respaldo actualizados.
+            Eso facilita confirmaciones, recuperacion de acceso y avisos de seguridad.
+          </span>
+        </div>
+      </section>
+    </div>
+  );
+
+  const activeLanguageOption =
+    LANGUAGE_OPTIONS.find((option) => option.value === language) || LANGUAGE_OPTIONS[0];
+
+  const languageSettingsContent = (
+    <div className="settings-stack">
+      <section className="settings-card settings-legal-hero">
+        <div className="settings-card-title">
+          <h3>{t("settings.language.title", "Idiomas")}</h3>
+          <span>
+            {t(
+              "settings.language.subtitle",
+              "Cambia el idioma visible de Umbra para esta app y este dispositivo."
+            )}
+          </span>
+        </div>
+
+        <div className="settings-legal-summary">
+          <div className="settings-legal-summary-copy">
+            <strong>{t("settings.language.current", "Idioma actual")}</strong>
+            <p>
+              {t(
+                "settings.language.currentHelper",
+                "El cambio se aplica al instante y Umbra lo recuerda para la proxima vez."
+              )}
+            </p>
+          </div>
+          <div className="settings-legal-summary-note">
+            <strong>{activeLanguageOption.nativeLabel}</strong>
+            <span>{t("settings.language.applyNow", "Aplicado al instante")}</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="settings-card settings-language-grid-card">
+        <div className="settings-card-title">
+          <h3>{t("settings.language.preview", "Vista rapida")}</h3>
+          <span>
+            {t(
+              "settings.language.previewBody",
+              "Esta seleccion afecta primero a acceso, ajustes y rotulos principales de la interfaz."
+            )}
+          </span>
+        </div>
+
+        <div className="settings-language-grid">
+          {LANGUAGE_OPTIONS.map((option) => {
+            const selected = option.value === language;
+            return (
+              <button
+                className={`settings-language-option ${selected ? "active" : ""}`.trim()}
+                key={option.value}
+                onClick={() => onChangeLanguage?.(option.value)}
+                type="button"
+              >
+                <div className="settings-language-option-copy">
+                  <strong>{option.nativeLabel}</strong>
+                  <span>{option.helper}</span>
+                </div>
+                <span className={`user-profile-chip ${selected ? "" : "muted"}`}>
+                  {selected
+                    ? t("settings.language.selected", "Seleccionado")
+                    : option.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="settings-empty-state settings-empty-state-solid">
+          <strong>{t("settings.language.title", "Idiomas")}</strong>
+          <span>
+            {t(
+              "settings.language.note",
+              "Mas zonas de Umbra seguiran heredando este idioma a medida que se actualicen."
+            )}
+          </span>
+        </div>
       </section>
     </div>
   );
@@ -1081,7 +1713,7 @@ export function SettingsModal({
             />
             <div className="settings-user-copy">
               <strong>{user.username}</strong>
-              <span>Editar perfiles</span>
+              <span>{t("settings.editProfiles", "Editar perfiles")}</span>
             </div>
           </div>
 
@@ -1089,15 +1721,18 @@ export function SettingsModal({
             <Icon name="search" />
             <input
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Buscar"
+              placeholder={t("settings.search", "Buscar")}
               type="text"
               value={search}
             />
           </label>
 
           <div className="settings-nav stacked">
-            {SETTINGS_NAV_GROUPS.map((group) => (
-              <div className="settings-nav-group" key={group.title}>
+            {translatedNavGroups.map((group) => (
+              <div
+                className={`settings-nav-group ${group.className || ""}`.trim()}
+                key={group.title}
+              >
                 <p className="settings-nav-title">{group.title}</p>
                 {group.items
                   .filter((item) =>
@@ -1148,14 +1783,14 @@ export function SettingsModal({
             <div className="settings-stack">
               <div className="settings-top-tabs">
                 <button className="settings-top-tab active" type="button">
-                  Seguridad
+                  {t("settings.panel.security", "Mi cuenta")}
                 </button>
                 <button
                   className="settings-top-tab"
                   onClick={() => setTab("status")}
                   type="button"
                 >
-                  Estado
+                  {t("settings.panel.status", "Estado")}
                 </button>
               </div>
 
@@ -1447,10 +2082,10 @@ export function SettingsModal({
                   onClick={() => setTab("security")}
                   type="button"
                 >
-                  Seguridad
+                  {t("settings.panel.security", "Mi cuenta")}
                 </button>
                 <button className="settings-top-tab active" type="button">
-                  Estado
+                  {t("settings.panel.status", "Estado")}
                 </button>
               </div>
 
@@ -1506,6 +2141,10 @@ export function SettingsModal({
             privacySettingsContent
           ) : tab === "devices" ? (
             devicesSettingsContent
+          ) : tab === "language" ? (
+            languageSettingsContent
+          ) : tab === "terms" ? (
+            termsSettingsContent
           ) : (
             connectionsSettingsContent
           )}

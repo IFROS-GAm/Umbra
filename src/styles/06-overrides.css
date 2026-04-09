@@ -1436,6 +1436,117 @@
   color: var(--text-2);
 }
 
+.server-stickers-form {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 18px;
+}
+
+.server-stickers-form-row {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 180px) minmax(0, 1fr);
+}
+
+.server-stickers-upload-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.server-sticker-preview {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  display: flex;
+  justify-content: center;
+  min-height: 122px;
+  padding: 18px;
+}
+
+.server-sticker-preview img {
+  display: block;
+  height: 96px;
+  object-fit: contain;
+  width: 96px;
+}
+
+.server-stickers-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.server-sticker-card {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 18px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 14px;
+}
+
+.server-sticker-card-main {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+}
+
+.server-sticker-card-visual {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 16px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 58px;
+  justify-content: center;
+  overflow: hidden;
+  width: 58px;
+}
+
+.server-sticker-card-visual img {
+  display: block;
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.server-sticker-card-visual span {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.server-sticker-card-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.server-sticker-card-copy strong,
+.server-sticker-card-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.server-sticker-card-copy strong {
+  color: var(--text-0);
+}
+
+.server-sticker-card-copy span {
+  color: var(--text-2);
+  font-size: 0.84rem;
+}
+
 .invite-modal-card {
   background: var(--bg-1);
   border: 1px solid var(--line);

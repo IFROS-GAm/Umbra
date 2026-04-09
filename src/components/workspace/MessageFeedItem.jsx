@@ -25,6 +25,7 @@ export const MessageFeedItem = memo(function MessageFeedItem({
   onStartReply,
   openProfileCard
 }) {
+  const toolbarRef = React.useRef(null);
   const authorProfile = {
     ...message.author,
     bio: availableUsersById?.[message.author?.id]?.bio
@@ -33,7 +34,9 @@ export const MessageFeedItem = memo(function MessageFeedItem({
 
   return (
     <article
-      className={`message-card ${grouped ? "grouped" : ""} ${message.is_mentioning_me ? "mention-hit" : ""}`}
+      className={`message-card ${grouped ? "grouped" : ""} ${message.is_mentioning_me ? "mention-hit" : ""} ${
+        isMenuOpen || isReactionPickerOpen ? "overlay-open" : ""
+      }`}
       id={`message-${message.id}`}
     >
       {!grouped ? (
@@ -87,6 +90,21 @@ export const MessageFeedItem = memo(function MessageFeedItem({
           />
         ) : null}
 
+        {message.sticker ? (
+          <div className={`message-sticker ${message.sticker.image_url ? "image" : "emoji"}`}>
+            {message.sticker.image_url ? (
+              <img
+                alt={message.sticker.name}
+                loading="lazy"
+                src={resolveAssetUrl(message.sticker.image_url)}
+              />
+            ) : (
+              <span className="message-sticker-emoji">{message.sticker.emoji || "✨"}</span>
+            )}
+            {!message.sticker.image_url ? <strong>{message.sticker.name}</strong> : null}
+          </div>
+        ) : null}
+
         {message.attachments?.length ? (
           <div
             className={`message-attachment-grid attachment-count-${Math.min(
@@ -128,10 +146,10 @@ export const MessageFeedItem = memo(function MessageFeedItem({
         ) : null}
 
         <div className={`message-toolbar message-menu-anchor ${isMenuOpen ? "menu-open" : ""}`}>
-          <div className="message-toolbar-strip">
+          <div className="message-toolbar-strip" ref={toolbarRef}>
             {MESSAGE_TOOLBAR_REACTIONS.map((emoji) => (
               <button
-                className="message-toolbar-reaction"
+                className="message-toolbar-reaction tooltip-anchor"
                 data-tooltip="Reaccion rapida"
                 data-tooltip-position="top"
                 key={`${message.id}-toolbar-${emoji}`}
@@ -189,8 +207,10 @@ export const MessageFeedItem = memo(function MessageFeedItem({
 
           {isMenuOpen ? (
             <MessageActionMenu
+              anchorRef={toolbarRef}
               message={message}
               onAction={onMenuAction}
+              onClose={() => onSetMessageMenuFor(null)}
               onQuickReact={(emoji) => {
                 onHandleReaction(message.id, emoji);
                 onSetMessageMenuFor(null);

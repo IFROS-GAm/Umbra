@@ -152,6 +152,21 @@ create table if not exists public.messages (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.guild_stickers (
+  id uuid primary key default gen_random_uuid(),
+  guild_id uuid not null references public.guilds(id) on delete cascade,
+  name text not null,
+  emoji text not null default '',
+  image_url text not null default '',
+  is_default boolean not null default false,
+  position integer not null default 0,
+  created_by uuid references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.messages
+  add column if not exists sticker_id uuid references public.guild_stickers(id) on delete set null;
+
 create table if not exists public.message_reactions (
   message_id uuid not null references public.messages(id) on delete cascade,
   user_id uuid not null references public.profiles(id) on delete cascade,
@@ -222,7 +237,9 @@ create index if not exists idx_channels_guild_id on public.channels(guild_id);
 create index if not exists idx_channel_members_user_id on public.channel_members(user_id);
 create index if not exists idx_messages_channel_id_created_at on public.messages(channel_id, created_at desc);
 create index if not exists idx_messages_guild_id on public.messages(guild_id);
+create index if not exists idx_messages_sticker_id on public.messages(sticker_id);
 create index if not exists idx_message_reactions_message_id on public.message_reactions(message_id);
+create index if not exists idx_guild_stickers_guild_id on public.guild_stickers(guild_id, position);
 create unique index if not exists idx_friendships_pair on public.friendships(user_id, friend_id);
 create index if not exists idx_friendships_friend_id on public.friendships(friend_id);
 create unique index if not exists idx_friend_requests_pair on public.friend_requests(requester_id, recipient_id);

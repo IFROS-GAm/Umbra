@@ -42,6 +42,39 @@ export const DEFAULT_REACTIONS = Object.freeze([
   "\uD83D\uDE80"
 ]);
 
+export const DEFAULT_GUILD_STICKERS = Object.freeze([
+  {
+    key: "wave",
+    name: "Wave",
+    emoji: "\uD83D\uDC4B"
+  },
+  {
+    key: "nova",
+    name: "Nova",
+    emoji: "\u2728"
+  },
+  {
+    key: "blink",
+    name: "Blink",
+    emoji: "\uD83D\uDC40"
+  },
+  {
+    key: "pulse",
+    name: "Pulse",
+    emoji: "\uD83D\uDC9C"
+  },
+  {
+    key: "ghost",
+    name: "Ghost",
+    emoji: "\uD83D\uDC7B"
+  },
+  {
+    key: "echo",
+    name: "Echo",
+    emoji: "\uD83C\uDF19"
+  }
+]);
+
 export const GUILD_TEMPLATES = Object.freeze({
   games: {
     description: "Raids, squads y noches de party.",

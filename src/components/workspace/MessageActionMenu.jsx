@@ -1,9 +1,70 @@
 import React from "react";
+import { createPortal } from "react-dom";
 
 import { Icon } from "../Icon.jsx";
 import { MESSAGE_TOOLBAR_REACTIONS } from "./workspaceHelpers.js";
 
-export function MessageActionMenu({ message, onAction, onQuickReact }) {
+export function MessageActionMenu({ anchorRef, message, onAction, onClose, onQuickReact }) {
+  const rootRef = React.useRef(null);
+  const [menuPosition, setMenuPosition] = React.useState(null);
+
+  React.useEffect(() => {
+    function handlePointerDown(event) {
+      if (rootRef.current?.contains(event.target)) {
+        return;
+      }
+
+      onClose?.();
+    }
+
+    function handleEscape(event) {
+      if (event.key === "Escape") {
+        onClose?.();
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [onClose]);
+
+  React.useLayoutEffect(() => {
+    const anchorRect = anchorRef?.current?.getBoundingClientRect?.();
+    if (!anchorRect || !rootRef.current) {
+      return;
+    }
+
+    const safe = { left: 12, right: 12, top: 12, bottom: 20 };
+    const rect = rootRef.current.getBoundingClientRect();
+    let left = anchorRect.right - rect.width;
+    let top = anchorRect.bottom + 8;
+
+    if (left + rect.width > window.innerWidth - safe.right) {
+      left = window.innerWidth - rect.width - safe.right;
+    }
+    if (left < safe.left) {
+      left = safe.left;
+    }
+
+    if (top + rect.height > window.innerHeight - safe.bottom) {
+      top = anchorRect.top - rect.height - 8;
+    }
+    if (top < safe.top) {
+      top = safe.top;
+    }
+
+    setMenuPosition((previous) => {
+      if (previous?.left === left && previous?.top === top) {
+        return previous;
+      }
+      return { left, top };
+    });
+  }, [anchorRef]);
+
   const sections = [
     [
       { id: "react", label: "Agregar reaccion", icon: "emoji" },
@@ -26,8 +87,22 @@ export function MessageActionMenu({ message, onAction, onQuickReact }) {
     [{ id: "copy-id", label: "Copiar ID del mensaje", icon: "copy" }]
   ].filter((section) => section.length > 0);
 
-  return (
-    <div className="message-context-menu floating-surface">
+  if (!anchorRef?.current) {
+    return null;
+  }
+
+  const content = (
+    <div
+      className="message-context-portal-shell message-menu-anchor"
+      ref={rootRef}
+      style={{
+        left: `${menuPosition?.left ?? 0}px`,
+        position: "fixed",
+        top: `${menuPosition?.top ?? 0}px`,
+        zIndex: 120
+      }}
+    >
+      <div className="message-context-menu floating-surface">
       <div className="message-context-reactions">
         {MESSAGE_TOOLBAR_REACTIONS.map((emoji) => (
           <button
@@ -60,6 +135,9 @@ export function MessageActionMenu({ message, onAction, onQuickReact }) {
           </div>
         </React.Fragment>
       ))}
+      </div>
     </div>
   );
+
+  return createPortal(content, document.body);
 }

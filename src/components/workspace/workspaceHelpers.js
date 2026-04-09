@@ -60,7 +60,7 @@ export const HOME_LINKS = [
   }
 ];
 
-export const CHANNEL_CACHE_TTL_MS = 18_000;
+export const CHANNEL_CACHE_TTL_MS = 60_000;
 
 export function isVisibleStatus(status) {
   return status && status !== "offline" && status !== "invisible";

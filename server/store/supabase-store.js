@@ -1,6 +1,16 @@
 import { CHANNEL_TYPES, GUILD_CHANNEL_KINDS, PERMISSIONS } from "../constants.js";
+import {
+  canSendUmbraEmails,
+  sendUmbraTransactionalEmail
+} from "../email/transactional-mailer.js";
 import { supabaseStoreRuntimeMethods } from "./supabase-store.runtime.js";
-import { buildBootstrapState, computePermissionBits, createId, isGuildVoiceChannel } from "./helpers.js";
+import {
+  buildBootstrapState,
+  buildDefaultGuildStickerRows,
+  computePermissionBits,
+  createId,
+  isGuildVoiceChannel
+} from "./helpers.js";
 
 function createError(message, statusCode = 400) {
   const error = new Error(message);
@@ -43,7 +53,19 @@ function isEmailAddress(candidate = "") {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(candidate || "").trim());
 }
 
+function normalizeRecoveryProvider(provider = "") {
+  const normalized = String(provider || "").trim().toLowerCase();
+  return ["", "google", "outlook", "apple", "discord", "other"].includes(normalized)
+    ? normalized
+    : "";
+}
+
+function normalizeRecoveryAccount(value = "") {
+  return String(value || "").trim().slice(0, 160);
+}
+
 const DEFAULT_VOICE_CHANNELS = ["Lounge", "Sala de estudio 1", "Sala de estudio 2"];
+const GUILD_MESSAGE_CONTEXT_TTL_MS = 15_000;
 
 async function expectData(queryPromise, fallbackMessage = "Error consultando Supabase.") {
   const { data, error } = await queryPromise;
@@ -56,10 +78,41 @@ async function expectData(queryPromise, fallbackMessage = "Error consultando Sup
   return data;
 }
 
+function isMissingSchemaFeatureError(error, markers = []) {
+  const cause = error?.cause || error;
+  const haystack = [
+    error?.message,
+    cause?.message,
+    cause?.hint,
+    cause?.details
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (!haystack) {
+    return false;
+  }
+
+  const looksLikeSchemaIssue =
+    haystack.includes("schema cache") ||
+    haystack.includes("could not find the table") ||
+    haystack.includes("could not find the column") ||
+    haystack.includes("column") && haystack.includes("does not exist");
+
+  if (!looksLikeSchemaIssue) {
+    return false;
+  }
+
+  return markers.some((marker) => haystack.includes(String(marker).toLowerCase()));
+}
+
 export class SupabaseStore {
   constructor(client) {
     this.client = client;
     this.attachmentsBucket = process.env.SUPABASE_ATTACHMENTS_BUCKET || "attachments";
+    this.guildStickersEnabled = true;
+    this.guildMessageContextCache = new Map();
   }
 
   getMode() {
@@ -69,7 +122,129 @@ export class SupabaseStore {
   async init() {
     await this.ensureAttachmentsBucket();
     await this.ensureDefaultVoiceChannels();
+    try {
+      await this.ensureDefaultGuildStickers();
+    } catch (error) {
+      if (!this.handleMissingStickerSchemaError(error)) {
+        throw error;
+      }
+    }
     return this;
+  }
+
+  handleMissingStickerSchemaError(error) {
+    if (!isMissingSchemaFeatureError(error, ["guild_stickers", "sticker_id"])) {
+      return false;
+    }
+
+    this.guildStickersEnabled = false;
+    return true;
+  }
+
+  assertGuildStickerFeatureAvailable() {
+    if (!this.guildStickersEnabled) {
+      throw createError(
+        "Los stickers del servidor aun no estan habilitados. Aplica el schema nuevo en Supabase para usarlos.",
+        501
+      );
+    }
+  }
+
+  invalidateGuildMessageContext(guildId) {
+    if (!guildId) {
+      return;
+    }
+
+    this.guildMessageContextCache.delete(guildId);
+  }
+
+  async loadGuildMessageContext(guildId) {
+    if (!guildId) {
+      return {
+        guilds: [],
+        guild_stickers: [],
+        roles: []
+      };
+    }
+
+    const cached = this.guildMessageContextCache.get(guildId);
+    if (cached && Date.now() - cached.cachedAt < GUILD_MESSAGE_CONTEXT_TTL_MS) {
+      return cached.value;
+    }
+
+    const [roles, guilds, guildStickers] = await Promise.all([
+      expectData(this.client.from("roles").select("*").eq("guild_id", guildId)),
+      expectData(this.client.from("guilds").select("*").eq("id", guildId)),
+      this.loadGuildStickers(guildId)
+    ]);
+
+    const value = {
+      guilds,
+      guild_stickers: guildStickers,
+      roles
+    };
+
+    this.guildMessageContextCache.set(guildId, {
+      cachedAt: Date.now(),
+      value
+    });
+
+    return value;
+  }
+
+  async loadGuildStickers(guildId) {
+    if (!this.guildStickersEnabled || !guildId) {
+      return [];
+    }
+
+    try {
+      return await expectData(
+        this.client.from("guild_stickers").select("*").eq("guild_id", guildId)
+      );
+    } catch (error) {
+      if (this.handleMissingStickerSchemaError(error)) {
+        return [];
+      }
+
+      throw error;
+    }
+  }
+
+  async loadGuildStickersByGuildIds(guildIds = []) {
+    if (!this.guildStickersEnabled || !guildIds.length) {
+      return [];
+    }
+
+    try {
+      return await expectData(
+        this.client.from("guild_stickers").select("*").in("guild_id", guildIds)
+      );
+    } catch (error) {
+      if (this.handleMissingStickerSchemaError(error)) {
+        return [];
+      }
+
+      throw error;
+    }
+  }
+
+  async getGuildStickerById(stickerId) {
+    if (!this.guildStickersEnabled || !stickerId) {
+      return null;
+    }
+
+    try {
+      const rows = await expectData(
+        this.client.from("guild_stickers").select("*").eq("id", stickerId).limit(1)
+      );
+      return rows[0] || null;
+    } catch (error) {
+      if (this.handleMissingStickerSchemaError(error)) {
+        return null;
+      }
+
+      throw error;
+    }
   }
 
   async verifyAccessToken(accessToken) {
@@ -205,6 +380,39 @@ export class SupabaseStore {
         );
         nextPosition += 1;
       }
+    }
+  }
+
+  async ensureDefaultGuildStickers() {
+    if (!this.guildStickersEnabled) {
+      return;
+    }
+
+    const guilds = await expectData(
+      this.client.from("guilds").select("id,owner_id")
+    );
+
+    for (const guild of guilds) {
+      const existing = await expectData(
+        this.client
+          .from("guild_stickers")
+          .select("id")
+          .eq("guild_id", guild.id)
+          .limit(1)
+      );
+
+      if (existing.length) {
+        continue;
+      }
+
+      await expectData(
+        this.client.from("guild_stickers").insert(
+          buildDefaultGuildStickerRows({
+            createdBy: guild.owner_id,
+            guildId: guild.id
+          })
+        )
+      );
     }
   }
 
@@ -370,6 +578,7 @@ export class SupabaseStore {
     return {
       email: profile.email,
       kind: "confirmation",
+      provider: "supabase-auth",
       ok: true,
       target: "primary"
     };
@@ -404,19 +613,29 @@ export class SupabaseStore {
         return this.resendEmailConfirmation({ emailRedirectTo, userId });
       }
 
-      const { error } = await this.client.auth.resetPasswordForEmail(
-        profile.email,
-        redirectOptions
-      );
-
-      if (error) {
-        throw createError(error.message || "No se pudo enviar la comprobacion al correo principal.", 400);
+      if (!canSendUmbraEmails()) {
+        throw createError(
+          "Configura SMTP de Umbra para enviar correos de prueba con marca propia.",
+          400
+        );
       }
+
+      await sendUmbraTransactionalEmail({
+        actionLabel: "Abrir Umbra",
+        actionUrl: emailRedirectTo || process.env.PUBLIC_APP_URL || "http://localhost:5173",
+        intro:
+          "Este es un correo de prueba del canal principal para confirmar que tu cuenta de acceso sigue recibiendo mensajes de Umbra.",
+        preheader: "Prueba de correo principal de Umbra",
+        subject: "Umbra | Comprobacion del correo principal",
+        title: "Comprobacion del correo principal",
+        to: profile.email
+      });
 
       return {
         email: profile.email,
         kind: "check",
         ok: true,
+        provider: "umbra-smtp",
         target: "primary"
       };
     }
@@ -433,17 +652,65 @@ export class SupabaseStore {
       );
     }
 
-    const { error } = await this.client.auth.resetPasswordForEmail(recoveryEmail, redirectOptions);
-
-    if (error) {
-      throw createError(error.message || "No se pudo enviar la comprobacion al correo de respaldo.", 400);
+    if (!canSendUmbraEmails()) {
+      throw createError(
+        "Configura SMTP de Umbra para enviar comprobaciones al correo de respaldo.",
+        400
+      );
     }
+
+    await sendUmbraTransactionalEmail({
+      actionLabel: "Abrir Umbra",
+      actionUrl: emailRedirectTo || process.env.PUBLIC_APP_URL || "http://localhost:5173",
+      intro:
+        "Este correo de prueba confirma que tu cuenta de recuperacion sigue disponible para futuros flujos de respaldo en Umbra.",
+      preheader: "Prueba del correo de respaldo de Umbra",
+      subject: "Umbra | Comprobacion del correo de respaldo",
+      title: "Comprobacion del correo de respaldo",
+      to: recoveryEmail
+    });
 
     return {
       email: recoveryEmail,
       kind: "check",
       ok: true,
+      provider: "umbra-smtp",
       target: "recovery"
+    };
+  }
+
+  async inviteUserByEmail({ email, inviterId, redirectTo }) {
+    const inviter = await this.getProfileById(inviterId);
+    if (!inviter) {
+      throw createError("Invitador no encontrado.", 404);
+    }
+
+    const normalizedEmail = String(email || "").trim().toLowerCase();
+    if (!isEmailAddress(normalizedEmail)) {
+      throw createError("Ingresa un correo valido para enviar la invitacion.", 400);
+    }
+
+    const { data, error } = await this.client.auth.admin.inviteUserByEmail(normalizedEmail, {
+      data: {
+        invited_by: inviter.id,
+        invited_by_username: inviter.username || "umbra_user"
+      },
+      redirectTo: redirectTo
+        ? String(redirectTo).trim()
+        : process.env.PUBLIC_APP_URL || "http://localhost:5173"
+    });
+
+    if (error) {
+      throw createError(error.message || "No se pudo enviar la invitacion a Umbra.", 400);
+    }
+
+    return {
+      email: normalizedEmail,
+      invitedUserId: data?.user?.id || null,
+      inviter: inviter.username || inviter.display_name || "Umbra",
+      kind: "invite",
+      ok: true,
+      provider: "supabase-auth"
     };
   }
 
@@ -481,7 +748,7 @@ export class SupabaseStore {
       ).catch(() => [])
     ]);
 
-    const [guilds, roles, guildMembers, guildChannels, dmChannels] = await Promise.all([
+    const [guilds, roles, guildMembers, guildChannels, guildStickers, dmChannels] = await Promise.all([
       guildIds.length
         ? expectData(this.client.from("guilds").select("*").in("id", guildIds))
         : Promise.resolve([]),
@@ -498,6 +765,7 @@ export class SupabaseStore {
             this.client.from("channels").select("*").in("guild_id", guildIds)
           )
         : Promise.resolve([]),
+      this.loadGuildStickersByGuildIds(guildIds),
       dmChannelIds.length
         ? expectData(this.client.from("channels").select("*").in("id", dmChannelIds))
         : Promise.resolve([])
@@ -537,6 +805,7 @@ export class SupabaseStore {
       guilds,
       roles,
       guild_members: guildMembers,
+      guild_stickers: guildStickers,
       channels,
       channel_members: channelMembers,
       friendships,

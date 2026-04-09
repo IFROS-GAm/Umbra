@@ -88,6 +88,7 @@ export const api = {
     channelId,
     clientNonce = null,
     content,
+    stickerId = null,
     replyMentionUserId = null,
     replyTo
   }) {
@@ -97,6 +98,7 @@ export const api = {
         attachments,
         clientNonce,
         content,
+        stickerId,
         replyMentionUserId,
         replyTo
       })
@@ -198,6 +200,24 @@ export const api = {
   },
   listGuildRoles({ guildId }) {
     return request(`/api/guilds/${guildId}/roles`);
+  },
+  listGuildStickers({ guildId }) {
+    return request(`/api/guilds/${guildId}/stickers`);
+  },
+  createGuildSticker({ guildId, imageUrl = "", emoji = "", name }) {
+    return request(`/api/guilds/${guildId}/stickers`, {
+      method: "POST",
+      body: JSON.stringify({
+        emoji,
+        imageUrl,
+        name
+      })
+    });
+  },
+  deleteGuildSticker({ guildId, stickerId }) {
+    return request(`/api/guilds/${guildId}/stickers/${stickerId}`, {
+      method: "DELETE"
+    });
   },
   getInviteByCode(code) {
     return request(`/api/invites/${encodeURIComponent(code)}`);
@@ -339,6 +359,15 @@ export const api = {
       body: JSON.stringify({
         emailRedirectTo,
         target
+      })
+    });
+  },
+  inviteUmbraUser({ email, redirectTo } = {}) {
+    return request("/api/users/invite-email", {
+      method: "POST",
+      body: JSON.stringify({
+        email,
+        redirectTo
       })
     });
   },

@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import {
   ALL_PERMISSIONS,
   CHANNEL_TYPES,
+  DEFAULT_GUILD_STICKERS,
   PERMISSIONS
 } from "../constants.js";
 
@@ -62,10 +63,14 @@ export function isGuildCategoryChannel(channel) {
   return Boolean(channel?.guild_id) && channel.type === CHANNEL_TYPES.CATEGORY;
 }
 
-export function buildMessagePreview(content = "", attachments = []) {
+export function buildMessagePreview(content = "", attachments = [], sticker = null) {
   const textPreview = safePreview(content);
   if (textPreview) {
     return textPreview;
+  }
+
+  if (sticker?.name) {
+    return `[sticker] ${sticker.name}`;
   }
 
   const attachmentCount = attachments.length || 0;
@@ -205,6 +210,39 @@ export function getDefaultGuildChannel(channels = [], guildId) {
     guildChannels.find((channel) => !isGuildCategoryChannel(channel)) ||
     null
   );
+}
+
+export function buildDefaultGuildStickerRows({
+  createdBy,
+  guildId,
+  now = new Date().toISOString()
+}) {
+  return DEFAULT_GUILD_STICKERS.map((sticker, index) => ({
+    id: createId(),
+    guild_id: guildId,
+    name: sticker.name,
+    emoji: sticker.emoji,
+    image_url: "",
+    is_default: true,
+    position: index,
+    created_by: createdBy,
+    created_at: now
+  }));
+}
+
+export function sortGuildStickers(stickers = []) {
+  return [...stickers].sort((left, right) => {
+    const positionDiff = Number(left.position || 0) - Number(right.position || 0);
+    if (positionDiff !== 0) {
+      return positionDiff;
+    }
+
+    return String(left.name || "").localeCompare(String(right.name || ""), "es");
+  });
+}
+
+function findGuildSticker(db, stickerId) {
+  return (db.guild_stickers || []).find((sticker) => sticker.id === stickerId) || null;
 }
 
 function normalizeParentId(parentId) {
@@ -451,11 +489,18 @@ export function refreshChannelSummaries(db) {
     const latestMessage = db.messages
       .filter((message) => message.channel_id === channel.id && !message.deleted_at)
       .sort(sortByDateDesc)[0];
+    const latestSticker = latestMessage?.sticker_id
+      ? findGuildSticker(db, latestMessage.sticker_id)
+      : null;
 
     channel.last_message_id = latestMessage?.id ?? null;
     channel.last_message_author_id = latestMessage?.author_id ?? null;
     channel.last_message_preview = latestMessage
-      ? buildMessagePreview(latestMessage.content, latestMessage.attachments || [])
+      ? buildMessagePreview(
+          latestMessage.content,
+          latestMessage.attachments || [],
+          latestSticker
+        )
       : "";
     channel.last_message_at = latestMessage?.created_at ?? null;
     channel.updated_at = latestMessage?.created_at ?? channel.updated_at;
@@ -597,7 +642,15 @@ export function buildBootstrapState(db, userId) {
           can_manage_guild: hasPermission(permissionBits, PERMISSIONS.ADMINISTRATOR)
         },
         channels,
-        members
+        members,
+        stickers: sortGuildStickers(
+          (db.guild_stickers || [])
+            .filter((sticker) => sticker.guild_id === guild.id)
+            .map((sticker) => ({
+              ...sticker,
+              image_url: sticker.image_url || ""
+            }))
+        )
       };
     });
 
@@ -751,8 +804,12 @@ export function enrichMessages({ channelId, db, messages, userId }) {
     .sort(sortByDateAsc)
     .map((message) => {
       const author = db.profiles.find((profile) => profile.id === message.author_id);
+      const sticker = message.sticker_id ? findGuildSticker(db, message.sticker_id) : null;
       const replyTarget = message.reply_to
         ? db.messages.find((item) => item.id === message.reply_to && !item.deleted_at)
+        : null;
+      const replySticker = replyTarget?.sticker_id
+        ? findGuildSticker(db, replyTarget.sticker_id)
         : null;
       const reactions = db.message_reactions.filter(
         (reaction) => reaction.message_id === message.id
@@ -793,6 +850,15 @@ export function enrichMessages({ channelId, db, messages, userId }) {
           message.author_id === userId ||
           hasPermission(permissionBits, PERMISSIONS.MANAGE_MESSAGES),
         attachments: message.attachments || [],
+        sticker: sticker
+          ? {
+              id: sticker.id,
+              name: sticker.name,
+              emoji: sticker.emoji || "",
+              image_url: sticker.image_url || "",
+              is_default: Boolean(sticker.is_default)
+            }
+          : null,
         is_mentioning_me: message.mention_user_ids.includes(userId),
         reply_preview: replyTarget
           ? {
@@ -803,7 +869,11 @@ export function enrichMessages({ channelId, db, messages, userId }) {
                 profiles: db.profiles,
                 userId: replyTarget.author_id
               }),
-              content: safePreview(replyTarget.content, 120)
+              content: buildMessagePreview(
+                replyTarget.content,
+                replyTarget.attachments || [],
+                replySticker
+              )
             }
           : null,
         reactions: reactionBuckets

@@ -22,8 +22,10 @@ export function MessageStage(props) {
     handleDeleteMessage,
     handlePickerInsert,
     handleReaction,
+    handleStickerSelect,
     handleScroll,
     handleSubmitMessage,
+    guildStickers,
     listRef,
     loadingMessages,
     messageMenuFor,
@@ -171,7 +173,9 @@ export function MessageStage(props) {
         handleComposerChange={handleComposerChange}
         handleComposerShortcut={handleComposerShortcut}
         handlePickerInsert={handlePickerInsert}
+        handleStickerSelect={handleStickerSelect}
         handleSubmitMessage={handleSubmitMessage}
+        guildStickers={guildStickers}
         onCancelEdit={onCancelEdit}
         onCancelReply={onCancelReply}
         onSetComposerMenuOpen={onSetComposerMenuOpen}

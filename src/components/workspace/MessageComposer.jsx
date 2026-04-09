@@ -23,6 +23,7 @@ export const MessageComposer = memo(function MessageComposer({
   handleComposerChange,
   handleComposerShortcut,
   handlePickerInsert,
+  handleStickerSelect,
   handleSubmitMessage,
   onCancelEdit,
   onCancelReply,
@@ -35,7 +36,8 @@ export const MessageComposer = memo(function MessageComposer({
   showUiNotice,
   typingUsers,
   uiNotice,
-  uploadingAttachments
+  uploadingAttachments,
+  guildStickers = []
 }) {
   return (
     <footer className="composer-shell">
@@ -259,25 +261,58 @@ export const MessageComposer = memo(function MessageComposer({
               </button>
             </div>
 
-            <div className={`picker-grid ${composerPicker}`}>
-              {PICKER_CONTENT[composerPicker].items.map((item) => (
-                <button
-                  className="picker-card"
-                  key={item}
-                  onClick={() =>
-                    handlePickerInsert(
-                      composerPicker === "emoji" ? item : `:${String(item).toLowerCase()}:`
-                    )
-                  }
-                  type="button"
-                >
-                  <strong>{item}</strong>
-                  {composerPicker === "emoji" ? null : (
-                    <span>{composerPicker === "gif" ? "Inserta un tag rapido" : "Sticker rapido"}</span>
-                  )}
-                </button>
-              ))}
-            </div>
+            {composerPicker === "sticker" ? (
+              guildStickers.length ? (
+                <div className="picker-grid sticker server-stickers">
+                  {guildStickers.map((sticker) => (
+                    <button
+                      className="picker-card sticker-real"
+                      key={sticker.id}
+                      onClick={() => handleStickerSelect(sticker)}
+                      type="button"
+                    >
+                      {sticker.image_url ? (
+                        <img
+                          alt={sticker.name}
+                          className="picker-card-thumb"
+                          loading="lazy"
+                          src={resolveAssetUrl(sticker.image_url)}
+                        />
+                      ) : (
+                        <span className="picker-card-emoji">{sticker.emoji || "✨"}</span>
+                      )}
+                      <strong>{sticker.name}</strong>
+                      <span>{sticker.is_default ? "Sticker predeterminado" : "Sticker del servidor"}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="picker-empty-state">
+                  <strong>No hay stickers en este servidor todavia.</strong>
+                  <span>Crea uno desde Ajustes del servidor para usarlo aqui.</span>
+                </div>
+              )
+            ) : (
+              <div className={`picker-grid ${composerPicker}`}>
+                {PICKER_CONTENT[composerPicker].items.map((item) => (
+                  <button
+                    className="picker-card"
+                    key={item}
+                    onClick={() =>
+                      handlePickerInsert(
+                        composerPicker === "emoji" ? item : `:${String(item).toLowerCase()}:`
+                      )
+                    }
+                    type="button"
+                  >
+                    <strong>{item}</strong>
+                    {composerPicker === "emoji" ? null : (
+                      <span>{composerPicker === "gif" ? "Inserta un tag rapido" : "Sticker rapido"}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         ) : null}
       </div>

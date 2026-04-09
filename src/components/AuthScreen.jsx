@@ -1,16 +1,21 @@
 import React, { useState } from "react";
 
+import { translate } from "../i18n.js";
 import { UmbraLogo } from "./UmbraLogo.jsx";
 
 export function AuthScreen({
   authMessage,
   busy,
   error,
+  language = "es",
   onGoogleSignIn,
   onLogin,
   onOtpSend,
   onOtpVerify,
-  onSignup
+  onPasswordResetConfirm,
+  onPasswordResetRequest,
+  onSignup,
+  passwordResetMode = false
 }) {
   const [mode, setMode] = useState("signup");
   const [loginForm, setLoginForm] = useState({
@@ -27,7 +32,22 @@ export function AuthScreen({
     email: "",
     username: ""
   });
+  const [recoveryForm, setRecoveryForm] = useState({
+    email: ""
+  });
+  const [resetForm, setResetForm] = useState({
+    confirmPassword: "",
+    password: ""
+  });
   const [otpSent, setOtpSent] = useState(false);
+  const t = (key, fallback = "") => translate(language, key, fallback);
+
+  React.useEffect(() => {
+    if (passwordResetMode) {
+      setMode("reset");
+      setOtpSent(false);
+    }
+  }, [passwordResetMode]);
 
   async function handleLoginSubmit(event) {
     event.preventDefault();
@@ -50,6 +70,16 @@ export function AuthScreen({
     await onOtpVerify(otpForm);
   }
 
+  async function handleRecoverySubmit(event) {
+    event.preventDefault();
+    await onPasswordResetRequest?.(recoveryForm);
+  }
+
+  async function handleResetSubmit(event) {
+    event.preventDefault();
+    await onPasswordResetConfirm?.(resetForm);
+  }
+
   return (
     <div className="auth-shell">
       <div className="auth-backdrop" />
@@ -60,29 +90,46 @@ export function AuthScreen({
             <UmbraLogo alt="Logo de Umbra" size={68} />
             <div className="brand-lockup-copy">
               <p className="eyebrow">Umbra</p>
-              <strong>Arriba como abajo</strong>
+              <strong>{t("auth.brand.tagline", "Arriba como abajo")}</strong>
             </div>
           </div>
 
-          <h1>Chat with shadows.</h1>
+          <h1>{t("auth.hero.title", "Chat with shadows.")}</h1>
           <p>
-            Arriba como abajo. Umbra entra con auth real, backend protegido,
-            flujo desktop y una base lista para despliegue.
+            {t(
+              "auth.hero.copy",
+              "Arriba como abajo. Umbra entra con auth real, backend protegido, flujo desktop y una base lista para despliegue."
+            )}
           </p>
         </div>
 
         <div className="auth-highlights">
           <div>
-            <strong>Realtime</strong>
-            <span>Socket.IO, presencia, replies, reacciones y lectura por canal.</span>
+            <strong>{t("auth.highlight.realtime.title", "Realtime")}</strong>
+            <span>
+              {t(
+                "auth.highlight.realtime.body",
+                "Socket.IO, presencia, replies, reacciones y lectura por canal."
+              )}
+            </span>
           </div>
           <div>
-            <strong>Acceso moderno</strong>
-            <span>Email, OTP por codigo y soporte preparado para Google OAuth.</span>
+            <strong>{t("auth.highlight.access.title", "Acceso moderno")}</strong>
+            <span>
+              {t(
+                "auth.highlight.access.body",
+                "Email, OTP por codigo y soporte preparado para Google OAuth."
+              )}
+            </span>
           </div>
           <div>
-            <strong>Desktop-ready</strong>
-            <span>Electron levanta Umbra como app instalable con backend embebido.</span>
+            <strong>{t("auth.highlight.desktop.title", "Desktop-ready")}</strong>
+            <span>
+              {t(
+                "auth.highlight.desktop.body",
+                "Electron levanta Umbra como app instalable con backend embebido."
+              )}
+            </span>
           </div>
         </div>
       </section>
@@ -97,7 +144,7 @@ export function AuthScreen({
             }}
             type="button"
           >
-            Crear cuenta
+            {t("auth.tab.signup", "Crear cuenta")}
           </button>
           <button
             className={mode === "login" ? "active" : ""}
@@ -107,25 +154,25 @@ export function AuthScreen({
             }}
             type="button"
           >
-            Entrar
+            {t("auth.tab.login", "Entrar")}
           </button>
           <button
             className={mode === "otp" ? "active" : ""}
             onClick={() => setMode("otp")}
             type="button"
           >
-            Codigo
+            {t("auth.tab.otp", "Codigo / link")}
           </button>
         </div>
 
         <button className="google-button" disabled={busy} onClick={onGoogleSignIn} type="button">
-          Continuar con Google
+          {t("auth.google", "Continuar con Google")}
         </button>
 
         {mode === "signup" ? (
           <form className="auth-form" onSubmit={handleSignupSubmit}>
             <label>
-              <span>Usuario</span>
+              <span>{t("auth.user", "Usuario")}</span>
               <input
                 onChange={(event) =>
                   setSignupForm((previous) => ({
@@ -133,13 +180,13 @@ export function AuthScreen({
                     username: event.target.value
                   }))
                 }
-                placeholder="umbra_user"
+                placeholder={t("auth.placeholder.user", "umbra_user")}
                 required
                 value={signupForm.username}
               />
             </label>
             <label>
-              <span>Email</span>
+              <span>{t("auth.email", "Email")}</span>
               <input
                 onChange={(event) =>
                   setSignupForm((previous) => ({
@@ -147,14 +194,14 @@ export function AuthScreen({
                     email: event.target.value
                   }))
                 }
-                placeholder="tu@email.com"
+                placeholder={t("auth.placeholder.email", "tu@email.com")}
                 required
                 type="email"
                 value={signupForm.email}
               />
             </label>
             <label>
-              <span>Contrasena</span>
+              <span>{t("auth.password", "Contrasena")}</span>
               <input
                 minLength={8}
                 onChange={(event) =>
@@ -163,14 +210,16 @@ export function AuthScreen({
                     password: event.target.value
                   }))
                 }
-                placeholder="Minimo 8 caracteres"
+                placeholder={t("auth.placeholder.password", "Minimo 8 caracteres")}
                 required
                 type="password"
                 value={signupForm.password}
               />
             </label>
             <button className="primary-button auth-submit" disabled={busy} type="submit">
-              {busy ? "Creando..." : "Crear cuenta"}
+              {busy
+                ? t("auth.busy.creating", "Creando...")
+                : t("auth.submit.signup", "Crear cuenta")}
             </button>
           </form>
         ) : null}
@@ -178,7 +227,7 @@ export function AuthScreen({
         {mode === "login" ? (
           <form className="auth-form" onSubmit={handleLoginSubmit}>
             <label>
-              <span>Email</span>
+              <span>{t("auth.email", "Email")}</span>
               <input
                 onChange={(event) =>
                   setLoginForm((previous) => ({
@@ -186,14 +235,14 @@ export function AuthScreen({
                     email: event.target.value
                   }))
                 }
-                placeholder="tu@email.com"
+                placeholder={t("auth.placeholder.email", "tu@email.com")}
                 required
                 type="email"
                 value={loginForm.email}
               />
             </label>
             <label>
-              <span>Contrasena</span>
+              <span>{t("auth.password", "Contrasena")}</span>
               <input
                 onChange={(event) =>
                   setLoginForm((previous) => ({
@@ -201,14 +250,24 @@ export function AuthScreen({
                     password: event.target.value
                   }))
                 }
-                placeholder="Tu contrasena"
+                placeholder={t("auth.placeholder.loginPassword", "Tu contrasena")}
                 required
                 type="password"
                 value={loginForm.password}
               />
             </label>
             <button className="primary-button auth-submit" disabled={busy} type="submit">
-              {busy ? "Entrando..." : "Entrar en Umbra"}
+              {busy
+                ? t("auth.busy.entering", "Entrando...")
+                : t("auth.submit.login", "Entrar en Umbra")}
+            </button>
+            <button
+              className="ghost-button auth-secondary-action"
+              disabled={busy}
+              onClick={() => setMode("recover")}
+              type="button"
+            >
+              {t("auth.recover", "Olvide mi contrasena")}
             </button>
           </form>
         ) : null}
@@ -216,7 +275,7 @@ export function AuthScreen({
         {mode === "otp" ? (
           <form className="auth-form" onSubmit={otpSent ? handleOtpVerify : handleOtpSend}>
             <label>
-              <span>Email</span>
+              <span>{t("auth.email", "Email")}</span>
               <input
                 onChange={(event) =>
                   setOtpForm((previous) => ({
@@ -224,7 +283,7 @@ export function AuthScreen({
                     email: event.target.value
                   }))
                 }
-                placeholder="tu@email.com"
+                placeholder={t("auth.placeholder.email", "tu@email.com")}
                 required
                 type="email"
                 value={otpForm.email}
@@ -233,7 +292,7 @@ export function AuthScreen({
 
             {!otpSent ? (
               <label>
-                <span>Usuario inicial</span>
+                <span>{t("auth.initialUser", "Usuario inicial")}</span>
                 <input
                   onChange={(event) =>
                     setOtpForm((previous) => ({
@@ -241,13 +300,13 @@ export function AuthScreen({
                       username: event.target.value
                     }))
                   }
-                  placeholder="Solo para usuarios nuevos"
+                  placeholder={t("auth.placeholder.initialUser", "Solo para usuarios nuevos")}
                   value={otpForm.username}
                 />
               </label>
             ) : (
               <label>
-                <span>Codigo recibido</span>
+                <span>{t("auth.receivedCode", "Codigo recibido")}</span>
                 <input
                   onChange={(event) =>
                     setOtpForm((previous) => ({
@@ -255,7 +314,7 @@ export function AuthScreen({
                       code: event.target.value
                     }))
                   }
-                  placeholder="123456"
+                  placeholder={t("auth.placeholder.code", "123456")}
                   required
                   value={otpForm.code}
                 />
@@ -264,10 +323,85 @@ export function AuthScreen({
 
             <button className="primary-button auth-submit" disabled={busy} type="submit">
               {busy
-                ? "Procesando..."
+                ? t("auth.submit.processing", "Procesando...")
                 : otpSent
-                  ? "Verificar codigo"
-                  : "Enviar codigo de acceso"}
+                  ? t("auth.submit.verifyCode", "Verificar codigo")
+                  : t("auth.submit.sendOtp", "Enviar codigo o magic link")}
+            </button>
+          </form>
+        ) : null}
+
+        {mode === "recover" ? (
+          <form className="auth-form" onSubmit={handleRecoverySubmit}>
+            <label>
+              <span>{t("auth.email", "Email")}</span>
+              <input
+                onChange={(event) =>
+                  setRecoveryForm((previous) => ({
+                    ...previous,
+                    email: event.target.value
+                  }))
+                }
+                placeholder={t("auth.placeholder.email", "tu@email.com")}
+                required
+                type="email"
+                value={recoveryForm.email}
+              />
+            </label>
+            <button className="primary-button auth-submit" disabled={busy} type="submit">
+              {busy
+                ? t("auth.busy.sending", "Enviando...")
+                : t("auth.submit.sendRecovery", "Enviar enlace de recuperacion")}
+            </button>
+            <button
+              className="ghost-button auth-secondary-action"
+              disabled={busy}
+              onClick={() => setMode("login")}
+              type="button"
+            >
+              {t("auth.backToLogin", "Volver a entrar")}
+            </button>
+          </form>
+        ) : null}
+
+        {mode === "reset" ? (
+          <form className="auth-form" onSubmit={handleResetSubmit}>
+            <label>
+              <span>{t("auth.newPassword", "Nueva contrasena")}</span>
+              <input
+                minLength={8}
+                onChange={(event) =>
+                  setResetForm((previous) => ({
+                    ...previous,
+                    password: event.target.value
+                  }))
+                }
+                placeholder={t("auth.placeholder.password", "Minimo 8 caracteres")}
+                required
+                type="password"
+                value={resetForm.password}
+              />
+            </label>
+            <label>
+              <span>{t("auth.confirmPassword", "Confirmar contrasena")}</span>
+              <input
+                minLength={8}
+                onChange={(event) =>
+                  setResetForm((previous) => ({
+                    ...previous,
+                    confirmPassword: event.target.value
+                  }))
+                }
+                placeholder={t("auth.placeholder.resetConfirm", "Repite la contrasena")}
+                required
+                type="password"
+                value={resetForm.confirmPassword}
+              />
+            </label>
+            <button className="primary-button auth-submit" disabled={busy} type="submit">
+              {busy
+                ? t("auth.busy.saving", "Guardando...")
+                : t("auth.submit.savePassword", "Actualizar contrasena")}
             </button>
           </form>
         ) : null}

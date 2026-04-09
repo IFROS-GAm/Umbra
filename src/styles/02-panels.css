@@ -580,12 +580,23 @@
   display: grid;
   gap: 12px;
   grid-template-columns: 40px 1fr;
+  overflow: visible;
   padding: 8px 10px;
+  position: relative;
   transition: background 160ms ease;
 }
 
 .message-card:hover {
   background: rgba(255, 255, 255, 0.025);
+  contain: none;
+  content-visibility: visible;
+  z-index: 4;
+}
+
+.message-card.overlay-open {
+  contain: none;
+  content-visibility: visible;
+  z-index: 5;
 }
 
 .message-card.grouped {
@@ -638,6 +649,7 @@
 
 .message-main {
   min-width: 0;
+  overflow: visible;
 }
 
 .reply-preview {
@@ -688,6 +700,35 @@
   margin: 10px 0 0;
   overflow: auto;
   padding: 14px;
+}
+
+.message-sticker {
+  align-items: center;
+  display: inline-flex;
+  gap: 10px;
+  margin-top: 10px;
+  max-width: min(260px, 100%);
+}
+
+.message-sticker.image {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 18px;
+  padding: 10px;
+}
+
+.message-sticker img {
+  border-radius: 14px;
+  display: block;
+  max-height: 180px;
+  max-width: 220px;
+  object-fit: contain;
+  width: 100%;
+}
+
+.message-sticker-emoji {
+  font-size: 2.1rem;
+  line-height: 1;
 }
 
 .mention {

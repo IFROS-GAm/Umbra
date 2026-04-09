@@ -20,6 +20,8 @@ import {
 import { createVoiceCameraSession } from "./voiceCameraSession.js";
 import { createVoiceInputProcessingSession } from "./voiceInputProcessing.js";
 
+const BACKGROUND_PREFETCH_COOLDOWN_MS = 90_000;
+
 export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, onSignOut }) {
   const [workspace, setWorkspace] = useState(null);
   const [activeSelection, setActiveSelection] = useState({
@@ -109,6 +111,8 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
   const messageCacheRef = useRef(new Map());
   const messageRequestIdRef = useRef(0);
   const messageAbortRef = useRef(null);
+  const inFlightMessageLoadsRef = useRef(new Map());
+  const backgroundPrefetchRef = useRef(new Map());
   const localReadStateRef = useRef(new Map());
   const pendingDirectDmRef = useRef(new Set());
 
@@ -143,6 +147,8 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
   function pruneChannelCache(nextWorkspace) {
     if (!nextWorkspace) {
       messageCacheRef.current.clear();
+      backgroundPrefetchRef.current.clear();
+      inFlightMessageLoadsRef.current.clear();
       return;
     }
 
@@ -154,6 +160,19 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
     [...messageCacheRef.current.keys()].forEach((channelId) => {
       if (!allowedIds.has(channelId)) {
         messageCacheRef.current.delete(channelId);
+      }
+    });
+
+    [...backgroundPrefetchRef.current.keys()].forEach((channelId) => {
+      if (!allowedIds.has(channelId)) {
+        backgroundPrefetchRef.current.delete(channelId);
+      }
+    });
+
+    [...inFlightMessageLoadsRef.current.keys()].forEach((requestKey) => {
+      const [channelId] = String(requestKey || "").split("::");
+      if (channelId && !allowedIds.has(channelId)) {
+        inFlightMessageLoadsRef.current.delete(requestKey);
       }
     });
   }
@@ -288,10 +307,14 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
     }, 240);
   }
 
-  function buildLocalMessagePreview(content = "", attachments = []) {
+  function buildLocalMessagePreview(content = "", attachments = [], sticker = null) {
     const normalized = String(content || "").replace(/\s+/g, " ").trim();
     if (normalized) {
       return normalized.length > 84 ? `${normalized.slice(0, 81)}...` : normalized;
+    }
+
+    if (sticker?.name) {
+      return `[sticker] ${sticker.name}`;
     }
 
     if (!attachments.length) {
@@ -315,7 +338,8 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
     createdAt,
     currentUser,
     currentUserDisplayName,
-    replyTo
+    replyTo,
+    sticker = null
   }) {
     return {
       id: `temp-${clientNonce}`,
@@ -326,6 +350,7 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
       author_id: currentUser?.id || "",
       content: String(content || "").trim(),
       reply_to: replyTo?.id || null,
+      sticker,
       attachments,
       mention_user_ids: [],
       edited_at: null,
@@ -379,6 +404,8 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
     }
 
     const isInitialPage = !before && !prepend;
+    const resolvedLimit = limit || (prepend ? 28 : 24);
+    const requestKey = `${channelId}::${before || "latest"}::${resolvedLimit}::${prepend ? "prepend" : "replace"}`;
     const cachedEntry = isInitialPage ? readChannelCache(channelId) : null;
 
     if (cachedEntry && isInitialPage) {
@@ -387,6 +414,11 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
         return cachedEntry;
       }
       silent = true;
+    }
+
+    const inFlightRequest = inFlightMessageLoadsRef.current.get(requestKey);
+    if (inFlightRequest) {
+      return inFlightRequest;
     }
 
     if (!silent && !background && activeSelectionRef.current.channelId === channelId) {
@@ -407,68 +439,83 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
 
     const previousHeight = listRef.current?.scrollHeight || 0;
 
-    try {
-      const payload = await api.fetchMessages({
-        before,
-        channelId,
-        limit: limit || (prepend ? 28 : 24),
-        signal: controller?.signal
-      });
-
-      if (prepend) {
-        const currentMessages = readChannelCache(channelId)?.messages || [];
-        const nextMessages = mergeChannelMessages(currentMessages, payload.messages, {
-          prepend: true
-        });
-        commitChannelMessages(channelId, nextMessages, payload.has_more);
-
-        if (activeSelectionRef.current.channelId === channelId) {
-          requestAnimationFrame(() => {
-            const element = listRef.current;
-            if (element) {
-              element.scrollTop = element.scrollHeight - previousHeight;
-            }
-          });
-        }
-      } else {
-        commitChannelMessages(channelId, payload.messages, payload.has_more);
-        if (activeSelectionRef.current.channelId === channelId) {
-          requestAnimationFrame(() => {
-            const element = listRef.current;
-            if (element) {
-              element.scrollTop = element.scrollHeight;
-            }
-          });
-        }
-      }
-
-      const latest = payload.messages[payload.messages.length - 1];
-      if (latest && activeSelectionRef.current.channelId === channelId) {
-        queueMarkRead({
+    const requestPromise = (async () => {
+      try {
+        const payload = await api.fetchMessages({
+          before,
           channelId,
-          lastReadAt: latest.created_at,
-          lastReadMessageId: latest.id
+          limit: resolvedLimit,
+          signal: controller?.signal
         });
-      }
 
-      return payload;
-    } catch (error) {
-      if (error?.name !== "AbortError" && !background) {
-        setAppError(error.message);
-      }
-    } finally {
-      if (
-        activeSelectionRef.current.channelId === channelId &&
-        (!background || !silent) &&
-        (!isInitialPage || messageRequestIdRef.current === requestId)
-      ) {
-        setLoadingMessages(false);
-      }
+        if (prepend) {
+          const currentMessages = readChannelCache(channelId)?.messages || [];
+          const nextMessages = mergeChannelMessages(currentMessages, payload.messages, {
+            prepend: true
+          });
+          commitChannelMessages(channelId, nextMessages, payload.has_more);
 
-      if (messageAbortRef.current === controller) {
-        messageAbortRef.current = null;
+          if (activeSelectionRef.current.channelId === channelId) {
+            requestAnimationFrame(() => {
+              const element = listRef.current;
+              if (element) {
+                element.scrollTop = element.scrollHeight - previousHeight;
+              }
+            });
+          }
+        } else {
+          commitChannelMessages(channelId, payload.messages, payload.has_more);
+          if (activeSelectionRef.current.channelId === channelId) {
+            requestAnimationFrame(() => {
+              const element = listRef.current;
+              if (element) {
+                element.scrollTop = element.scrollHeight;
+              }
+            });
+          }
+        }
+
+        const latest = payload.messages[payload.messages.length - 1];
+        if (latest && activeSelectionRef.current.channelId === channelId) {
+          queueMarkRead({
+            channelId,
+            lastReadAt: latest.created_at,
+            lastReadMessageId: latest.id
+          });
+        }
+
+        if (background) {
+          backgroundPrefetchRef.current.set(channelId, Date.now());
+        }
+
+        return payload;
+      } catch (error) {
+        if (error?.name !== "AbortError" && !background) {
+          setAppError(error.message);
+        }
+
+        if (background) {
+          backgroundPrefetchRef.current.set(channelId, Date.now());
+        }
+      } finally {
+        if (
+          activeSelectionRef.current.channelId === channelId &&
+          (!background || !silent) &&
+          (!isInitialPage || messageRequestIdRef.current === requestId)
+        ) {
+          setLoadingMessages(false);
+        }
+
+        if (messageAbortRef.current === controller) {
+          messageAbortRef.current = null;
+        }
+
+        inFlightMessageLoadsRef.current.delete(requestKey);
       }
-    }
+    })();
+
+    inFlightMessageLoadsRef.current.set(requestKey, requestPromise);
+    return requestPromise;
   }
 
   useEffect(() => {
@@ -794,7 +841,15 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
     }
 
     const candidateIds = listLikelyChannelIds(workspace, activeSelection, 5).filter(
-      (channelId) => !readChannelCache(channelId)
+      (channelId) => {
+        const cachedEntry = readChannelCache(channelId);
+        if (cachedEntry && isChannelCacheFresh(cachedEntry)) {
+          return false;
+        }
+
+        const lastPrefetchAt = backgroundPrefetchRef.current.get(channelId) || 0;
+        return Date.now() - lastPrefetchAt > BACKGROUND_PREFETCH_COOLDOWN_MS;
+      }
     );
 
     if (!candidateIds.length) {
@@ -813,10 +868,15 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
 
     const handle = scheduleIdle(async () => {
       for (const channelId of candidateIds) {
-        if (cancelled || readChannelCache(channelId)) {
+        const cachedEntry = readChannelCache(channelId);
+        if (
+          cancelled ||
+          (cachedEntry && isChannelCacheFresh(cachedEntry))
+        ) {
           continue;
         }
 
+        backgroundPrefetchRef.current.set(channelId, Date.now());
         await loadMessages({
           background: true,
           channelId,
@@ -1617,6 +1677,114 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
     setComposerPicker(null);
   }
 
+  async function handleStickerSelect(sticker) {
+    if (!sticker?.id) {
+      return;
+    }
+
+    if (editingMessage) {
+      showUiNotice("Por ahora los stickers se envian como mensajes nuevos.");
+      return;
+    }
+
+    if (activeSelection.kind !== "guild" || !activeSelection.channelId || isVoiceChannel) {
+      showUiNotice("Los stickers del servidor solo funcionan en canales de texto del servidor.");
+      return;
+    }
+
+    const draftReplyTarget = replyTarget;
+    const draftReplyMentionEnabled = replyMentionEnabled;
+    const clientNonce =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `nonce-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const createdAt = new Date().toISOString();
+    const currentUser = workspace?.current_user || null;
+    const currentUserDisplayName =
+      activeGuild?.members.find((member) => member.id === currentUser?.id)?.display_name ||
+      currentUserLabel;
+    const optimisticMessage = buildOptimisticMessage({
+      attachments: [],
+      channelId: activeSelection.channelId,
+      clientNonce,
+      content: "",
+      createdAt,
+      currentUser,
+      currentUserDisplayName,
+      replyTo: draftReplyTarget,
+      sticker
+    });
+    const optimisticPreview = {
+      id: activeSelection.channelId,
+      last_message_id: optimisticMessage.id,
+      last_message_author_id: currentUser?.id || null,
+      last_message_preview: buildLocalMessagePreview("", [], sticker),
+      last_message_at: createdAt
+    };
+
+    patchChannelMessages(activeSelection.channelId, (previous) =>
+      upsertChannelMessage(previous, optimisticMessage)
+    );
+    setWorkspace((previous) =>
+      applyChannelPreviewToWorkspace(previous, optimisticPreview, {
+        localReadStateByChannel: localReadStateRef.current,
+        openChannelId: activeSelectionRef.current.channelId
+      })
+    );
+    requestAnimationFrame(() => {
+      const element = listRef.current;
+      if (element) {
+        element.scrollTop = element.scrollHeight;
+      }
+    });
+
+    setComposerPicker(null);
+    setReplyTarget(null);
+    setReplyMentionEnabled(true);
+
+    try {
+      const payload = await api.createMessage({
+        attachments: [],
+        channelId: activeSelection.channelId,
+        clientNonce,
+        content: "",
+        stickerId: sticker.id,
+        replyMentionUserId:
+          draftReplyTarget && draftReplyMentionEnabled
+            ? draftReplyTarget.author?.id || null
+            : null,
+        replyTo: draftReplyTarget?.id || null
+      });
+
+      if (payload?.preview) {
+        setWorkspace((previous) =>
+          applyChannelPreviewToWorkspace(previous, payload.preview, {
+            localReadStateByChannel: localReadStateRef.current,
+            openChannelId: activeSelectionRef.current.channelId
+          })
+        );
+      }
+
+      if (payload?.message) {
+        patchChannelMessages(activeSelection.channelId, (previous) =>
+          previous.map((item) =>
+            item.client_nonce === clientNonce ? payload.message : item
+          )
+        );
+      }
+
+      setAppError("");
+    } catch (error) {
+      patchChannelMessages(activeSelection.channelId, (previous) =>
+        previous.filter((item) => item.client_nonce !== clientNonce)
+      );
+      setReplyTarget(draftReplyTarget);
+      setReplyMentionEnabled(draftReplyMentionEnabled);
+      await loadBootstrap(activeSelectionRef.current);
+      setAppError(error.message);
+    }
+  }
+
   async function handleAttachmentSelection(event) {
     const files = [...(event.target.files || [])];
     event.target.value = "";
@@ -1686,6 +1854,7 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
     composerMenuOpen, composerPicker, composerRef, currentUserLabel, cycleVoiceDevice, dialog, directUnreadCount, editingMessage,
     handleAttachmentSelection, handleComposerChange, handleComposerShortcut, handleDeleteMessage, handleDialogSubmit,
     handlePickerInsert, handleProfileUpdate, handleReaction, handleScroll, handleSelectGuildChannel,
+    handleStickerSelect,
     handleStatusChange, handleSubmitMessage, handleVoiceDeviceChange, handleVoiceLeave, hasMore, headerActionsRef,
     getSelectedDeviceLabel, headerCopy, headerPanel, headerPanelRef, hoveredVoiceChannelId, inboxTab, isVoiceChannel, joinedVoiceChannelId,
     joinedVoiceChannelIdRef, lastTypingAtRef, listRef, loadBootstrap, loadBootstrapRef, loadMessages,

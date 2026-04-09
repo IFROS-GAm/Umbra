@@ -6,9 +6,10 @@ import {
 } from "../constants.js";
 import {
   buildInvitePreview,
-  buildMessagePreview,
   buildChannelMovePatchPlan,
+  buildDefaultGuildStickerRows,
   buildGuildMovePatchPlan,
+  buildMessagePreview,
   createId,
   enrichMessages,
   getDefaultGuildChannel,
@@ -32,6 +33,20 @@ const GUILD_PERMISSION_SELECT = ["id", "owner_id"].join(",");
 const GUILD_MEMBER_MESSAGE_SELECT = ["guild_id", "user_id", "nickname", "role_ids"].join(",");
 const ROLE_PERMISSION_SELECT = ["id", "guild_id", "name", "permissions", "position", "color"].join(",");
 const REACTION_SELECT = ["message_id", "user_id", "emoji"].join(",");
+
+function sanitizeStickerName(candidate = "") {
+  return String(candidate || "").trim().slice(0, 32);
+}
+
+function normalizeStickerEmoji(candidate = "") {
+  return String(candidate || "").trim().slice(0, 16);
+}
+
+function sortGuildStickers(stickers = []) {
+  return [...stickers].sort(
+    (left, right) => Number(left.position || 0) - Number(right.position || 0)
+  );
+}
 
 function createError(message, statusCode = 400) {
   const error = new Error(message);
@@ -175,7 +190,7 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
     const profileIds = [...new Set(messageBundle.map((item) => item.author_id).filter(Boolean))];
     const memberIds = [...new Set([userId, ...profileIds].filter(Boolean))];
 
-    const [profiles, guilds, roles, guildMembers, reactions] = await Promise.all([
+    const [profiles, guilds, roles, guildMembers, reactions, guildStickers] = await Promise.all([
       profileIds.length
         ? expectData(
             this.client.from("profiles").select(PROFILE_MESSAGE_SELECT).in("id", profileIds)
@@ -205,7 +220,8 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
           .from("message_reactions")
           .select(REACTION_SELECT)
           .eq("message_id", message.id)
-      )
+      ),
+      this.loadGuildStickers(channel.guild_id)
     ]);
 
     const enriched = enrichMessages({
@@ -215,6 +231,7 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
         guilds,
         roles,
         guild_members: guildMembers,
+        guild_stickers: guildStickers,
         channels: [channel],
         channel_members: [],
         messages: messageBundle,
@@ -227,13 +244,13 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
     return enriched[0] || null;
   }
 
-  async updateChannelSummary(channelId, message = null) {
+  async updateChannelSummary(channelId, message = null, sticker = null) {
     const preview = {
       id: channelId,
       last_message_id: message?.id ?? null,
       last_message_author_id: message?.author_id ?? null,
       last_message_preview: message
-        ? buildMessagePreview(message.content, message.attachments || [])
+        ? buildMessagePreview(message.content, message.attachments || [], sticker)
         : "",
       last_message_at: message?.created_at ?? null,
       updated_at: message?.created_at ?? new Date().toISOString()
@@ -286,7 +303,7 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
     const messages = await expectData(query);
     const pageMessageIds = messages.map((message) => message.id);
     const replyIds = messages.map((message) => message.reply_to).filter(Boolean);
-    const [reactions, replyMessages, roles, guilds] = await Promise.all([
+    const [reactions, replyMessages, guildMessageContext] = await Promise.all([
       pageMessageIds.length
         ? expectData(
             this.client
@@ -300,17 +317,11 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
             this.client.from("messages").select("*").in("id", replyIds)
           )
         : Promise.resolve([]),
-      channel.guild_id
-        ? expectData(
-            this.client.from("roles").select(ROLE_PERMISSION_SELECT).eq("guild_id", channel.guild_id)
-          )
-        : Promise.resolve([]),
-      channel.guild_id
-        ? expectData(
-            this.client.from("guilds").select(GUILD_PERMISSION_SELECT).eq("id", channel.guild_id)
-          )
-        : Promise.resolve([])
+      this.loadGuildMessageContext(channel.guild_id)
     ]);
+    const roles = guildMessageContext?.roles || [];
+    const guilds = guildMessageContext?.guilds || [];
+    const guildStickers = guildMessageContext?.guild_stickers || [];
 
     const relatedProfileIds = [
       ...new Set(
@@ -340,6 +351,7 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
       guilds,
       roles,
       guild_members: guildMembers,
+      guild_stickers: guildStickers,
       channels: [channel],
       channel_members: [],
       messages: [...messages, ...replyMessages].filter(
@@ -366,6 +378,7 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
     channelId,
     clientNonce = null,
     content,
+    stickerId = null,
     replyMentionUserId = null,
     replyTo = null
   }) {
@@ -383,7 +396,20 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
     }
 
     const trimmed = content?.trim() || "";
-    if (!trimmed && !attachments.length) {
+    const sticker = stickerId ? await this.getGuildStickerById(stickerId) : null;
+
+    if (stickerId && !sticker) {
+      throw createError("El sticker seleccionado no existe.", 400);
+    }
+
+    if (sticker && !channel.guild_id) {
+      throw createError("Los stickers del servidor solo funcionan dentro de ese servidor.", 400);
+    }
+
+    if (sticker && sticker.guild_id !== channel.guild_id) {
+      throw createError("Ese sticker no pertenece a este servidor.", 400);
+    }
+    if (!trimmed && !attachments.length && !sticker) {
       throw createError("El mensaje no puede estar vacío.", 400);
     }
 
@@ -445,8 +471,12 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
       created_at: now
     };
 
+    if (this.guildStickersEnabled) {
+      message.sticker_id = sticker?.id || null;
+    }
+
     await expectData(this.client.from("messages").insert(message));
-    const preview = await this.updateChannelSummary(channelId, message);
+    const preview = await this.updateChannelSummary(channelId, message, sticker);
     await this.markChannelRead({
       channelId,
       lastReadMessageId: message.id,
@@ -698,6 +728,18 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
         { onConflict: "channel_id,user_id" }
       )
     );
+
+    if (this.guildStickersEnabled) {
+      await expectData(
+        this.client.from("guild_stickers").insert(
+          buildDefaultGuildStickerRows({
+            createdBy: ownerId,
+            guildId,
+            now
+          })
+        )
+      );
+    }
 
     return {
       guild_id: guildId,
@@ -999,7 +1041,129 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
         .select("*")
     );
 
+    this.invalidateGuildMessageContext(guildId);
+
     return updatedRows[0] || guild;
+  }
+
+  async listGuildStickers({ guildId, userId }) {
+    this.assertGuildStickerFeatureAvailable();
+
+    const guildRows = await expectData(
+      this.client.from("guilds").select("id").eq("id", guildId).limit(1)
+    );
+    if (!guildRows[0]) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    const memberships = await expectData(
+      this.client
+        .from("guild_members")
+        .select("guild_id")
+        .eq("guild_id", guildId)
+        .eq("user_id", userId)
+        .limit(1)
+    );
+    if (!memberships[0]) {
+      throw createError("No perteneces a este servidor.", 403);
+    }
+
+    const stickers = await this.loadGuildStickers(guildId);
+
+    return sortGuildStickers(stickers);
+  }
+
+  async createGuildSticker({ emoji = "", guildId, imageUrl = "", name, userId }) {
+    this.assertGuildStickerFeatureAvailable();
+
+    const guildRows = await expectData(
+      this.client.from("guilds").select("id").eq("id", guildId).limit(1)
+    );
+    if (!guildRows[0]) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    const permissionBits = await this.getPermissionBits(guildId, userId);
+    if ((permissionBits & PERMISSIONS.ADMINISTRATOR) !== PERMISSIONS.ADMINISTRATOR) {
+      throw createError("Solo el administrador puede crear stickers del servidor.", 403);
+    }
+
+    const trimmedName = sanitizeStickerName(name);
+    const trimmedEmoji = normalizeStickerEmoji(emoji);
+    const normalizedImageUrl = String(imageUrl || "").trim();
+
+    if (!trimmedName) {
+      throw createError("El sticker necesita un nombre.", 400);
+    }
+
+    if (!trimmedEmoji && !normalizedImageUrl) {
+      throw createError("El sticker necesita un emoji o una imagen.", 400);
+    }
+
+    const existing = await this.loadGuildStickers(guildId);
+    if (
+      existing.some(
+        (sticker) => String(sticker.name || "").toLowerCase() === trimmedName.toLowerCase()
+      )
+    ) {
+      throw createError("Ya existe un sticker con ese nombre.", 400);
+    }
+
+    const sticker = {
+      id: createId(),
+      guild_id: guildId,
+      name: trimmedName,
+      emoji: trimmedEmoji,
+      image_url: normalizedImageUrl,
+      is_default: false,
+      position:
+        existing.reduce((max, current) => Math.max(max, Number(current.position || 0)), -1) + 1,
+      created_by: userId,
+      created_at: new Date().toISOString()
+    };
+
+    const rows = await expectData(this.client.from("guild_stickers").insert(sticker).select("*"));
+    this.invalidateGuildMessageContext(guildId);
+    return rows[0] || sticker;
+  }
+
+  async deleteGuildSticker({ guildId, stickerId, userId }) {
+    this.assertGuildStickerFeatureAvailable();
+
+    const guildRows = await expectData(
+      this.client.from("guilds").select("id").eq("id", guildId).limit(1)
+    );
+    if (!guildRows[0]) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    const permissionBits = await this.getPermissionBits(guildId, userId);
+    if ((permissionBits & PERMISSIONS.ADMINISTRATOR) !== PERMISSIONS.ADMINISTRATOR) {
+      throw createError("Solo el administrador puede eliminar stickers del servidor.", 403);
+    }
+
+    const sticker = await this.getGuildStickerById(stickerId);
+    if (!sticker || sticker.guild_id !== guildId) {
+      throw createError("Sticker no encontrado.", 404);
+    }
+
+    if (sticker.is_default) {
+      throw createError("Los stickers predeterminados no se pueden eliminar.", 400);
+    }
+
+    const usageRows = await expectData(
+      this.client.from("messages").select("id").eq("sticker_id", stickerId).limit(1)
+    );
+    if (usageRows.length) {
+      throw createError(
+        "No puedes eliminar un sticker que ya fue usado en mensajes del servidor.",
+        400
+      );
+    }
+
+    await expectData(this.client.from("guild_stickers").delete().eq("id", stickerId));
+    this.invalidateGuildMessageContext(guildId);
+    return { ok: true, sticker_id: stickerId };
   }
 
   async listGuildRoles({ guildId, userId }) {
@@ -2148,6 +2312,10 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
     );
 
     const message = latest[0];
+    let sticker = null;
+    if (message?.sticker_id) {
+      sticker = await this.getGuildStickerById(message.sticker_id);
+    }
     await expectData(
       this.client
         .from("channels")
@@ -2155,7 +2323,7 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
           last_message_id: message?.id ?? null,
           last_message_author_id: message?.author_id ?? null,
           last_message_preview: message
-            ? buildMessagePreview(message.content, message.attachments || [])
+            ? buildMessagePreview(message.content, message.attachments || [], sticker)
             : "",
           last_message_at: message?.created_at ?? null,
           updated_at: new Date().toISOString()
