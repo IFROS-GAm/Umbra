@@ -44,14 +44,19 @@ function getDirectFriendAction(profile) {
 }
 
 export function ChatHeader({
+  activeChannel,
   directMessageProfile,
   headerActionsRef,
   headerPanel,
   headerPanelNode,
   headerSearchPlaceholder,
+  isDirectConversation,
+  isDirectGroupConversation,
   membersPanelVisible,
   onAddFriend,
   onOpenDialog,
+  onStartDirectCall,
+  onStartDirectVideoCall,
   onShowNotice,
   onToggleHeaderPanel,
   onToggleMembersPanel,
@@ -86,14 +91,14 @@ export function ChatHeader({
       <div className="chat-header-tools">
         <div className="chat-header-actions-shell">
           <div className="chat-header-tool-cluster" ref={headerActionsRef}>
-            {directMessageProfile ? (
+            {isDirectConversation ? (
               <>
                 <button
                   aria-label="Llamada"
                   className="ghost-button icon-only tooltip-anchor"
                   data-tooltip="Llamar"
                   data-tooltip-position="bottom"
-                  onClick={() => onShowNotice?.("Las llamadas directas llegan en una siguiente pasada.")}
+                  onClick={() => onStartDirectCall?.()}
                   type="button"
                 >
                   <Icon name="phone" />
@@ -103,9 +108,7 @@ export function ChatHeader({
                   className="ghost-button icon-only tooltip-anchor"
                   data-tooltip="Videollamada"
                   data-tooltip-position="bottom"
-                  onClick={() =>
-                    onShowNotice?.("Las videollamadas directas llegan en una siguiente pasada.")
-                  }
+                  onClick={() => onStartDirectVideoCall?.()}
                   type="button"
                 >
                   <Icon name="camera" />
@@ -120,7 +123,7 @@ export function ChatHeader({
                 >
                   <Icon name="pin" />
                 </button>
-                {directFriendAction.visible ? (
+                {!isDirectGroupConversation && directFriendAction.visible ? (
                   <button
                     aria-label={directFriendAction.label}
                     className="ghost-button icon-only tooltip-anchor"
@@ -136,20 +139,28 @@ export function ChatHeader({
                 <button
                   aria-label={
                     membersPanelVisible
-                      ? "Ocultar perfil"
-                      : "Mostrar perfil"
+                      ? isDirectGroupConversation
+                        ? "Ocultar participantes"
+                        : "Ocultar perfil"
+                      : isDirectGroupConversation
+                        ? "Mostrar participantes"
+                        : "Mostrar perfil"
                   }
                   className={`ghost-button icon-only tooltip-anchor ${membersPanelVisible ? "active" : ""}`}
                   data-tooltip={
                     membersPanelVisible
-                      ? "Ocultar perfil"
-                      : "Mostrar perfil"
+                      ? isDirectGroupConversation
+                        ? "Ocultar participantes"
+                        : "Ocultar perfil"
+                      : isDirectGroupConversation
+                        ? "Mostrar participantes"
+                        : "Mostrar perfil"
                   }
                   data-tooltip-position="bottom"
                   onClick={onToggleMembersPanel}
                   type="button"
                 >
-                  <Icon name="profile" />
+                  <Icon name={isDirectGroupConversation ? "community" : "profile"} />
                 </button>
               </>
             ) : (

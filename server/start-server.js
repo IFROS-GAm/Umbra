@@ -12,7 +12,7 @@ import helmet from "helmet";
 import multer from "multer";
 import { Server } from "socket.io";
 
-import { USER_STATUSES } from "./constants.js";
+import { CHANNEL_TYPES, USER_STATUSES } from "./constants.js";
 import { createStore } from "./store/index.js";
 import { isGuildVoiceChannel } from "./store/helpers.js";
 
@@ -82,6 +82,15 @@ function createCorsOptions(allowedOrigins) {
     methods: ["GET", "POST", "PATCH", "DELETE"],
     credentials: false
   };
+}
+
+function canUseSharedVoiceChannel(channel) {
+  return Boolean(
+    channel &&
+      (isGuildVoiceChannel(channel) ||
+        channel.type === CHANNEL_TYPES.DM ||
+        channel.type === CHANNEL_TYPES.GROUP_DM)
+  );
 }
 
 function extractBearerToken(value) {
@@ -1142,10 +1151,10 @@ export async function startServer(options = {}) {
         });
         const channel = await store.getChannel(channelId);
 
-        if (!canAccess || !isGuildVoiceChannel(channel)) {
+        if (!canAccess || !canUseSharedVoiceChannel(channel)) {
           socket.emit("room:error", {
             channelId,
-            error: "No puedes entrar a este canal de voz."
+            error: "No puedes entrar a esta llamada."
           });
           return;
         }

@@ -21,6 +21,7 @@ import { createVoiceCameraSession } from "./voiceCameraSession.js";
 import { createVoiceInputProcessingSession } from "./voiceInputProcessing.js";
 
 const BACKGROUND_PREFETCH_COOLDOWN_MS = 90_000;
+const DIRECT_CALL_TYPES = new Set(["dm", "group_dm"]);
 
 export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, onSignOut }) {
   const [workspace, setWorkspace] = useState(null);
@@ -1832,6 +1833,34 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
     }
   }
 
+  function handleJoinDirectCall({ enableCamera = false } = {}) {
+    const selectedChannel = activeSelectionRef.current?.channelId
+      ? findChannelInSession(workspace, activeSelectionRef.current.channelId)?.channel
+      : null;
+
+    if (
+      !accessToken ||
+      activeSelectionRef.current?.kind !== "dm" ||
+      !selectedChannel ||
+      !DIRECT_CALL_TYPES.has(selectedChannel.type)
+    ) {
+      return;
+    }
+
+    setVoiceMenu(null);
+    if (enableCamera) {
+      setVoiceState((previous) => ({
+        ...previous,
+        cameraEnabled: true
+      }));
+    }
+
+    getSocket(accessToken).emit("voice:join", {
+      channelId: selectedChannel.id
+    });
+    setJoinedVoiceChannelId(selectedChannel.id);
+  }
+
   function handleVoiceLeave() {
     if (!joinedVoiceChannelId || !accessToken) {
       return;
@@ -1855,7 +1884,7 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
     handleAttachmentSelection, handleComposerChange, handleComposerShortcut, handleDeleteMessage, handleDialogSubmit,
     handlePickerInsert, handleProfileUpdate, handleReaction, handleScroll, handleSelectGuildChannel,
     handleStickerSelect,
-    handleStatusChange, handleSubmitMessage, handleVoiceDeviceChange, handleVoiceLeave, hasMore, headerActionsRef,
+    handleStatusChange, handleSubmitMessage, handleVoiceDeviceChange, handleVoiceLeave, handleJoinDirectCall, hasMore, headerActionsRef,
     getSelectedDeviceLabel, headerCopy, headerPanel, headerPanelRef, hoveredVoiceChannelId, inboxTab, isVoiceChannel, joinedVoiceChannelId,
     joinedVoiceChannelIdRef, lastTypingAtRef, listRef, loadBootstrap, loadBootstrapRef, loadMessages,
     loadingMessages, messageMenuFor, messages, membersPanelVisible, profileCard,

@@ -1656,9 +1656,16 @@ export class DemoStore {
   async createGroupDm({ name = "", ownerId, recipientIds }) {
     const uniqueRecipientIds = [...new Set((recipientIds || []).map((id) => String(id)).filter(Boolean))]
       .filter((id) => id !== ownerId);
+    const maxRecipients = 9;
 
     if (uniqueRecipientIds.length < 2) {
       const error = new Error("Selecciona al menos dos amigos para crear el grupo.");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (uniqueRecipientIds.length > maxRecipients) {
+      const error = new Error("Un grupo directo admite maximo 10 personas contando contigo.");
       error.statusCode = 400;
       throw error;
     }
@@ -1670,6 +1677,20 @@ export class DemoStore {
     if (missingUserId) {
       const error = new Error("Una de las personas seleccionadas ya no esta disponible.");
       error.statusCode = 400;
+      throw error;
+    }
+
+    const nonFriendId = uniqueRecipientIds.find((userId) => {
+      const [leftId, rightId] = buildFriendshipPair(ownerId, userId);
+      return !(this.db.friendships || []).some(
+        (friendship) =>
+          friendship.user_id === leftId && friendship.friend_id === rightId
+      );
+    });
+
+    if (nonFriendId) {
+      const error = new Error("Solo puedes crear grupos directos con amistades activas.");
+      error.statusCode = 403;
       throw error;
     }
 

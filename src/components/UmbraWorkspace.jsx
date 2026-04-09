@@ -69,7 +69,7 @@ export function UmbraWorkspace({
     handleAttachmentSelection, handleComposerChange, handleComposerShortcut, handleDeleteMessage,
     handleDialogSubmit, handlePickerInsert, handleProfileUpdate, handleReaction, handleScroll,
     handleStickerSelect,
-    handleSelectGuildChannel, handleStatusChange, handleSubmitMessage, handleVoiceDeviceChange, handleVoiceLeave,
+    handleJoinDirectCall, handleSelectGuildChannel, handleStatusChange, handleSubmitMessage, handleVoiceDeviceChange, handleVoiceLeave,
     headerActionsRef, headerCopy, headerPanel, headerPanelRef, hoveredVoiceChannelId, inboxTab,
     isVoiceChannel, joinedVoiceChannelId, listRef, loadBootstrap, loadingMessages, messageMenuFor, messages,
     membersPanelVisible, profileCard, reactionPickerFor, removeComposerAttachment,
@@ -133,12 +133,16 @@ export function UmbraWorkspace({
 
   const currentUser = workspace?.current_user || null;
   const currentUserId = currentUser?.id || "";
+  const isDirectConversation = activeSelection?.kind === "dm";
+  const isGroupDirectConversation = isDirectConversation && activeChannel?.type === "group_dm";
+  const isCallableDirectConversation =
+    isDirectConversation && ["dm", "group_dm"].includes(activeChannel?.type || "");
   const serverSettingsGuild =
     workspace?.guilds.find((guild) => guild.id === serverSettingsGuildId) || null;
   const inviteTargetGuild =
     workspace?.guilds.find((guild) => guild.id === inviteModalState.guildId) || null;
   const isSingleDirectMessagePanel =
-    membersPanelVisible && activeSelection?.kind === "dm" && activeChannel?.type === "dm";
+    membersPanelVisible && isDirectConversation && activeChannel?.type === "dm";
   const resolvedMembersPanelWidth = isSingleDirectMessagePanel ? membersPanelWidth : 292;
   const resolvedMembersPanelMinWidth = isSingleDirectMessagePanel ? 320 : 292;
   const minimumNavigatorWidth = 272;
@@ -936,6 +940,14 @@ export function UmbraWorkspace({
             return currentUser;
           }
 
+          if (isDirectConversation) {
+            return (
+              activeChannel?.participants?.find((participant) => participant.id === userId) ||
+              availableUsersById[userId] ||
+              null
+            );
+          }
+
           return (
             activeGuild?.members.find((member) => member.id === userId) ||
             availableUsersById[userId] ||
@@ -943,7 +955,15 @@ export function UmbraWorkspace({
           );
         })
         .filter(Boolean),
-    [activeGuild?.members, availableUsersById, currentUser, currentUserId, voiceUserIds]
+    [
+      activeChannel?.participants,
+      activeGuild?.members,
+      availableUsersById,
+      currentUser,
+      currentUserId,
+      isDirectConversation,
+      voiceUserIds
+    ]
   );
   const joinedVoiceChannel =
     (workspace?.guilds || [])
@@ -993,6 +1013,8 @@ export function UmbraWorkspace({
 
     return buildProfileCardData(other, other.display_name || other.username || "Umbra user");
   }, [activeChannel, activeSelection.kind, workspace, activeGuild]);
+  const isDirectCallActive =
+    isCallableDirectConversation && joinedVoiceChannelId === activeChannel?.id;
   const voiceStageParticipants = useMemo(
     () =>
       voiceUsers.map((user) => ({
@@ -2341,14 +2363,19 @@ export function UmbraWorkspace({
           ) : (
             <>
               <ChatHeader
+                activeChannel={activeChannel}
                 directMessageProfile={directMessageProfile}
                 headerActionsRef={headerActionsRef}
                 headerPanel={headerPanel}
                 headerPanelNode={renderChatHeaderPanel()}
                 headerSearchPlaceholder={headerSearchPlaceholder}
+                isDirectConversation={isDirectConversation}
+                isDirectGroupConversation={isGroupDirectConversation}
                 membersPanelVisible={effectiveMembersPanelVisible}
                 onAddFriend={handleSendFriendRequest}
                 onOpenDialog={openDialog}
+                onStartDirectCall={() => handleJoinDirectCall()}
+                onStartDirectVideoCall={() => handleJoinDirectCall({ enableCamera: true })}
                 onShowNotice={showUiNotice}
                 onToggleHeaderPanel={toggleHeaderPanel}
                 onToggleMembersPanel={() => setMembersPanelVisible((previous) => !previous)}
@@ -2358,16 +2385,21 @@ export function UmbraWorkspace({
 
               {appError ? <div className="error-banner">{appError}</div> : null}
 
-              {isVoiceChannel ? (
+              {isVoiceChannel || isDirectCallActive ? (
                 <Suspense fallback={<WorkspacePanelFallback />}>
                   <VoiceRoomStage
                     activeChannel={activeChannel}
                     cameraStatus={cameraStatus}
                     cameraMenuNode={voiceMenu === "camera" ? renderCameraMenu() : null}
                     inputMenuNode={voiceMenu === "input" ? renderInputMenu() : null}
+                    isDirectCall={isDirectConversation}
                     joinedVoiceChannelId={joinedVoiceChannelId}
                     onHandleVoiceLeave={handleVoiceLeave}
-                    onJoinVoiceChannel={() => handleSelectGuildChannel(activeChannel)}
+                    onJoinVoiceChannel={() =>
+                      isVoiceChannel
+                        ? handleSelectGuildChannel(activeChannel)
+                        : handleJoinDirectCall()
+                    }
                     onOpenProfileCard={openProfileCard}
                     onShowNotice={showUiNotice}
                     onToggleVoiceMenu={toggleVoiceMenu}

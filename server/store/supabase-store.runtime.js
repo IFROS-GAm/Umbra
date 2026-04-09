@@ -1680,9 +1680,14 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
   async createGroupDm({ name = "", ownerId, recipientIds }) {
     const uniqueRecipientIds = [...new Set((recipientIds || []).map((id) => String(id)).filter(Boolean))]
       .filter((id) => id !== ownerId);
+    const maxRecipients = 9;
 
     if (uniqueRecipientIds.length < 2) {
       throw createError("Selecciona al menos dos amigos para crear el grupo.", 400);
+    }
+
+    if (uniqueRecipientIds.length > maxRecipients) {
+      throw createError("Un grupo directo admite maximo 10 personas contando contigo.", 400);
     }
 
     const participantIds = [ownerId, ...uniqueRecipientIds];
@@ -1693,6 +1698,24 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
     if (profiles.length !== participantIds.length) {
       throw createError("Una de las personas seleccionadas ya no esta disponible.", 400);
     }
+
+    await Promise.all(
+      uniqueRecipientIds.map(async (recipientId) => {
+        const [leftId, rightId] = buildFriendshipPair(ownerId, recipientId);
+        const friendshipRows = await expectData(
+          this.client
+            .from("friendships")
+            .select("user_id, friend_id")
+            .eq("user_id", leftId)
+            .eq("friend_id", rightId)
+            .limit(1)
+        );
+
+        if (!friendshipRows[0]) {
+          throw createError("Solo puedes crear grupos directos con amistades activas.", 403);
+        }
+      })
+    );
 
     const now = new Date().toISOString();
     const channel = {

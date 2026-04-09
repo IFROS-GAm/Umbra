@@ -37,6 +37,7 @@ export function VoiceRoomStage({
   cameraStatus,
   cameraMenuNode,
   inputMenuNode,
+  isDirectCall,
   joinedVoiceChannelId,
   onHandleVoiceLeave,
   onJoinVoiceChannel,
@@ -55,23 +56,31 @@ export function VoiceRoomStage({
     <section className="voice-room-stage">
       <div className="voice-room-hero">
         <div>
-          <p className="eyebrow">Canal de voz</p>
-          <h2>{activeChannel?.name || "Lounge"}</h2>
+          <p className="eyebrow">
+            {isDirectCall
+              ? activeChannel?.type === "group_dm"
+                ? "Llamada de grupo"
+                : "Llamada directa"
+              : "Canal de voz"}
+          </p>
+          <h2>{activeChannel?.display_name || activeChannel?.name || "Lounge"}</h2>
           <p>
             {activeChannel?.topic ||
-              "Entra, mantente conectado y deja el chat de texto para el contexto."}
+              (isDirectCall
+                ? "Comparte voz, camara y pantalla con la gente de este chat."
+                : "Entra, mantente conectado y deja el chat de texto para el contexto.")}
           </p>
         </div>
 
         {joinedVoiceChannelId === activeChannel?.id ? (
           <button className="ghost-button danger" onClick={onHandleVoiceLeave} type="button">
             <Icon name="close" />
-            <span>Salir del canal</span>
+            <span>{isDirectCall ? "Salir de la llamada" : "Salir del canal"}</span>
           </button>
         ) : (
           <button className="primary-button" onClick={onJoinVoiceChannel} type="button">
             <Icon name="headphones" />
-            <span>Entrar al canal</span>
+            <span>{isDirectCall ? "Unirte a la llamada" : "Entrar al canal"}</span>
           </button>
         )}
       </div>

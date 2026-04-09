@@ -76,6 +76,11 @@ function findStatusLabel(status) {
   return STATUS_OPTIONS.find((item) => item.value === status)?.label || "Offline";
 }
 
+function findLocalizedStatusLabel(status, locale) {
+  const value = String(status || "").toLowerCase();
+  return locale?.statuses?.[value] || findStatusLabel(status);
+}
+
 function normalizeColorInput(candidate, fallback = "#5865F2") {
   const normalized = String(candidate || "")
     .trim()
@@ -209,6 +214,890 @@ function settingsPanelTitle(tab) {
   }
 }
 
+function getSettingsLocale(language) {
+  const dictionaries = {
+    es: {
+      statuses: {
+        online: "En linea",
+        idle: "Inactivo",
+        dnd: "No molestar",
+        invisible: "Invisible",
+        offline: "Offline"
+      },
+      socialPlatforms: {
+        website: "Sitio web",
+        instagram: "Instagram",
+        youtube: "YouTube",
+        spotify: "Spotify",
+        twitch: "Twitch",
+        tiktok: "TikTok",
+        x: "X / Twitter",
+        discord: "Discord"
+      },
+      recoveryProviders: {
+        "": "Sin cuenta de recuperacion",
+        google: "Google",
+        outlook: "Microsoft / Outlook",
+        apple: "Apple",
+        discord: "Discord",
+        other: "Otra"
+      },
+      security: {
+        editProfileButton: "Editar perfil de usuario",
+        closeEditorButton: "Cerrar editor",
+        editButton: "Editar",
+        editProfileTitle: "Editar perfil",
+        editProfileSubtitle: "Elige avatar, panel, color y datos visibles de tu cuenta.",
+        profilePanel: "Panel del perfil",
+        uploadPanel: "Subir panel",
+        changePanelImage: "Cambiar imagen del panel",
+        removePanelImage: "Quitar imagen del panel",
+        panelHelper: "Usa una imagen horizontal para que el header se vea mejor.",
+        avatar: "Avatar",
+        uploadPhoto: "Subir foto",
+        removePhoto: "Quitar foto",
+        avatarHelper: "PNG, JPG o WEBP. Aparece en mensajes, miembros y perfiles.",
+        username: "Nombre de usuario",
+        customStatus: "Estado personalizado",
+        customStatusPlaceholder: "Que estas haciendo ahora",
+        bio: "Bio",
+        profileAccent: "Color de respaldo del panel",
+        avatarTone: "Tono de respaldo del avatar",
+        saveChanges: "Guardar cambios",
+        saving: "Guardando...",
+        back: "Volver",
+        signOut: "Cerrar sesion",
+        accountRows: {
+          displayName: "Nombre para mostrar",
+          username: "Nombre de usuario",
+          email: "Correo electronico",
+          panel: "Panel del perfil",
+          emailAccent: "Mostrar",
+          bannerConfigured: "Imagen de panel configurada",
+          noUsername: "Sin usuario",
+          defaultName: "Umbra user"
+        }
+      },
+      social: {
+        title: "Contenido y redes",
+        subtitle: "Lo que publiques aqui aparecera en Ver perfil completo.",
+        platform: "Plataforma",
+        visibleLabel: "Etiqueta visible",
+        visiblePlaceholder: "Tu nombre o handle",
+        link: "Enlace",
+        delete: "Eliminar red",
+        emptyTitle: "Todavia no hay redes visibles.",
+        emptyBody: "Agrega las conexiones que quieres que aparezcan en tu perfil completo.",
+        add: "Anadir red",
+        save: "Guardar redes",
+        saving: "Guardando..."
+      },
+      privacy: {
+        title: "Datos y privacidad",
+        subtitle: "Controla que partes de tu perfil completo se muestran al resto.",
+        socialTitle: "Mostrar redes y conexiones",
+        socialBody: "Permite que Contenido y redes se vea dentro de tu perfil completo.",
+        memberSinceTitle: "Mostrar fecha de miembro desde",
+        memberSinceBody: "Usa la fecha de creacion de tu cuenta dentro del perfil completo.",
+        activityTitle: "Mostrar estado de actividad",
+        activityBody: "Deja visible tu estado personalizado y actividad en el perfil.",
+        dmTitle: "Permitir mensajes directos desde perfil",
+        dmBody: "Guarda tu preferencia para futuros accesos directos a DM.",
+        save: "Guardar privacidad",
+        saving: "Guardando..."
+      },
+      devices: {
+        title: "Dispositivos",
+        subtitle: "Lectura local de microfonos, salidas y camaras disponibles en este equipo.",
+        refresh: "Actualizar lista",
+        refreshing: "Actualizando...",
+        microphones: "Microfonos",
+        outputs: "Salidas de audio",
+        cameras: "Camaras",
+        detected: "detectados",
+        systemDefault: "Predeterminado del sistema",
+        detectedLocal: "Detectado localmente",
+        emptyTitle: "Sin dispositivos visibles.",
+        emptyBody: "Permite acceso a microfono o camara para ver etiquetas completas.",
+        readError: "No se pudieron leer los dispositivos."
+      },
+      connections: {
+        title: "Conexiones",
+        subtitle:
+          "Controla como recuperas tu cuenta, que correo recibe avisos y que enlaces quedan visibles dentro de Umbra.",
+        provider: "Proveedor de acceso",
+        connected: "Conectado",
+        noEmail: "Sin correo",
+        currentEmail: "Correo actual",
+        confirmed: "Confirmado",
+        unconfirmed: "Sin confirmar",
+        emailConfirmation: "Confirmacion de correo",
+        emailConfirmedBody:
+          "Tu correo principal ya esta confirmado. Puedes mandar un correo de prueba si quieres revisar la entrega.",
+        emailPendingBody:
+          "Puedes reenviar el correo de verificacion al principal para comprobar que el flujo funciona.",
+        send: "Enviar",
+        sendTest: "Enviar prueba",
+        sendConfirmation: "Enviar confirmacion",
+        changePrimaryTitle: "Cambiar correo principal",
+        changePrimarySubtitle:
+          "Usa un nuevo correo y Umbra disparara el flujo de validacion correspondiente.",
+        newEmail: "Nuevo correo",
+        changeEmail: "Cambiar correo",
+        reauthTitle: "Reautenticacion y clave",
+        reauthSubtitle:
+          "Envia un codigo de reautenticacion y luego actualiza tu contrasena desde Umbra.",
+        sendReauth: "Enviar codigo de reautenticacion",
+        reauthCode: "Codigo de reautenticacion",
+        reauthPlaceholder: "Pegalo aqui si se solicita por correo",
+        newPassword: "Nueva contrasena",
+        newPasswordPlaceholder: "Minimo 8 caracteres",
+        confirmPassword: "Confirmar contrasena",
+        confirmPasswordPlaceholder: "Repite la nueva contrasena",
+        updatePassword: "Actualizar contrasena",
+        recoveryTitle: "Cuenta de recuperacion",
+        recoverySubtitle:
+          "Guarda una via de respaldo como Google u otro servicio para futuros flujos de recuperacion.",
+        providerField: "Proveedor",
+        accountField: "Cuenta o correo",
+        backupNow: "Respaldo actual",
+        backupNone: "Todavia no hay una cuenta de recuperacion guardada.",
+        backupBody:
+          "Puedes dejar un correo, usuario o enlace de una cuenta externa como referencia segura.",
+        recoveryCheckTitle: "Comprobacion del respaldo",
+        recoveryCheckBody:
+          "Envia un correo de prueba al respaldo para validar que siga disponible.",
+        recoveryNeedsEmail:
+          "Si quieres probar el respaldo por correo, guardalo como un email valido.",
+        visibleNetworksTitle: "Redes visibles ahora",
+        visibleNetworksBody:
+          "Esto es lo que la gente vera en tu perfil completo si tiene acceso a tus conexiones.",
+        hiddenNetworksBody: "Las redes estan ocultas por tu configuracion de privacidad.",
+        noPublicConnections: "No hay conexiones publicas configuradas.",
+        noPublicConnectionsBody: "Usa Contenido y redes para agregar tus enlaces visibles.",
+        inviteUmbraTitle: "Invitar a Umbra",
+        inviteUmbraSubtitle: "Envia una invitacion por correo para crear una cuenta nueva en Umbra.",
+        inviteEmail: "Correo a invitar",
+        sendInvite: "Enviar invitacion",
+        inviting: "Invitando...",
+        saveBackup: "Guardar conexiones",
+        saving: "Guardando...",
+        summary: {
+          primary: "Correo principal",
+          primaryHelperReady: "Listo para recibir avisos",
+          primaryHelperPending: "Pendiente de verificar",
+          provider: "Acceso activo",
+          providerReady: "Sesion validada",
+          providerPending: "Requiere confirmacion",
+          recovery: "Respaldo",
+          recoveryReady: "Puede recibir prueba",
+          recoveryPending: "Agrega una via de apoyo",
+          public: "Perfil publico",
+          publicVisible: "Visible en tu perfil",
+          publicHidden: "Redes ocultas",
+          hidden: "Oculto",
+          noConfig: "No configurado",
+          linkSingular: "enlace",
+          linkPlural: "enlaces"
+        }
+      },
+      statusPanel: {
+        currentTitle: "Estado actual",
+        currentSubtitle: "Presencia visible para el resto del workspace.",
+        noCustomStatus: "Sin estado personalizado por ahora.",
+        workspaceTitle: "Resumen del espacio",
+        workspaceSubtitle: "Actividad actual dentro de Umbra.",
+        guilds: "Servidores activos",
+        dms: "DMs visibles",
+        theme: "Modo visual"
+      },
+      terms: {
+        title: "Terminos y condiciones de uso",
+        subtitle:
+          "Este panel resume las reglas base para usar Umbra con seguridad, respeto y responsabilidad.",
+        summaryTitle: "Resumen Umbra",
+        summaryBody:
+          "Al usar Umbra aceptas una plataforma centrada en comunidad, identidad, privacidad, mensajeria, voz y servidores administrados por sus propias reglas.",
+        lastReview: "Ultima revision",
+        conditionsTitle: "Condiciones generales",
+        conditionsSubtitle:
+          "Estos puntos aplican al uso del cliente, la web, los servidores, los mensajes directos y cualquier integracion futura de Umbra.",
+        acceptTitle: "Lo que aceptas al usar Umbra",
+        acceptSubtitle: "Una version corta y clara de las reglas practicas del servicio.",
+        supportTitle: "Soporte y contacto",
+        supportSubtitle:
+          "Si una norma de un servidor entra en conflicto con el uso seguro de Umbra, prevalece la seguridad del servicio y de las personas usuarias.",
+        recommendation: "Recomendacion",
+        recommendationBody:
+          "Usa Conexiones para mantener tu correo principal y tu respaldo actualizados. Eso facilita confirmaciones, recuperacion de acceso y avisos de seguridad.",
+        pills: ["Respeto y convivencia", "Privacidad", "Moderacion", "Uso responsable"],
+        checklist: [
+          "No usar Umbra para suplantar identidades ni enganar a otras personas.",
+          "No automatizar invitaciones, DMs, menciones o llamadas de forma abusiva.",
+          "No compartir contenido privado de terceros sin permiso.",
+          "Respetar bloqueos, silencios, baneos y limites de moderacion.",
+          "Cuidar tus accesos, dispositivos y metodos de recuperacion.",
+          "Usar de forma responsable stickers, perfiles, servidores y conexiones visibles."
+        ]
+      }
+    },
+    en: {
+      statuses: {
+        online: "Online",
+        idle: "Idle",
+        dnd: "Do not disturb",
+        invisible: "Invisible",
+        offline: "Offline"
+      },
+      socialPlatforms: {
+        website: "Website",
+        instagram: "Instagram",
+        youtube: "YouTube",
+        spotify: "Spotify",
+        twitch: "Twitch",
+        tiktok: "TikTok",
+        x: "X / Twitter",
+        discord: "Discord"
+      },
+      recoveryProviders: {
+        "": "No recovery account",
+        google: "Google",
+        outlook: "Microsoft / Outlook",
+        apple: "Apple",
+        discord: "Discord",
+        other: "Other"
+      },
+      security: {
+        editProfileButton: "Edit user profile",
+        closeEditorButton: "Close editor",
+        editButton: "Edit",
+        editProfileTitle: "Edit profile",
+        editProfileSubtitle: "Choose avatar, banner, color, and visible account details.",
+        profilePanel: "Profile banner",
+        uploadPanel: "Upload banner",
+        changePanelImage: "Change banner image",
+        removePanelImage: "Remove banner image",
+        panelHelper: "Use a wide image so the header looks better.",
+        avatar: "Avatar",
+        uploadPhoto: "Upload photo",
+        removePhoto: "Remove photo",
+        avatarHelper: "PNG, JPG or WEBP. It appears in messages, members and profiles.",
+        username: "Username",
+        customStatus: "Custom status",
+        customStatusPlaceholder: "What are you doing right now",
+        bio: "Bio",
+        profileAccent: "Panel accent color",
+        avatarTone: "Avatar accent tone",
+        saveChanges: "Save changes",
+        saving: "Saving...",
+        back: "Back",
+        signOut: "Sign out",
+        accountRows: {
+          displayName: "Display name",
+          username: "Username",
+          email: "Email",
+          panel: "Profile panel",
+          emailAccent: "Show",
+          bannerConfigured: "Banner image configured",
+          noUsername: "No username",
+          defaultName: "Umbra user"
+        }
+      },
+      social: {
+        title: "Content and social",
+        subtitle: "What you publish here appears in View full profile.",
+        platform: "Platform",
+        visibleLabel: "Visible label",
+        visiblePlaceholder: "Your name or handle",
+        link: "Link",
+        delete: "Remove social link",
+        emptyTitle: "There are no visible socials yet.",
+        emptyBody: "Add the connections you want to show on your full profile.",
+        add: "Add social link",
+        save: "Save socials",
+        saving: "Saving..."
+      },
+      privacy: {
+        title: "Privacy and data",
+        subtitle: "Control which parts of your full profile are visible to others.",
+        socialTitle: "Show socials and connections",
+        socialBody: "Allows Content and social to appear in your full profile.",
+        memberSinceTitle: "Show member since date",
+        memberSinceBody: "Use your account creation date inside the full profile.",
+        activityTitle: "Show activity status",
+        activityBody: "Keep your custom status and activity visible on the profile.",
+        dmTitle: "Allow direct messages from profile",
+        dmBody: "Stores your preference for future profile-to-DM shortcuts.",
+        save: "Save privacy",
+        saving: "Saving..."
+      },
+      devices: {
+        title: "Devices",
+        subtitle: "Local readout of microphones, outputs and cameras available on this device.",
+        refresh: "Refresh list",
+        refreshing: "Refreshing...",
+        microphones: "Microphones",
+        outputs: "Audio outputs",
+        cameras: "Cameras",
+        detected: "detected",
+        systemDefault: "System default",
+        detectedLocal: "Detected locally",
+        emptyTitle: "No visible devices.",
+        emptyBody: "Allow microphone or camera access to see full labels.",
+        readError: "Could not read devices."
+      },
+      connections: {
+        title: "Connections",
+        subtitle:
+          "Control how you recover your account, which email receives notices, and which links remain visible inside Umbra.",
+        provider: "Access provider",
+        connected: "Connected",
+        noEmail: "No email",
+        currentEmail: "Current email",
+        confirmed: "Confirmed",
+        unconfirmed: "Unconfirmed",
+        emailConfirmation: "Email confirmation",
+        emailConfirmedBody:
+          "Your primary email is already confirmed. You can send a test email if you want to verify delivery.",
+        emailPendingBody:
+          "You can resend the verification email to the primary address to validate the flow.",
+        send: "Send",
+        sendTest: "Send test",
+        sendConfirmation: "Send confirmation",
+        changePrimaryTitle: "Change primary email",
+        changePrimarySubtitle: "Use a new email and Umbra will trigger the matching validation flow.",
+        newEmail: "New email",
+        changeEmail: "Change email",
+        reauthTitle: "Reauthentication and password",
+        reauthSubtitle: "Send a reauthentication code and then update your password from Umbra.",
+        sendReauth: "Send reauthentication code",
+        reauthCode: "Reauthentication code",
+        reauthPlaceholder: "Paste it here if requested by email",
+        newPassword: "New password",
+        newPasswordPlaceholder: "Minimum 8 characters",
+        confirmPassword: "Confirm password",
+        confirmPasswordPlaceholder: "Repeat the new password",
+        updatePassword: "Update password",
+        recoveryTitle: "Recovery account",
+        recoverySubtitle: "Save a backup path such as Google or another service for future recovery flows.",
+        providerField: "Provider",
+        accountField: "Account or email",
+        backupNow: "Current backup",
+        backupNone: "There is no saved recovery account yet.",
+        backupBody: "You can save an email, username or link to an external account as a secure reference.",
+        recoveryCheckTitle: "Backup check",
+        recoveryCheckBody: "Send a test email to the backup to validate it is still available.",
+        recoveryNeedsEmail: "If you want to test the backup by email, save it as a valid email address.",
+        visibleNetworksTitle: "Visible connections now",
+        visibleNetworksBody: "This is what people will see on your full profile if they can access your connections.",
+        hiddenNetworksBody: "Connections are hidden by your privacy settings.",
+        noPublicConnections: "There are no public connections configured.",
+        noPublicConnectionsBody: "Use Content and social to add the links you want to show.",
+        inviteUmbraTitle: "Invite to Umbra",
+        inviteUmbraSubtitle: "Send an email invitation to create a new Umbra account.",
+        inviteEmail: "Email to invite",
+        sendInvite: "Send invitation",
+        inviting: "Inviting...",
+        saveBackup: "Save connections",
+        saving: "Saving...",
+        summary: {
+          primary: "Primary email",
+          primaryHelperReady: "Ready to receive notices",
+          primaryHelperPending: "Pending verification",
+          provider: "Active access",
+          providerReady: "Validated session",
+          providerPending: "Needs confirmation",
+          recovery: "Backup",
+          recoveryReady: "Can receive tests",
+          recoveryPending: "Add a backup path",
+          public: "Public profile",
+          publicVisible: "Visible on your profile",
+          publicHidden: "Hidden connections",
+          hidden: "Hidden",
+          noConfig: "Not configured",
+          linkSingular: "link",
+          linkPlural: "links"
+        }
+      },
+      statusPanel: {
+        currentTitle: "Current status",
+        currentSubtitle: "Presence visible to the rest of the workspace.",
+        noCustomStatus: "No custom status for now.",
+        workspaceTitle: "Workspace summary",
+        workspaceSubtitle: "Current activity inside Umbra.",
+        guilds: "Active servers",
+        dms: "Visible DMs",
+        theme: "Visual mode"
+      },
+      terms: {
+        title: "Terms and conditions",
+        subtitle: "This panel summarizes the core rules for using Umbra safely, respectfully and responsibly.",
+        summaryTitle: "Umbra summary",
+        summaryBody:
+          "By using Umbra you accept a platform focused on community, identity, privacy, messaging, voice and servers managed by their own rules.",
+        lastReview: "Last review",
+        conditionsTitle: "General conditions",
+        conditionsSubtitle:
+          "These points apply to the client, the web app, servers, direct messages and any future Umbra integrations.",
+        acceptTitle: "What you accept when using Umbra",
+        acceptSubtitle: "A short and clear version of the service's practical rules.",
+        supportTitle: "Support and contact",
+        supportSubtitle:
+          "If a server rule conflicts with the safe use of Umbra, the safety of the service and its users prevails.",
+        recommendation: "Recommendation",
+        recommendationBody:
+          "Use Connections to keep your primary email and backup current. That makes confirmations, account recovery and security notices easier.",
+        pills: ["Respect and conduct", "Privacy", "Moderation", "Responsible use"],
+        checklist: [
+          "Do not use Umbra to impersonate identities or deceive other people.",
+          "Do not automate invites, DMs, mentions or calls abusively.",
+          "Do not share private third-party content without permission.",
+          "Respect blocks, mutes, bans and moderation limits.",
+          "Protect your access, devices and recovery methods.",
+          "Use stickers, profiles, servers and visible connections responsibly."
+        ]
+      }
+    },
+    fr: {
+      statuses: {
+        online: "En ligne",
+        idle: "Inactif",
+        dnd: "Ne pas deranger",
+        invisible: "Invisible",
+        offline: "Hors ligne"
+      },
+      socialPlatforms: {
+        website: "Site web",
+        instagram: "Instagram",
+        youtube: "YouTube",
+        spotify: "Spotify",
+        twitch: "Twitch",
+        tiktok: "TikTok",
+        x: "X / Twitter",
+        discord: "Discord"
+      },
+      recoveryProviders: {
+        "": "Aucun compte de recuperation",
+        google: "Google",
+        outlook: "Microsoft / Outlook",
+        apple: "Apple",
+        discord: "Discord",
+        other: "Autre"
+      },
+      security: {
+        editProfileButton: "Modifier le profil utilisateur",
+        closeEditorButton: "Fermer l'editeur",
+        editButton: "Modifier",
+        editProfileTitle: "Modifier le profil",
+        editProfileSubtitle: "Choisis l'avatar, la banniere, la couleur et les informations visibles.",
+        profilePanel: "Banniere du profil",
+        uploadPanel: "Importer une banniere",
+        changePanelImage: "Changer l'image de la banniere",
+        removePanelImage: "Retirer l'image de la banniere",
+        panelHelper: "Utilise une image horizontale pour un meilleur rendu du header.",
+        avatar: "Avatar",
+        uploadPhoto: "Importer une photo",
+        removePhoto: "Retirer la photo",
+        avatarHelper: "PNG, JPG ou WEBP. Visible dans les messages, membres et profils.",
+        username: "Nom d'utilisateur",
+        customStatus: "Statut personnalise",
+        customStatusPlaceholder: "Que fais-tu en ce moment",
+        bio: "Bio",
+        profileAccent: "Couleur d'accent du panneau",
+        avatarTone: "Teinte d'accent de l'avatar",
+        saveChanges: "Enregistrer",
+        saving: "Enregistrement...",
+        back: "Retour",
+        signOut: "Se deconnecter",
+        accountRows: {
+          displayName: "Nom d'affichage",
+          username: "Nom d'utilisateur",
+          email: "Email",
+          panel: "Panneau du profil",
+          emailAccent: "Afficher",
+          bannerConfigured: "Image du panneau configuree",
+          noUsername: "Aucun nom d'utilisateur",
+          defaultName: "Utilisateur Umbra"
+        }
+      },
+      social: {
+        title: "Contenu et reseaux",
+        subtitle: "Ce que tu publies ici apparaitra dans Voir le profil complet.",
+        platform: "Plateforme",
+        visibleLabel: "Etiquette visible",
+        visiblePlaceholder: "Ton nom ou ton identifiant",
+        link: "Lien",
+        delete: "Supprimer le lien",
+        emptyTitle: "Aucun reseau visible pour l'instant.",
+        emptyBody: "Ajoute les connexions que tu veux afficher sur ton profil complet.",
+        add: "Ajouter un lien",
+        save: "Enregistrer les reseaux",
+        saving: "Enregistrement..."
+      },
+      privacy: {
+        title: "Confidentialite et donnees",
+        subtitle: "Controle quelles parties de ton profil complet sont visibles pour les autres.",
+        socialTitle: "Afficher les reseaux et connexions",
+        socialBody: "Permet a Contenu et reseaux d'apparaitre dans ton profil complet.",
+        memberSinceTitle: "Afficher la date de membre depuis",
+        memberSinceBody: "Utilise la date de creation du compte dans le profil complet.",
+        activityTitle: "Afficher le statut d'activite",
+        activityBody: "Garde ton statut personnalise et ton activite visibles sur le profil.",
+        dmTitle: "Autoriser les messages directs depuis le profil",
+        dmBody: "Enregistre ta preference pour les futurs raccourcis profil vers DM.",
+        save: "Enregistrer la confidentialite",
+        saving: "Enregistrement..."
+      },
+      devices: {
+        title: "Appareils",
+        subtitle: "Lecture locale des micros, sorties et cameras disponibles sur cet appareil.",
+        refresh: "Actualiser la liste",
+        refreshing: "Actualisation...",
+        microphones: "Micros",
+        outputs: "Sorties audio",
+        cameras: "Cameras",
+        detected: "detectes",
+        systemDefault: "Par defaut du systeme",
+        detectedLocal: "Detecte localement",
+        emptyTitle: "Aucun appareil visible.",
+        emptyBody: "Autorise l'acces au micro ou a la camera pour voir les libelles complets.",
+        readError: "Impossible de lire les appareils."
+      },
+      connections: {
+        title: "Connexions",
+        subtitle:
+          "Controle comment tu recuperes ton compte, quel email recoit les avis et quels liens restent visibles dans Umbra.",
+        provider: "Fournisseur d'acces",
+        connected: "Connecte",
+        noEmail: "Aucun email",
+        currentEmail: "Email actuel",
+        confirmed: "Confirme",
+        unconfirmed: "Non confirme",
+        emailConfirmation: "Confirmation d'email",
+        emailConfirmedBody:
+          "Ton email principal est deja confirme. Tu peux envoyer un email de test pour verifier la distribution.",
+        emailPendingBody:
+          "Tu peux renvoyer l'email de verification au principal pour valider le flux.",
+        send: "Envoyer",
+        sendTest: "Envoyer un test",
+        sendConfirmation: "Envoyer la confirmation",
+        changePrimaryTitle: "Changer l'email principal",
+        changePrimarySubtitle: "Utilise un nouvel email et Umbra lancera le flux de validation approprie.",
+        newEmail: "Nouvel email",
+        changeEmail: "Changer l'email",
+        reauthTitle: "Reauthentification et mot de passe",
+        reauthSubtitle: "Envoie un code de reauthentification puis mets a jour ton mot de passe depuis Umbra.",
+        sendReauth: "Envoyer le code de reauthentification",
+        reauthCode: "Code de reauthentification",
+        reauthPlaceholder: "Colle-le ici si on te le demande par email",
+        newPassword: "Nouveau mot de passe",
+        newPasswordPlaceholder: "Minimum 8 caracteres",
+        confirmPassword: "Confirmer le mot de passe",
+        confirmPasswordPlaceholder: "Repete le nouveau mot de passe",
+        updatePassword: "Mettre a jour le mot de passe",
+        recoveryTitle: "Compte de recuperation",
+        recoverySubtitle: "Enregistre une voie de secours comme Google ou un autre service pour de futurs flux de recuperation.",
+        providerField: "Fournisseur",
+        accountField: "Compte ou email",
+        backupNow: "Secours actuel",
+        backupNone: "Aucun compte de recuperation enregistre pour l'instant.",
+        backupBody: "Tu peux enregistrer un email, un identifiant ou un lien de compte externe comme reference sure.",
+        recoveryCheckTitle: "Verification du secours",
+        recoveryCheckBody: "Envoie un email de test au secours pour verifier qu'il reste disponible.",
+        recoveryNeedsEmail: "Si tu veux tester le secours par email, enregistre-le comme adresse valide.",
+        visibleNetworksTitle: "Connexions visibles maintenant",
+        visibleNetworksBody: "Voici ce que les autres verront sur ton profil complet s'ils peuvent acceder a tes connexions.",
+        hiddenNetworksBody: "Les connexions sont masquees par tes parametres de confidentialite.",
+        noPublicConnections: "Aucune connexion publique configuree.",
+        noPublicConnectionsBody: "Utilise Contenu et reseaux pour ajouter les liens visibles.",
+        inviteUmbraTitle: "Inviter sur Umbra",
+        inviteUmbraSubtitle: "Envoie une invitation par email pour creer un nouveau compte Umbra.",
+        inviteEmail: "Email a inviter",
+        sendInvite: "Envoyer l'invitation",
+        inviting: "Invitation en cours...",
+        saveBackup: "Enregistrer les connexions",
+        saving: "Enregistrement...",
+        summary: {
+          primary: "Email principal",
+          primaryHelperReady: "Pret a recevoir les avis",
+          primaryHelperPending: "Verification en attente",
+          provider: "Acces actif",
+          providerReady: "Session validee",
+          providerPending: "Doit etre confirme",
+          recovery: "Secours",
+          recoveryReady: "Peut recevoir des tests",
+          recoveryPending: "Ajoute une voie de secours",
+          public: "Profil public",
+          publicVisible: "Visible sur ton profil",
+          publicHidden: "Connexions masquees",
+          hidden: "Masque",
+          noConfig: "Non configure",
+          linkSingular: "lien",
+          linkPlural: "liens"
+        }
+      },
+      statusPanel: {
+        currentTitle: "Statut actuel",
+        currentSubtitle: "Presence visible pour le reste de l'espace.",
+        noCustomStatus: "Aucun statut personnalise pour l'instant.",
+        workspaceTitle: "Resume de l'espace",
+        workspaceSubtitle: "Activite actuelle dans Umbra.",
+        guilds: "Serveurs actifs",
+        dms: "DM visibles",
+        theme: "Mode visuel"
+      },
+      terms: {
+        title: "Conditions d'utilisation",
+        subtitle:
+          "Ce panneau resume les regles de base pour utiliser Umbra en toute securite, avec respect et responsabilite.",
+        summaryTitle: "Resume Umbra",
+        summaryBody:
+          "En utilisant Umbra, tu acceptes une plateforme centree sur la communaute, l'identite, la confidentialite, la messagerie, la voix et des serveurs geres par leurs propres regles.",
+        lastReview: "Derniere revision",
+        conditionsTitle: "Conditions generales",
+        conditionsSubtitle:
+          "Ces points s'appliquent au client, au web, aux serveurs, aux messages directs et a toute integration future d'Umbra.",
+        acceptTitle: "Ce que tu acceptes en utilisant Umbra",
+        acceptSubtitle: "Une version courte et claire des regles pratiques du service.",
+        supportTitle: "Support et contact",
+        supportSubtitle:
+          "Si une regle de serveur entre en conflit avec l'usage sur d'Umbra, la securite du service et des utilisateurs prime.",
+        recommendation: "Recommandation",
+        recommendationBody:
+          "Utilise Connexions pour garder ton email principal et ton secours a jour. Cela facilite les confirmations, la recuperation de compte et les avis de securite.",
+        pills: ["Respect et conduite", "Confidentialite", "Moderation", "Usage responsable"],
+        checklist: [
+          "N'utilise pas Umbra pour usurper une identite ou tromper d'autres personnes.",
+          "N'automatise pas les invitations, DMs, mentions ou appels de maniere abusive.",
+          "Ne partage pas de contenu prive de tiers sans permission.",
+          "Respecte les blocages, silences, bannissements et limites de moderation.",
+          "Protege tes acces, tes appareils et tes moyens de recuperation.",
+          "Utilise les stickers, profils, serveurs et connexions visibles de facon responsable."
+        ]
+      }
+    }
+  };
+
+  return dictionaries[language] || dictionaries.es;
+}
+
+function getLegalSections(language) {
+  const dictionaries = {
+    es: [
+      {
+        id: "uso",
+        title: "Uso aceptable",
+        body:
+          "Umbra esta pensada para conversaciones, servidores, mensajes directos, voz, video y comunidades privadas. No puedes usar la plataforma para spam, fraude, acoso, suplantacion, distribucion de malware o automatizacion abusiva."
+      },
+      {
+        id: "cuenta",
+        title: "Cuenta, acceso y seguridad",
+        body:
+          "Eres responsable de la seguridad de tu cuenta, de tus credenciales y de los dispositivos desde los que entras. Debes mantener tu correo principal actualizado y usar los canales de recuperacion disponibles para proteger el acceso."
+      },
+      {
+        id: "contenido",
+        title: "Contenido y convivencia",
+        body:
+          "Cada persona mantiene la responsabilidad sobre lo que publica, comparte, sube o transmite en Umbra. Tambien debe respetar la privacidad, autoria y normas internas de cada servidor, categoria, canal o grupo."
+      },
+      {
+        id: "moderacion",
+        title: "Servidores, moderacion y permisos",
+        body:
+          "Los duenos y administradores de servidores pueden definir estructura, roles, categorias, stickers, invitaciones y reglas de moderacion. Umbra puede limitar funciones o retirar acceso si detecta abuso, evasion de bloqueos o uso peligroso del servicio."
+      },
+      {
+        id: "voz",
+        title: "Llamadas, voz, camara y actividad",
+        body:
+          "Las funciones de microfono, camara, compartir pantalla y presencia solo deben usarse con consentimiento de las personas presentes. No debes grabar, retransmitir o capturar contenido privado sin autorizacion."
+      },
+      {
+        id: "privacidad",
+        title: "Privacidad y datos",
+        body:
+          "Umbra utiliza la informacion minima necesaria para darte acceso, mantener perfiles, conexiones, invitaciones, mensajes, presencia y configuraciones. Tus ajustes de privacidad controlan que partes de tu perfil y actividad se muestran a otros."
+      },
+      {
+        id: "cambios",
+        title: "Cambios, disponibilidad y soporte",
+        body:
+          "Podemos actualizar funciones, plantillas, limites, flujos de autenticacion, estructura del servicio y politicas para mejorar seguridad, rendimiento o experiencia. El uso continuado de Umbra implica aceptacion de estos cambios cuando entren en vigor."
+      }
+    ],
+    en: [
+      {
+        id: "uso",
+        title: "Acceptable use",
+        body:
+          "Umbra is built for conversations, servers, direct messages, voice, video and private communities. You may not use the platform for spam, fraud, harassment, impersonation, malware distribution or abusive automation."
+      },
+      {
+        id: "cuenta",
+        title: "Account, access and security",
+        body:
+          "You are responsible for the security of your account, your credentials and the devices you use to sign in. Keep your primary email updated and use the available recovery channels to protect your access."
+      },
+      {
+        id: "contenido",
+        title: "Content and conduct",
+        body:
+          "Each person remains responsible for what they publish, share, upload or broadcast on Umbra. They must also respect privacy, authorship and the internal rules of each server, category, channel or group."
+      },
+      {
+        id: "moderacion",
+        title: "Servers, moderation and permissions",
+        body:
+          "Server owners and admins may define structure, roles, categories, stickers, invites and moderation rules. Umbra may limit features or remove access if it detects abuse, ban evasion or dangerous use of the service."
+      },
+      {
+        id: "voz",
+        title: "Calls, voice, camera and activity",
+        body:
+          "Microphone, camera, screen share and presence features must only be used with the consent of the people involved. You must not record, rebroadcast or capture private content without authorization."
+      },
+      {
+        id: "privacidad",
+        title: "Privacy and data",
+        body:
+          "Umbra uses the minimum information needed to grant access, maintain profiles, connections, invites, messages, presence and settings. Your privacy settings control which parts of your profile and activity are shown to others."
+      },
+      {
+        id: "cambios",
+        title: "Changes, availability and support",
+        body:
+          "We may update features, templates, limits, authentication flows, service structure and policies to improve security, performance or experience. Continued use of Umbra implies acceptance of those changes when they take effect."
+      }
+    ],
+    fr: [
+      {
+        id: "uso",
+        title: "Utilisation acceptable",
+        body:
+          "Umbra est concu pour les conversations, les serveurs, les messages directs, la voix, la video et les communautes privees. Tu ne peux pas utiliser la plateforme pour le spam, la fraude, le harcelement, l'usurpation, la diffusion de malwares ou l'automatisation abusive."
+      },
+      {
+        id: "cuenta",
+        title: "Compte, acces et securite",
+        body:
+          "Tu es responsable de la securite de ton compte, de tes identifiants et des appareils avec lesquels tu te connectes. Garde ton email principal a jour et utilise les moyens de recuperation disponibles pour proteger ton acces."
+      },
+      {
+        id: "contenido",
+        title: "Contenu et conduite",
+        body:
+          "Chaque personne reste responsable de ce qu'elle publie, partage, importe ou diffuse sur Umbra. Elle doit aussi respecter la confidentialite, l'auteur et les regles internes de chaque serveur, categorie, canal ou groupe."
+      },
+      {
+        id: "moderacion",
+        title: "Serveurs, moderation et permissions",
+        body:
+          "Les proprietaires et administrateurs de serveurs peuvent definir la structure, les roles, les categories, les stickers, les invitations et les regles de moderation. Umbra peut limiter des fonctions ou retirer l'acces en cas d'abus, de contournement de blocage ou d'usage dangereux."
+      },
+      {
+        id: "voz",
+        title: "Appels, voix, camera et activite",
+        body:
+          "Les fonctions de microphone, camera, partage d'ecran et de presence ne doivent etre utilisees qu'avec le consentement des personnes concernees. Tu ne dois pas enregistrer, rediffuser ou capturer du contenu prive sans autorisation."
+      },
+      {
+        id: "privacidad",
+        title: "Confidentialite et donnees",
+        body:
+          "Umbra utilise le minimum d'informations necessaires pour donner l'acces, maintenir les profils, connexions, invitations, messages, presence et parametres. Tes reglages de confidentialite controlent ce que les autres voient."
+      },
+      {
+        id: "cambios",
+        title: "Changements, disponibilite et support",
+        body:
+          "Nous pouvons mettre a jour les fonctions, modeles, limites, flux d'authentification, structure du service et politiques pour ameliorer la securite, la performance ou l'experience. Continuer a utiliser Umbra implique l'acceptation de ces changements."
+      }
+    ]
+  };
+
+  return dictionaries[language] || dictionaries.es;
+}
+
+function getLocalizedSocialPlaceholder(language, platform) {
+  const placeholders = {
+    es: {
+      website: "https://tu-sitio.com",
+      instagram: "https://instagram.com/tu_usuario",
+      youtube: "https://youtube.com/@tu_canal",
+      spotify: "https://open.spotify.com/user/...",
+      twitch: "https://twitch.tv/tu_canal",
+      tiktok: "https://tiktok.com/@tu_usuario",
+      x: "https://x.com/tu_usuario",
+      discord: "https://discord.gg/tu_invite"
+    },
+    en: {
+      website: "https://your-site.com",
+      instagram: "https://instagram.com/your_handle",
+      youtube: "https://youtube.com/@your_channel",
+      spotify: "https://open.spotify.com/user/...",
+      twitch: "https://twitch.tv/your_channel",
+      tiktok: "https://tiktok.com/@your_handle",
+      x: "https://x.com/your_handle",
+      discord: "https://discord.gg/your_invite"
+    },
+    fr: {
+      website: "https://ton-site.com",
+      instagram: "https://instagram.com/ton_identifiant",
+      youtube: "https://youtube.com/@ta_chaine",
+      spotify: "https://open.spotify.com/user/...",
+      twitch: "https://twitch.tv/ta_chaine",
+      tiktok: "https://tiktok.com/@ton_identifiant",
+      x: "https://x.com/ton_identifiant",
+      discord: "https://discord.gg/ton_invite"
+    }
+  };
+
+  return (
+    placeholders[language]?.[platform] ||
+    placeholders.es[platform] ||
+    SOCIAL_PLATFORM_OPTIONS.find((option) => option.value === platform)?.placeholder ||
+    ""
+  );
+}
+
+function getLocalizedRecoveryPlaceholder(language, provider) {
+  const placeholders = {
+    es: {
+      "": "No configurada",
+      google: "tu-cuenta@gmail.com",
+      outlook: "tu-cuenta@outlook.com",
+      apple: "Apple ID o correo asociado",
+      discord: "usuario, enlace o handle",
+      other: "Correo, usuario o enlace de respaldo"
+    },
+    en: {
+      "": "Not configured",
+      google: "your-account@gmail.com",
+      outlook: "your-account@outlook.com",
+      apple: "Apple ID or linked email",
+      discord: "username, link or handle",
+      other: "Backup email, username or link"
+    },
+    fr: {
+      "": "Non configure",
+      google: "ton-compte@gmail.com",
+      outlook: "ton-compte@outlook.com",
+      apple: "Apple ID ou email associe",
+      discord: "utilisateur, lien ou pseudo",
+      other: "Email, utilisateur ou lien de secours"
+    }
+  };
+
+  return (
+    placeholders[language]?.[provider] ||
+    placeholders.es[provider] ||
+    RECOVERY_PROVIDER_OPTIONS.find((option) => option.value === provider)?.placeholder ||
+    ""
+  );
+}
+
 export function SettingsModal({
   dmCount,
   guildCount,
@@ -224,6 +1113,16 @@ export function SettingsModal({
   const avatarInputRef = useRef(null);
   const bannerInputRef = useRef(null);
   const t = (key, fallback = "") => translate(language, key, fallback);
+  const locale = getSettingsLocale(language);
+  const termsReviewDate = useMemo(
+    () =>
+      new Intl.DateTimeFormat(language || "es", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric"
+      }).format(new Date("2026-04-08T00:00:00Z")),
+    [language]
+  );
 
   const [tab, setTab] = useState("security");
   const [editorOpen, setEditorOpen] = useState(false);
@@ -347,7 +1246,7 @@ export function SettingsModal({
         setDeviceState({
           audioinput: [],
           audiooutput: [],
-          error: deviceError.message || "No se pudieron leer los dispositivos.",
+          error: deviceError.message || locale.devices.readError,
           loading: false,
           videoinput: []
         });
@@ -383,32 +1282,45 @@ export function SettingsModal({
     form.profileColor,
     user.profile_color || "#5865F2"
   );
-  const displayName = form.username || user.username || "Umbra user";
+  const displayName = form.username || user.username || locale.security.accountRows.defaultName;
   const visibleError = error === "sanitizeUsername is not defined" ? "" : error;
 
   const accountRows = useMemo(
     () => [
       {
-        label: "Nombre para mostrar",
+        label: locale.security.accountRows.displayName,
         value: displayName,
       },
       {
-        label: "Nombre de usuario",
-        value: user.username || "Sin usuario",
+        label: locale.security.accountRows.username,
+        value: user.username || locale.security.accountRows.noUsername,
       },
       {
-        label: "Correo electronico",
+        label: locale.security.accountRows.email,
         value: maskEmail(user.email),
-        accent: user.email ? "Mostrar" : null
+        accent: user.email ? locale.security.accountRows.emailAccent : null
       },
       {
-        label: "Panel del perfil",
+        label: locale.security.accountRows.panel,
         value: previewBannerUrl
-          ? "Imagen de panel configurada"
+          ? locale.security.accountRows.bannerConfigured
           : normalizedProfileColor,
       }
     ],
-    [displayName, normalizedProfileColor, previewBannerUrl, user.email, user.username]
+    [
+      displayName,
+      locale.security.accountRows.bannerConfigured,
+      locale.security.accountRows.displayName,
+      locale.security.accountRows.email,
+      locale.security.accountRows.emailAccent,
+      locale.security.accountRows.noUsername,
+      locale.security.accountRows.panel,
+      locale.security.accountRows.username,
+      normalizedProfileColor,
+      previewBannerUrl,
+      user.email,
+      user.username
+    ]
   );
 
   const translatedNavGroups = useMemo(
@@ -620,38 +1532,70 @@ export function SettingsModal({
     () => [
       {
         id: "primary-email",
-        helper: emailConfirmed ? "Listo para recibir avisos" : "Pendiente de verificar",
+        helper: emailConfirmed
+          ? locale.connections.summary.primaryHelperReady
+          : locale.connections.summary.primaryHelperPending,
         icon: "mail",
-        label: "Correo principal",
-        value: user.email ? maskEmail(user.email) : "Sin correo"
+        label: locale.connections.summary.primary,
+        value: user.email ? maskEmail(user.email) : locale.connections.noEmail
       },
       {
         id: "provider",
-        helper: emailConfirmed ? "Sesion validada" : "Requiere confirmacion",
+        helper: emailConfirmed
+          ? locale.connections.summary.providerReady
+          : locale.connections.summary.providerPending,
         icon: "settings",
-        label: "Acceso activo",
+        label: locale.connections.summary.provider,
         value: authProviderLabel
       },
       {
         id: "recovery",
-        helper: recoveryLooksLikeEmail ? "Puede recibir prueba" : "Agrega una via de apoyo",
+        helper: recoveryLooksLikeEmail
+          ? locale.connections.summary.recoveryReady
+          : locale.connections.summary.recoveryPending,
         icon: "link",
-        label: "Respaldo",
-        value: recoveryProvider ? recoveryProviderMeta.label : "No configurado"
+        label: locale.connections.summary.recovery,
+        value: recoveryProvider
+          ? locale.recoveryProviders[recoveryProvider] || recoveryProviderMeta.label
+          : locale.connections.summary.noConfig
       },
       {
         id: "links",
-        helper: privacySettings.showSocialLinks ? "Visible en tu perfil" : "Redes ocultas",
+        helper: privacySettings.showSocialLinks
+          ? locale.connections.summary.publicVisible
+          : locale.connections.summary.publicHidden,
         icon: "sparkles",
-        label: "Perfil publico",
+        label: locale.connections.summary.public,
         value: privacySettings.showSocialLinks
-          ? `${publicSocialLinks.length} enlace${publicSocialLinks.length === 1 ? "" : "s"}`
-          : "Oculto"
+          ? `${publicSocialLinks.length} ${
+              publicSocialLinks.length === 1
+                ? locale.connections.summary.linkSingular
+                : locale.connections.summary.linkPlural
+            }`
+          : locale.connections.summary.hidden
       }
     ],
     [
       authProviderLabel,
       emailConfirmed,
+      locale.connections.noEmail,
+      locale.connections.summary.hidden,
+      locale.connections.summary.linkPlural,
+      locale.connections.summary.linkSingular,
+      locale.connections.summary.noConfig,
+      locale.connections.summary.primary,
+      locale.connections.summary.primaryHelperPending,
+      locale.connections.summary.primaryHelperReady,
+      locale.connections.summary.provider,
+      locale.connections.summary.providerPending,
+      locale.connections.summary.providerReady,
+      locale.connections.summary.public,
+      locale.connections.summary.publicHidden,
+      locale.connections.summary.publicVisible,
+      locale.connections.summary.recovery,
+      locale.connections.summary.recoveryPending,
+      locale.connections.summary.recoveryReady,
+      locale.recoveryProviders,
       privacySettings.showSocialLinks,
       publicSocialLinks.length,
       recoveryLooksLikeEmail,
@@ -895,20 +1839,16 @@ export function SettingsModal({
     <div className="settings-stack">
       <section className="settings-card">
         <div className="settings-card-title">
-          <h3>Contenido y redes</h3>
-          <span>Lo que publiques aqui aparecera en Ver perfil completo.</span>
+          <h3>{locale.social.title}</h3>
+          <span>{locale.social.subtitle}</span>
         </div>
 
         <div className="settings-social-list">
           {visibleSocialLinks.map((link, index) => {
-            const platformMeta =
-              SOCIAL_PLATFORM_OPTIONS.find((option) => option.value === link.platform) ||
-              SOCIAL_PLATFORM_OPTIONS[0];
-
             return (
               <div className="settings-social-row" key={link.id}>
                 <label className="settings-field">
-                  <span>Plataforma</span>
+                  <span>{locale.social.platform}</span>
                   <select
                     className="settings-inline-select"
                     onChange={(event) => updateSocialLink(index, "platform", event.target.value)}
@@ -916,33 +1856,33 @@ export function SettingsModal({
                   >
                     {SOCIAL_PLATFORM_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
-                        {option.label}
+                        {locale.socialPlatforms[option.value] || option.label}
                       </option>
                     ))}
                   </select>
                 </label>
 
                 <label className="settings-field">
-                  <span>Etiqueta visible</span>
+                  <span>{locale.social.visibleLabel}</span>
                   <input
                     maxLength={48}
                     onChange={(event) => updateSocialLink(index, "label", event.target.value)}
-                    placeholder="Tu nombre o handle"
+                    placeholder={locale.social.visiblePlaceholder}
                     value={link.label}
                   />
                 </label>
 
                 <label className="settings-field">
-                  <span>Enlace</span>
+                  <span>{locale.social.link}</span>
                   <input
                     onChange={(event) => updateSocialLink(index, "url", event.target.value)}
-                    placeholder={platformMeta.placeholder}
+                    placeholder={getLocalizedSocialPlaceholder(language, link.platform)}
                     value={link.url}
                   />
                 </label>
 
                 <button
-                  aria-label="Eliminar red"
+                  aria-label={locale.social.delete}
                   className="ghost-button icon-only"
                   onClick={() => removeSocialLink(index)}
                   type="button"
@@ -956,8 +1896,8 @@ export function SettingsModal({
 
         {!visibleSocialLinks.length ? (
           <div className="settings-empty-state">
-            <strong>Todavia no hay redes visibles.</strong>
-            <span>Agrega las conexiones que quieres que aparezcan en tu perfil completo.</span>
+            <strong>{locale.social.emptyTitle}</strong>
+            <span>{locale.social.emptyBody}</span>
           </div>
         ) : null}
 
@@ -969,11 +1909,11 @@ export function SettingsModal({
             type="button"
           >
             <Icon name="add" />
-            <span>Anadir red</span>
+            <span>{locale.social.add}</span>
           </button>
           <button className="primary-button" disabled={saving} onClick={handleProfileSave} type="button">
             <Icon name="save" />
-            <span>{saving ? "Guardando..." : "Guardar redes"}</span>
+            <span>{saving ? locale.social.saving : locale.social.save}</span>
           </button>
         </div>
 
@@ -987,8 +1927,8 @@ export function SettingsModal({
     <div className="settings-stack">
       <section className="settings-card">
         <div className="settings-card-title">
-          <h3>Datos y privacidad</h3>
-          <span>Controla que partes de tu perfil completo se muestran al resto.</span>
+          <h3>{locale.privacy.title}</h3>
+          <span>{locale.privacy.subtitle}</span>
         </div>
 
         <div className="settings-toggle-list">
@@ -996,7 +1936,7 @@ export function SettingsModal({
             <div className="settings-row-copy">
               <div>
                 <strong>Mostrar redes y conexiones</strong>
-                <p>Permite que Contenido y redes se vea dentro de tu perfil completo.</p>
+                <p>{locale.privacy.socialBody}</p>
               </div>
             </div>
             <input
@@ -1009,8 +1949,8 @@ export function SettingsModal({
           <label className="settings-action-row settings-toggle-row">
             <div className="settings-row-copy">
               <div>
-                <strong>Mostrar fecha de miembro desde</strong>
-                <p>Usa la fecha de creacion de tu cuenta dentro del perfil completo.</p>
+                <strong>{locale.privacy.memberSinceTitle}</strong>
+                <p>{locale.privacy.memberSinceBody}</p>
               </div>
             </div>
             <input
@@ -1023,8 +1963,8 @@ export function SettingsModal({
           <label className="settings-action-row settings-toggle-row">
             <div className="settings-row-copy">
               <div>
-                <strong>Mostrar estado de actividad</strong>
-                <p>Deja visible tu estado personalizado y actividad en el perfil.</p>
+                <strong>{locale.privacy.activityTitle}</strong>
+                <p>{locale.privacy.activityBody}</p>
               </div>
             </div>
             <input
@@ -1037,8 +1977,8 @@ export function SettingsModal({
           <label className="settings-action-row settings-toggle-row">
             <div className="settings-row-copy">
               <div>
-                <strong>Permitir mensajes directos desde perfil</strong>
-                <p>Guarda tu preferencia para futuros accesos directos a DM.</p>
+                <strong>{locale.privacy.dmTitle}</strong>
+                <p>{locale.privacy.dmBody}</p>
               </div>
             </div>
             <input
@@ -1052,7 +1992,7 @@ export function SettingsModal({
         <div className="settings-form-actions inline">
           <button className="primary-button" disabled={saving} onClick={handleProfileSave} type="button">
             <Icon name="save" />
-            <span>{saving ? "Guardando..." : "Guardar privacidad"}</span>
+            <span>{saving ? locale.privacy.saving : locale.privacy.save}</span>
           </button>
         </div>
 
@@ -1066,17 +2006,17 @@ export function SettingsModal({
     {
       items: deviceState.audioinput,
       key: "audioinput",
-      label: "Microfonos"
+      label: locale.devices.microphones
     },
     {
       items: deviceState.audiooutput,
       key: "audiooutput",
-      label: "Salidas de audio"
+      label: locale.devices.outputs
     },
     {
       items: deviceState.videoinput,
       key: "videoinput",
-      label: "Camaras"
+      label: locale.devices.cameras
     }
   ];
 
@@ -1084,8 +2024,8 @@ export function SettingsModal({
     <div className="settings-stack">
       <section className="settings-card">
         <div className="settings-card-title">
-          <h3>Dispositivos</h3>
-          <span>Lectura local de microfonos, salidas y camaras disponibles en este equipo.</span>
+          <h3>{locale.devices.title}</h3>
+          <span>{locale.devices.subtitle}</span>
         </div>
 
         <div className="settings-form-actions inline">
@@ -1095,7 +2035,7 @@ export function SettingsModal({
             type="button"
           >
             <Icon name="refresh" />
-            <span>{deviceState.loading ? "Actualizando..." : "Actualizar lista"}</span>
+            <span>{deviceState.loading ? locale.devices.refreshing : locale.devices.refresh}</span>
           </button>
         </div>
 
@@ -1107,7 +2047,7 @@ export function SettingsModal({
           {deviceGroups.map((group) => (
             <section className="settings-device-card" key={group.key}>
               <strong>{group.label}</strong>
-              <span>{group.items.length} detectados</span>
+              <span>{group.items.length} {locale.devices.detected}</span>
               <div className="settings-device-list">
                 {group.items.length ? (
                   group.items.map((device, index) => (
@@ -1128,16 +2068,16 @@ export function SettingsModal({
                         <strong>{device.label || `${group.label} ${index + 1}`}</strong>
                         <small>
                           {device.deviceId === "default"
-                            ? "Predeterminado del sistema"
-                            : "Detectado localmente"}
+                            ? locale.devices.systemDefault
+                            : locale.devices.detectedLocal}
                         </small>
                       </div>
                     </div>
                   ))
                 ) : (
                   <div className="settings-empty-state compact">
-                    <strong>Sin dispositivos visibles.</strong>
-                    <span>Permite acceso a microfono o camara para ver etiquetas completas.</span>
+                    <strong>{locale.devices.emptyTitle}</strong>
+                    <span>{locale.devices.emptyBody}</span>
                   </div>
                 )}
               </div>
@@ -1152,11 +2092,8 @@ export function SettingsModal({
     <div className="settings-stack">
       <section className="settings-card">
         <div className="settings-card-title">
-          <h3>Conexiones</h3>
-          <span>
-            Controla como recuperas tu cuenta, que correo recibe avisos y que enlaces quedan
-            visibles dentro de Umbra.
-          </span>
+          <h3>{locale.connections.title}</h3>
+          <span>{locale.connections.subtitle}</span>
         </div>
 
         <div className="settings-summary-grid settings-connections-summary">
@@ -1176,33 +2113,35 @@ export function SettingsModal({
           <div className="settings-row">
             <div className="settings-row-copy">
               <div>
-                <strong>Proveedor de acceso</strong>
+                <strong>{locale.connections.provider}</strong>
                 <p>{String(user.auth_provider || "email").toUpperCase()}</p>
               </div>
             </div>
-            <span className="user-profile-chip muted">{user.email ? "Conectado" : "Sin correo"}</span>
-          </div>
-
-          <div className="settings-row">
-            <div className="settings-row-copy">
-              <div>
-                <strong>Correo actual</strong>
-                <p>{maskEmail(user.email)}</p>
-              </div>
-            </div>
-            <span className={`user-profile-chip ${emailConfirmed ? "" : "muted"}`}>
-              {emailConfirmed ? "Confirmado" : "Sin confirmar"}
+            <span className="user-profile-chip muted">
+              {user.email ? locale.connections.connected : locale.connections.noEmail}
             </span>
           </div>
 
           <div className="settings-row">
             <div className="settings-row-copy">
               <div>
-                <strong>Confirmacion de correo</strong>
+                <strong>{locale.connections.currentEmail}</strong>
+                <p>{maskEmail(user.email)}</p>
+              </div>
+            </div>
+            <span className={`user-profile-chip ${emailConfirmed ? "" : "muted"}`}>
+              {emailConfirmed ? locale.connections.confirmed : locale.connections.unconfirmed}
+            </span>
+          </div>
+
+          <div className="settings-row">
+            <div className="settings-row-copy">
+              <div>
+                <strong>{locale.connections.emailConfirmation}</strong>
                 <p>
                   {emailConfirmed
-                    ? "Tu correo principal ya esta confirmado. Puedes mandar un correo de prueba si quieres revisar la entrega."
-                    : "Puedes reenviar el correo de verificacion al principal para comprobar que el flujo funciona."}
+                    ? locale.connections.emailConfirmedBody
+                    : locale.connections.emailPendingBody}
                 </p>
               </div>
             </div>
@@ -1215,10 +2154,10 @@ export function SettingsModal({
               <Icon name="mail" />
               <span>
                 {connectionsBusy === "primary-email"
-                  ? "Enviando..."
+                  ? locale.connections.send
                   : emailConfirmed
-                    ? "Enviar prueba"
-                    : "Enviar confirmacion"}
+                    ? locale.connections.sendTest
+                    : locale.connections.sendConfirmation}
               </span>
             </button>
           </div>
@@ -1226,13 +2165,13 @@ export function SettingsModal({
 
         <div className="settings-connection-stack settings-connection-card settings-connection-card-primary">
           <div className="settings-card-title">
-            <h3>Cambiar correo principal</h3>
-            <span>Usa un nuevo correo y Umbra disparara el flujo de validacion correspondiente.</span>
+            <h3>{locale.connections.changePrimaryTitle}</h3>
+            <span>{locale.connections.changePrimarySubtitle}</span>
           </div>
 
           <div className="settings-social-row compact">
             <label className="settings-field">
-              <span>Nuevo correo</span>
+              <span>{locale.connections.newEmail}</span>
               <input
                 onChange={(event) => setAuthEmailDraft(event.target.value)}
                 placeholder="nuevo@email.com"
@@ -1250,17 +2189,15 @@ export function SettingsModal({
               type="button"
             >
               <Icon name="mail" />
-              <span>{connectionsBusy === "change-email" ? "Enviando..." : "Cambiar correo"}</span>
+              <span>{connectionsBusy === "change-email" ? locale.connections.send : locale.connections.changeEmail}</span>
             </button>
           </div>
         </div>
 
         <div className="settings-connection-stack settings-connection-card">
           <div className="settings-card-title">
-            <h3>Reautenticacion y clave</h3>
-            <span>
-              Envia un codigo de reautenticacion y luego actualiza tu contrasena desde Umbra.
-            </span>
+            <h3>{locale.connections.reauthTitle}</h3>
+            <span>{locale.connections.reauthSubtitle}</span>
           </div>
 
           <div className="settings-form-actions inline">
@@ -1272,36 +2209,36 @@ export function SettingsModal({
             >
               <Icon name="mail" />
               <span>
-                {connectionsBusy === "reauth" ? "Enviando..." : "Enviar codigo de reautenticacion"}
+                {connectionsBusy === "reauth" ? locale.connections.send : locale.connections.sendReauth}
               </span>
             </button>
           </div>
 
           <div className="settings-social-row settings-connection-security-grid">
             <label className="settings-field">
-              <span>Codigo de reautenticacion</span>
+              <span>{locale.connections.reauthCode}</span>
               <input
                 onChange={(event) => setReauthNonceDraft(event.target.value)}
-                placeholder="Pegalo aqui si se solicita por correo"
+                placeholder={locale.connections.reauthPlaceholder}
                 value={reauthNonceDraft}
               />
             </label>
             <label className="settings-field">
-              <span>Nueva contrasena</span>
+              <span>{locale.connections.newPassword}</span>
               <input
                 minLength={8}
                 onChange={(event) => setNewPasswordDraft(event.target.value)}
-                placeholder="Minimo 8 caracteres"
+                placeholder={locale.connections.newPasswordPlaceholder}
                 type="password"
                 value={newPasswordDraft}
               />
             </label>
             <label className="settings-field">
-              <span>Confirmar contrasena</span>
+              <span>{locale.connections.confirmPassword}</span>
               <input
                 minLength={8}
                 onChange={(event) => setConfirmPasswordDraft(event.target.value)}
-                placeholder="Repite la nueva contrasena"
+                placeholder={locale.connections.confirmPasswordPlaceholder}
                 type="password"
                 value={confirmPasswordDraft}
               />
@@ -1317,7 +2254,7 @@ export function SettingsModal({
             >
               <Icon name="save" />
               <span>
-                {connectionsBusy === "password" ? "Guardando..." : "Actualizar contrasena"}
+                {connectionsBusy === "password" ? locale.connections.saving : locale.connections.updatePassword}
               </span>
             </button>
           </div>
@@ -1325,15 +2262,13 @@ export function SettingsModal({
 
         <div className="settings-connection-stack settings-connection-card">
           <div className="settings-card-title">
-            <h3>Cuenta de recuperacion</h3>
-            <span>
-              Guarda una via de respaldo como Google u otro servicio para futuros flujos de recuperacion.
-            </span>
+            <h3>{locale.connections.recoveryTitle}</h3>
+            <span>{locale.connections.recoverySubtitle}</span>
           </div>
 
           <div className="settings-social-row compact">
             <label className="settings-field">
-              <span>Proveedor</span>
+              <span>{locale.connections.providerField}</span>
               <select
                 className="settings-inline-select"
                 onChange={(event) => updateForm("recoveryProvider", event.target.value)}
@@ -1341,17 +2276,17 @@ export function SettingsModal({
               >
                 {RECOVERY_PROVIDER_OPTIONS.map((option) => (
                   <option key={option.value || "none"} value={option.value}>
-                    {option.label}
+                    {locale.recoveryProviders[option.value] || option.label}
                   </option>
                 ))}
               </select>
             </label>
 
             <label className="settings-field">
-              <span>Cuenta o correo</span>
+              <span>{locale.connections.accountField}</span>
               <input
                 onChange={(event) => updateForm("recoveryAccount", event.target.value)}
-                placeholder={recoveryProviderMeta.placeholder}
+                placeholder={getLocalizedRecoveryPlaceholder(language, recoveryProvider)}
                 value={form.recoveryAccount}
               />
             </label>
@@ -1360,24 +2295,24 @@ export function SettingsModal({
           <div className="settings-empty-state compact settings-empty-state-solid">
             <strong>
               {recoveryProvider
-                ? `Respaldo actual: ${recoveryProviderMeta.label}`
-                : "Todavia no hay una cuenta de recuperacion guardada."}
+                ? `${locale.connections.backupNow}: ${locale.recoveryProviders[recoveryProvider] || recoveryProviderMeta.label}`
+                : locale.connections.backupNone}
             </strong>
             <span>
               {recoveryProvider && recoveryAccount
                 ? recoveryAccount
-                : "Puedes dejar un correo, usuario o enlace de una cuenta externa como referencia segura."}
+                : locale.connections.backupBody}
             </span>
           </div>
 
           <div className="settings-row settings-connection-row">
             <div className="settings-row-copy">
               <div>
-                <strong>Comprobacion del respaldo</strong>
+                <strong>{locale.connections.recoveryCheckTitle}</strong>
                 <p>
                   {recoveryLooksLikeEmail
-                    ? "Envía un correo de prueba al respaldo para validar que siga disponible."
-                    : "Si quieres probar el respaldo por correo, guardalo como un email valido."}
+                    ? locale.connections.recoveryCheckBody
+                    : locale.connections.recoveryNeedsEmail}
                 </p>
               </div>
             </div>
@@ -1388,18 +2323,18 @@ export function SettingsModal({
               type="button"
             >
               <Icon name="mail" />
-              <span>{connectionsBusy === "recovery-email" ? "Enviando..." : "Enviar prueba"}</span>
+              <span>{connectionsBusy === "recovery-email" ? locale.connections.send : locale.connections.sendTest}</span>
             </button>
           </div>
         </div>
 
         <div className="settings-connection-stack settings-connection-card">
           <div className="settings-card-title">
-            <h3>Redes visibles ahora</h3>
+            <h3>{locale.connections.visibleNetworksTitle}</h3>
             <span>
               {privacySettings.showSocialLinks
-                ? "Esto es lo que la gente vera en tu perfil completo si tiene acceso a tus conexiones."
-                : "Las redes estan ocultas por tu configuracion de privacidad."}
+                ? locale.connections.visibleNetworksBody
+                : locale.connections.hiddenNetworksBody}
             </span>
           </div>
           {privacySettings.showSocialLinks && publicSocialLinks.length ? (
@@ -1413,7 +2348,9 @@ export function SettingsModal({
                     <div className="profile-detail-connection-copy">
                       <strong>{connection.label || connection.url}</strong>
                       <small>
-                        {SOCIAL_PLATFORM_OPTIONS.find((item) => item.value === connection.platform)?.label || "Enlace"}
+                        {locale.socialPlatforms[connection.platform] ||
+                          SOCIAL_PLATFORM_OPTIONS.find((item) => item.value === connection.platform)?.label ||
+                          locale.social.link}
                       </small>
                     </div>
                   </div>
@@ -1423,21 +2360,21 @@ export function SettingsModal({
             </div>
           ) : (
             <div className="settings-empty-state settings-empty-state-solid">
-              <strong>No hay conexiones publicas configuradas.</strong>
-              <span>Usa Contenido y redes para agregar tus enlaces visibles.</span>
+              <strong>{locale.connections.noPublicConnections}</strong>
+              <span>{locale.connections.noPublicConnectionsBody}</span>
             </div>
           )}
         </div>
 
         <div className="settings-connection-stack settings-connection-card">
           <div className="settings-card-title">
-            <h3>Invitar a Umbra</h3>
-            <span>Envia una invitacion por correo para crear una cuenta nueva en Umbra.</span>
+            <h3>{locale.connections.inviteUmbraTitle}</h3>
+            <span>{locale.connections.inviteUmbraSubtitle}</span>
           </div>
 
           <div className="settings-social-row compact">
             <label className="settings-field">
-              <span>Correo a invitar</span>
+              <span>{locale.connections.inviteEmail}</span>
               <input
                 onChange={(event) => setInviteEmailDraft(event.target.value)}
                 placeholder="alguien@email.com"
@@ -1456,7 +2393,7 @@ export function SettingsModal({
             >
               <Icon name="userAdd" />
               <span>
-                {connectionsBusy === "invite-user" ? "Invitando..." : "Enviar invitacion"}
+                {connectionsBusy === "invite-user" ? locale.connections.inviting : locale.connections.sendInvite}
               </span>
             </button>
           </div>
@@ -1470,7 +2407,7 @@ export function SettingsModal({
             type="button"
           >
             <Icon name="save" />
-            <span>{connectionsBusy === "recovery" ? "Guardando..." : "Guardar respaldo"}</span>
+            <span>{connectionsBusy === "recovery" ? locale.connections.saving : locale.connections.saveBackup}</span>
           </button>
         </div>
 
@@ -1480,91 +2417,38 @@ export function SettingsModal({
     </div>
   );
 
-  const legalSections = [
-    {
-      id: "uso",
-      title: "Uso aceptable",
-      body:
-        "Umbra esta pensada para conversaciones, servidores, mensajes directos, voz, video y comunidades privadas. No puedes usar la plataforma para spam, fraude, acoso, suplantacion, distribucion de malware o automatizacion abusiva."
-    },
-    {
-      id: "cuenta",
-      title: "Cuenta, acceso y seguridad",
-      body:
-        "Eres responsable de la seguridad de tu cuenta, de tus credenciales y de los dispositivos desde los que entras. Debes mantener tu correo principal actualizado y usar los canales de recuperacion disponibles para proteger el acceso."
-    },
-    {
-      id: "contenido",
-      title: "Contenido y convivencia",
-      body:
-        "Cada persona mantiene la responsabilidad sobre lo que publica, comparte, sube o transmite en Umbra. Tambien debe respetar la privacidad, autoria y normas internas de cada servidor, categoria, canal o grupo."
-    },
-    {
-      id: "moderacion",
-      title: "Servidores, moderacion y permisos",
-      body:
-        "Los duenos y administradores de servidores pueden definir estructura, roles, categorias, stickers, invitaciones y reglas de moderacion. Umbra puede limitar funciones o retirar acceso si detecta abuso, evasion de bloqueos o uso peligroso del servicio."
-    },
-    {
-      id: "voz",
-      title: "Llamadas, voz, camara y actividad",
-      body:
-        "Las funciones de microfono, camara, compartir pantalla y presencia solo deben usarse con consentimiento de las personas presentes. No debes grabar, retransmitir o capturar contenido privado sin autorizacion."
-    },
-    {
-      id: "privacidad",
-      title: "Privacidad y datos",
-      body:
-        "Umbra utiliza la informacion minima necesaria para darte acceso, mantener perfiles, conexiones, invitaciones, mensajes, presencia y configuraciones. Tus ajustes de privacidad controlan que partes de tu perfil y actividad se muestran a otros."
-    },
-    {
-      id: "cambios",
-      title: "Cambios, disponibilidad y soporte",
-      body:
-        "Podemos actualizar funciones, plantillas, limites, flujos de autenticacion, estructura del servicio y politicas para mejorar seguridad, rendimiento o experiencia. El uso continuado de Umbra implica aceptacion de estos cambios cuando entren en vigor."
-    }
-  ];
+  const legalSections = useMemo(() => getLegalSections(language), [language]);
 
   const termsSettingsContent = (
     <div className="settings-stack">
       <section className="settings-card settings-legal-hero">
         <div className="settings-card-title">
-          <h3>Terminos y condiciones de uso</h3>
-          <span>
-            Este panel resume las reglas base para usar Umbra con seguridad, respeto y
-            responsabilidad.
-          </span>
+          <h3>{locale.terms.title}</h3>
+          <span>{locale.terms.subtitle}</span>
         </div>
 
         <div className="settings-legal-summary">
           <div className="settings-legal-summary-copy">
-            <strong>Resumen Umbra</strong>
-            <p>
-              Al usar Umbra aceptas una plataforma centrada en comunidad, identidad,
-              privacidad, mensajeria, voz y servidores administrados por sus propias reglas.
-            </p>
+            <strong>{locale.terms.summaryTitle}</strong>
+            <p>{locale.terms.summaryBody}</p>
           </div>
           <div className="settings-legal-summary-note">
-            <strong>Ultima revision</strong>
-            <span>08 abril 2026</span>
+            <strong>{locale.terms.lastReview}</strong>
+            <span>{termsReviewDate}</span>
           </div>
         </div>
 
         <div className="settings-legal-pill-row">
-          <span className="user-profile-chip">Respeto y convivencia</span>
-          <span className="user-profile-chip">Privacidad</span>
-          <span className="user-profile-chip">Moderacion</span>
-          <span className="user-profile-chip">Uso responsable</span>
+          {locale.terms.pills.map((pill) => (
+            <span className="user-profile-chip" key={pill}>{pill}</span>
+          ))}
         </div>
       </section>
 
       <section className="settings-card settings-legal-card">
         <div className="settings-card-title">
-          <h3>Condiciones generales</h3>
-          <span>
-            Estos puntos aplican al uso del cliente, la web, los servidores, los mensajes
-            directos y cualquier integracion futura de Umbra.
-          </span>
+          <h3>{locale.terms.conditionsTitle}</h3>
+          <span>{locale.terms.conditionsSubtitle}</span>
         </div>
 
         <div className="settings-legal-section-list">
@@ -1584,35 +2468,37 @@ export function SettingsModal({
 
       <section className="settings-card settings-legal-card">
         <div className="settings-card-title">
-          <h3>Lo que aceptas al usar Umbra</h3>
-          <span>Una version corta y clara de las reglas practicas del servicio.</span>
+          <h3>{locale.terms.acceptTitle}</h3>
+          <span>{locale.terms.acceptSubtitle}</span>
         </div>
 
         <ul className="settings-legal-checklist">
+          {locale.terms.checklist.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+
+        {false ? (
+          <ul className="settings-legal-checklist">
           <li>No usar Umbra para suplantar identidades ni engañar a otras personas.</li>
           <li>No automatizar invitaciones, DMs, menciones o llamadas de forma abusiva.</li>
           <li>No compartir contenido privado de terceros sin permiso.</li>
           <li>Respetar bloqueos, silencios, baneos y limites de moderacion.</li>
           <li>Cuidar tus accesos, dispositivos y metodos de recuperacion.</li>
           <li>Usar de forma responsable stickers, perfiles, servidores y conexiones visibles.</li>
-        </ul>
+          </ul>
+        ) : null}
       </section>
 
       <section className="settings-card settings-legal-card">
         <div className="settings-card-title">
-          <h3>Soporte y contacto</h3>
-          <span>
-            Si una norma de un servidor entra en conflicto con el uso seguro de Umbra,
-            prevalece la seguridad del servicio y de las personas usuarias.
-          </span>
+          <h3>{locale.terms.supportTitle}</h3>
+          <span>{locale.terms.supportSubtitle}</span>
         </div>
 
         <div className="settings-empty-state settings-empty-state-solid">
-          <strong>Recomendacion</strong>
-          <span>
-            Usa Conexiones para mantener tu correo principal y tu respaldo actualizados.
-            Eso facilita confirmaciones, recuperacion de acceso y avisos de seguridad.
-          </span>
+          <strong>{locale.terms.recommendation}</strong>
+          <span>{locale.terms.recommendationBody}</span>
         </div>
       </section>
     </div>
@@ -1820,7 +2706,11 @@ export function SettingsModal({
                     }}
                             type="button"
                           >
-                    <span>{editorOpen ? "Cerrar editor" : "Editar perfil de usuario"}</span>
+                    <span>
+                      {editorOpen
+                        ? locale.security.closeEditorButton
+                        : locale.security.editProfileButton}
+                    </span>
                   </button>
                 </div>
               </section>
@@ -1844,7 +2734,7 @@ export function SettingsModal({
                           onClick={() => setEditorOpen(true)}
                           type="button"
                         >
-                          Editar
+                          {locale.security.editButton}
                         </button>
                       </div>
                     ))}
@@ -1853,8 +2743,8 @@ export function SettingsModal({
               ) : (
                 <section className="settings-card profile-editor-card">
                   <div className="settings-card-title">
-                    <h3>Editar perfil</h3>
-                    <span>Elige avatar, panel, color y datos visibles de tu cuenta.</span>
+                    <h3>{locale.security.editProfileTitle}</h3>
+                    <span>{locale.security.editProfileSubtitle}</span>
                   </div>
 
                   <input
@@ -1874,7 +2764,7 @@ export function SettingsModal({
 
                   <form className="settings-form-grid" onSubmit={handleProfileSave}>
                     <div className="settings-field full">
-                      <span>Panel del perfil</span>
+                      <span>{locale.security.profilePanel}</span>
                       <div className="settings-banner-editor">
                         <div
                           className="settings-banner-preview"
@@ -1886,7 +2776,7 @@ export function SettingsModal({
                             type="button"
                           >
                             <Icon name="camera" />
-                            <span>Subir panel</span>
+                            <span>{locale.security.uploadPanel}</span>
                           </button>
                         </div>
                         <div className="settings-avatar-actions">
@@ -1896,7 +2786,7 @@ export function SettingsModal({
                             type="button"
                           >
                             <Icon name="upload" />
-                            <span>Cambiar imagen del panel</span>
+                            <span>{locale.security.changePanelImage}</span>
                           </button>
                           <button
                             className="ghost-button"
@@ -1913,15 +2803,15 @@ export function SettingsModal({
                             type="button"
                           >
                             <Icon name="close" />
-                            <span>Quitar imagen del panel</span>
+                            <span>{locale.security.removePanelImage}</span>
                           </button>
-                          <small>Usa una imagen horizontal para que el header se vea mejor.</small>
+                          <small>{locale.security.panelHelper}</small>
                         </div>
                       </div>
                     </div>
 
                     <div className="settings-field full">
-                      <span>Avatar</span>
+                      <span>{locale.security.avatar}</span>
                       <div className="settings-avatar-editor">
                         <Avatar
                           hue={form.avatarHue}
@@ -1937,7 +2827,7 @@ export function SettingsModal({
                             type="button"
                           >
                             <Icon name="upload" />
-                            <span>Subir foto</span>
+                            <span>{locale.security.uploadPhoto}</span>
                           </button>
                           <button
                             className="ghost-button"
@@ -1954,15 +2844,15 @@ export function SettingsModal({
                             type="button"
                           >
                             <Icon name="close" />
-                            <span>Quitar foto</span>
+                            <span>{locale.security.removePhoto}</span>
                           </button>
-                          <small>PNG, JPG o WEBP. Aparece en mensajes, miembros y perfiles.</small>
+                          <small>{locale.security.avatarHelper}</small>
                         </div>
                       </div>
                     </div>
 
                     <label className="settings-field">
-                      <span>Nombre de usuario</span>
+                      <span>{locale.security.username}</span>
                       <input
                         maxLength={24}
                         onChange={(event) => updateForm("username", sanitizeUsername(event.target.value))}
@@ -1972,17 +2862,17 @@ export function SettingsModal({
                     </label>
 
                     <label className="settings-field">
-                      <span>Estado personalizado</span>
+                      <span>{locale.security.customStatus}</span>
                       <input
                         maxLength={80}
                         onChange={(event) => updateForm("customStatus", event.target.value)}
-                        placeholder="Que estas haciendo ahora"
+                        placeholder={locale.security.customStatusPlaceholder}
                         value={form.customStatus}
                       />
                     </label>
 
                     <label className="settings-field full">
-                      <span>Bio</span>
+                      <span>{locale.security.bio}</span>
                       <textarea
                         maxLength={240}
                         onChange={(event) => updateForm("bio", event.target.value)}
@@ -1992,7 +2882,7 @@ export function SettingsModal({
                     </label>
 
                     <div className="settings-field full">
-                      <span>Color de respaldo del panel</span>
+                      <span>{locale.security.profileAccent}</span>
                       <div className="settings-color-editor">
                         <label className="settings-color-input">
                           <input
@@ -2028,7 +2918,7 @@ export function SettingsModal({
                     </div>
 
                     <label className="settings-field full">
-                      <span>Tono de respaldo del avatar</span>
+                      <span>{locale.security.avatarTone}</span>
                       <div className="settings-range-row">
                         <input
                           max="360"
@@ -2055,7 +2945,7 @@ export function SettingsModal({
                     <div className="settings-form-actions">
                       <button className="primary-button" disabled={saving} type="submit">
                         <Icon name="save" />
-                        <span>{saving ? "Guardando..." : "Guardar cambios"}</span>
+                        <span>{saving ? locale.security.saving : locale.security.saveChanges}</span>
                       </button>
                       <button
                         className="ghost-button"
@@ -2063,11 +2953,11 @@ export function SettingsModal({
                         type="button"
                       >
                         <Icon name="arrowRight" />
-                        <span>Volver</span>
+                        <span>{locale.security.back}</span>
                       </button>
                       <button className="ghost-button" onClick={onSignOut} type="button">
                         <Icon name="close" />
-                        <span>Cerrar sesion</span>
+                        <span>{locale.security.signOut}</span>
                       </button>
                     </div>
                   </form>
@@ -2091,8 +2981,8 @@ export function SettingsModal({
 
               <section className="settings-card">
                 <div className="settings-card-title">
-                  <h3>Estado actual</h3>
-                  <span>Presencia visible para el resto del workspace.</span>
+                  <h3>{locale.statusPanel.currentTitle}</h3>
+                  <span>{locale.statusPanel.currentSubtitle}</span>
                 </div>
 
                 <div className="settings-status-showcase">
@@ -2104,33 +2994,33 @@ export function SettingsModal({
                     status={user.status}
                   />
                   <div>
-                    <strong>{findStatusLabel(user.status)}</strong>
-                    <p>{user.custom_status || "Sin estado personalizado por ahora."}</p>
+                    <strong>{findLocalizedStatusLabel(user.status, locale)}</strong>
+                    <p>{user.custom_status || locale.statusPanel.noCustomStatus}</p>
                   </div>
                 </div>
               </section>
 
               <section className="settings-card">
                 <div className="settings-card-title">
-                  <h3>Resumen del espacio</h3>
-                  <span>Actividad actual dentro de Umbra.</span>
+                  <h3>{locale.statusPanel.workspaceTitle}</h3>
+                  <span>{locale.statusPanel.workspaceSubtitle}</span>
                 </div>
 
                 <div className="settings-summary-grid">
                   <div className="summary-tile">
                     <Icon name="community" />
                     <strong>{guildCount}</strong>
-                    <span>Servidores activos</span>
+                    <span>{locale.statusPanel.guilds}</span>
                   </div>
                   <div className="summary-tile">
                     <Icon name="mail" />
                     <strong>{dmCount}</strong>
-                    <span>DMs visibles</span>
+                    <span>{locale.statusPanel.dms}</span>
                   </div>
                   <div className="summary-tile">
                     <Icon name="sparkles" />
                     <strong>{theme === "dark" ? "Dark" : "Light"}</strong>
-                    <span>Modo visual</span>
+                    <span>{locale.statusPanel.theme}</span>
                   </div>
                 </div>
               </section>

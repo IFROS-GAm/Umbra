@@ -8,6 +8,8 @@ const GUILD_TEMPLATES = [
   { id: "study", icon: "study", label: "Grupo de estudio", description: "Clases, tareas y seguimiento." },
   { id: "community", icon: "community", label: "Comunidad local", description: "Eventos, anuncios y equipo." }
 ];
+const GROUP_DM_MAX_PARTICIPANTS = 10;
+const GROUP_DM_MAX_RECIPIENTS = GROUP_DM_MAX_PARTICIPANTS - 1;
 
 function buildTemplateName(template) {
   return `Servidor de ${template.label}`;
@@ -95,11 +97,22 @@ export function Dialog({ dialog, guildChannels = [], onClose, onSubmit, users })
   }, [dialog, users]);
 
   function toggleRecipient(userId) {
-    setRecipientIds((previous) =>
-      previous.includes(userId)
-        ? previous.filter((item) => item !== userId)
-        : [...previous, userId]
-    );
+    setRecipientIds((previous) => {
+      if (previous.includes(userId)) {
+        setError("");
+        return previous.filter((item) => item !== userId);
+      }
+
+      if (previous.length >= GROUP_DM_MAX_RECIPIENTS) {
+        setError(
+          `Un grupo directo admite maximo ${GROUP_DM_MAX_PARTICIPANTS} personas contando contigo.`
+        );
+        return previous;
+      }
+
+      setError("");
+      return [...previous, userId];
+    });
   }
 
   async function handleSubmit(event) {
@@ -110,6 +123,12 @@ export function Dialog({ dialog, guildChannels = [], onClose, onSubmit, users })
     try {
       if (dialog.type === "dm_group" && recipientIds.length < 2) {
         throw new Error("Selecciona al menos dos amigos para crear el grupo.");
+      }
+
+      if (dialog.type === "dm_group" && recipientIds.length > GROUP_DM_MAX_RECIPIENTS) {
+        throw new Error(
+          `Un grupo directo admite maximo ${GROUP_DM_MAX_PARTICIPANTS} personas contando contigo.`
+        );
       }
 
       await onSubmit({
@@ -322,7 +341,8 @@ export function Dialog({ dialog, guildChannels = [], onClose, onSubmit, users })
                 {users.length ? (
                   <>
                     <div className="dialog-field-helper">
-                      Selecciona al menos dos sombras. Si no nombras el grupo, Umbra mostrara a los integrantes.
+                      Selecciona entre 2 y {GROUP_DM_MAX_RECIPIENTS} sombras. Si no nombras el grupo,
+                      Umbra mostrara a los integrantes y solo tendra un chat de texto compartido.
                     </div>
                     <label className="dialog-friend-search">
                       <Icon name="search" size={16} />
@@ -333,13 +353,20 @@ export function Dialog({ dialog, guildChannels = [], onClose, onSubmit, users })
                         value={friendQuery}
                       />
                     </label>
-                    <div className="dialog-selected-count">{recipientIds.length} sombras elegidas</div>
+                    <div className="dialog-selected-count">
+                      {recipientIds.length + 1}/{GROUP_DM_MAX_PARTICIPANTS} personas
+                    </div>
                     <div className="dialog-friend-list discord-like">
                       {filteredFriendUsers.map((user) => {
                         const selected = recipientIds.includes(user.id);
+                        const atCapacity =
+                          !selected && recipientIds.length >= GROUP_DM_MAX_RECIPIENTS;
                         return (
                           <button
-                            className={`dialog-friend-option ${selected ? "selected" : ""}`}
+                            className={`dialog-friend-option ${selected ? "selected" : ""} ${
+                              atCapacity ? "disabled" : ""
+                            }`.trim()}
+                            disabled={atCapacity}
                             key={user.id}
                             onClick={() => toggleRecipient(user.id)}
                             type="button"
