@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 
 import { Icon } from "../Icon.jsx";
+import { translate } from "../../i18n.js";
 import { fallbackDeviceLabel } from "./workspaceHelpers.js";
 
 function buildUniqueDevices(devices, kind) {
@@ -16,6 +17,31 @@ function buildUniqueDevices(devices, kind) {
   });
 }
 
+function localizeGeneratedDeviceLabel(label, kind, language, t) {
+  const normalized = String(label || "").trim();
+
+  if (!normalized) {
+    return normalized;
+  }
+
+  if (normalized === "Configuracion predeterminada") {
+    return t("voice.device.default", "Configuracion predeterminada");
+  }
+
+  const patterns = {
+    audioinput: /^Microfono\s+(\d+)$/i,
+    audiooutput: /^Altavoces\s+(\d+)$/i,
+    videoinput: /^Camara\s+(\d+)$/i
+  };
+
+  const match = patterns[kind]?.exec(normalized);
+  if (!match) {
+    return normalized;
+  }
+
+  return fallbackDeviceLabel(kind, Number(match[1]) - 1, language);
+}
+
 export function WorkspaceInputMenu({
   activeInputBars,
   activeInputProfile,
@@ -24,6 +50,7 @@ export function WorkspaceInputMenu({
   handleApplyVoiceProfile,
   handleVoiceDeviceChange,
   inputMeterBars,
+  language = "es",
   selectedVoiceDevices,
   setSettingsOpen,
   setVoiceInputPanel,
@@ -39,7 +66,14 @@ export function WorkspaceInputMenu({
   voiceSuppressionCopy,
   voiceSuppressionLabel
 }) {
+  const t = (key, fallback = "") => translate(language, key, fallback);
   const inputDevices = voiceDevices.audioinput || [];
+  const selectedInputLabel = localizeGeneratedDeviceLabel(
+    getSelectedDeviceLabel("audioinput"),
+    "audioinput",
+    language,
+    t
+  );
 
   function renderInputSubmenu() {
     if (voiceInputPanel === "device") {
@@ -47,15 +81,17 @@ export function WorkspaceInputMenu({
         <div className="floating-surface voice-control-menu voice-control-submenu">
           <div className="voice-control-submenu-header">
             <div className="voice-control-heading">
-              <strong>Dispositivo de entrada</strong>
-              <small>{getSelectedDeviceLabel("audioinput")}</small>
+              <strong>{t("voice.input.device", "Dispositivo de entrada")}</strong>
+              <small>{selectedInputLabel}</small>
             </div>
           </div>
 
           <div className="voice-control-option-list">
             {inputDevices.length ? (
               inputDevices.map((device, index) => {
-                const label = device.label || `Microfono ${index + 1}`;
+                const label =
+                  device.label ||
+                  fallbackDeviceLabel("audioinput", index, language);
                 const selected = selectedVoiceDevices.audioinput === device.deviceId;
 
                 return (
@@ -65,7 +101,7 @@ export function WorkspaceInputMenu({
                     onClick={() => {
                       handleVoiceDeviceChange("audioinput", device.deviceId);
                       setVoiceInputPanel(null);
-                      showUiNotice(`Ahora usando ${label}.`);
+                      showUiNotice(`${t("voice.input.nowUsing", "Ahora usando")} ${label}.`);
                     }}
                     type="button"
                   >
@@ -77,7 +113,9 @@ export function WorkspaceInputMenu({
                 );
               })
             ) : (
-              <div className="voice-control-empty">No hay microfonos disponibles.</div>
+              <div className="voice-control-empty">
+                {t("voice.input.noDevices", "No hay microfonos disponibles.")}
+              </div>
             )}
           </div>
         </div>
@@ -89,7 +127,7 @@ export function WorkspaceInputMenu({
         <div className="floating-surface voice-control-menu voice-control-submenu">
           <div className="voice-control-submenu-header">
             <div className="voice-control-heading">
-              <strong>Perfil de entrada</strong>
+              <strong>{t("voice.input.profile", "Perfil de entrada")}</strong>
               <small>{activeInputProfileLabel}</small>
             </div>
           </div>
@@ -125,15 +163,15 @@ export function WorkspaceInputMenu({
     <div className="floating-surface voice-control-menu input-menu">
       <div className="voice-control-menu-header">
         <div className="voice-control-heading">
-          <strong>Supresion de ruido</strong>
+          <strong>{t("voice.input.noiseTitle", "Supresion de ruido")}</strong>
           <small>{voiceSuppressionLabel}</small>
         </div>
         <div className="voice-control-menu-actions">
           <button
             aria-label={
               voiceState.noiseSuppression
-                ? "Desactivar supresion de ruido"
-                : "Activar supresion de ruido"
+                ? t("voice.input.noiseDisable", "Desactivar supresion de ruido")
+                : t("voice.input.noiseEnable", "Activar supresion de ruido")
             }
             className={`voice-noise-toggle ${voiceState.noiseSuppression ? "active" : ""}`}
             onClick={() => toggleVoiceState("noiseSuppression")}
@@ -165,8 +203,8 @@ export function WorkspaceInputMenu({
         type="button"
       >
         <span>
-          <strong>Dispositivo de entrada</strong>
-          <small>{getSelectedDeviceLabel("audioinput")}</small>
+          <strong>{t("voice.input.device", "Dispositivo de entrada")}</strong>
+          <small>{selectedInputLabel}</small>
         </span>
         <Icon name="arrowRight" size={15} />
       </button>
@@ -179,7 +217,7 @@ export function WorkspaceInputMenu({
         type="button"
       >
         <span>
-          <strong>Perfil de entrada</strong>
+          <strong>{t("voice.input.profile", "Perfil de entrada")}</strong>
           <small>{activeInputProfileLabel}</small>
         </span>
         <Icon name="arrowRight" size={15} />
@@ -187,7 +225,7 @@ export function WorkspaceInputMenu({
 
       <div className="voice-control-slider-block">
         <div className="voice-control-title-row">
-          <strong>Volumen de entrada</strong>
+          <strong>{t("voice.input.volume", "Volumen de entrada")}</strong>
           <small>{voiceState.inputVolume}%</small>
         </div>
         <input
@@ -207,10 +245,13 @@ export function WorkspaceInputMenu({
         </div>
         <small className="voice-control-slider-caption">
           {voiceState.micMuted
-            ? "El microfono esta silenciado."
+            ? t("voice.input.muted", "El microfono esta silenciado.")
             : voiceInputStatus.ready
-              ? "Nivel en vivo del microfono."
-              : "Abre este panel o entra a una sala para activar el analizador."}
+              ? t("voice.input.liveLevel", "Nivel en vivo del microfono.")
+              : t(
+                  "voice.input.openAnalyzer",
+                  "Abre este panel o entra a una sala para activar el analizador."
+                )}
         </small>
       </div>
 
@@ -218,22 +259,25 @@ export function WorkspaceInputMenu({
 
       <div className="voice-control-footer">
         <button className="ghost-button small" onClick={() => setSettingsOpen(true)} type="button">
-          Ajustes de voz
+          {t("voice.common.settings", "Ajustes de voz")}
         </button>
         <button
           className="ghost-button small"
           onClick={() =>
             showUiNotice(
               voiceInputStatus.engine === "speex"
-                ? "Speex DSP esta activo sobre tu microfono."
+                ? t("voice.input.status.speex", "Speex DSP esta activo sobre tu microfono.")
                 : voiceInputStatus.engine === "native"
-                  ? "Umbra esta usando la supresion nativa del navegador."
-                  : "La supresion esta desactivada."
+                  ? t(
+                      "voice.input.status.native",
+                      "Umbra esta usando la supresion nativa del navegador."
+                    )
+                  : t("voice.input.status.off", "La supresion esta desactivada.")
             )
           }
           type="button"
         >
-          Ver estado
+          {t("voice.input.viewStatus", "Ver estado")}
         </button>
       </div>
 
@@ -245,16 +289,24 @@ export function WorkspaceInputMenu({
 export function WorkspaceCameraMenu({
   cameraStatus,
   getSelectedDeviceLabel,
+  language = "es",
   setSettingsOpen,
   toggleVoiceState,
   voiceState
 }) {
+  const t = (key, fallback = "") => translate(language, key, fallback);
+  const selectedCameraLabel = localizeGeneratedDeviceLabel(
+    getSelectedDeviceLabel("videoinput"),
+    "videoinput",
+    language,
+    t
+  );
   return (
     <div className="floating-surface voice-control-menu camera-menu">
       <button className="voice-control-link" type="button">
         <span>
-          <strong>Camara</strong>
-          <small>{getSelectedDeviceLabel("videoinput")}</small>
+          <strong>{t("voice.camera.title", "Camara")}</strong>
+          <small>{selectedCameraLabel}</small>
         </span>
         <Icon name="arrowRight" size={15} />
       </button>
@@ -267,13 +319,13 @@ export function WorkspaceCameraMenu({
         type="button"
       >
         <span>
-          <strong>Vista previa de la camara</strong>
+          <strong>{t("voice.camera.preview", "Vista previa de la camara")}</strong>
           <small>
             {cameraStatus.error
               ? cameraStatus.error
               : voiceState.cameraEnabled && cameraStatus.ready
-                ? cameraStatus.label || "Camara activa"
-                : "Inactiva"}
+                ? cameraStatus.label || t("voice.camera.active", "Camara activa")
+                : t("voice.camera.inactive", "Inactiva")}
           </small>
         </span>
         <Icon name="camera" size={16} />
@@ -281,8 +333,8 @@ export function WorkspaceCameraMenu({
 
       <button className="voice-control-link" onClick={() => setSettingsOpen(true)} type="button">
         <span>
-          <strong>Ajustes de video</strong>
-          <small>Configuracion local de Umbra</small>
+          <strong>{t("voice.camera.settings", "Ajustes de video")}</strong>
+          <small>{t("voice.camera.settingsCopy", "Configuracion local de Umbra")}</small>
         </span>
         <Icon name="settings" size={16} />
       </button>
@@ -293,6 +345,7 @@ export function WorkspaceCameraMenu({
 export function WorkspaceOutputMenu({
   getSelectedDeviceLabel,
   handleVoiceDeviceChange,
+  language = "es",
   selectedVoiceDevices,
   setSettingsOpen,
   setVoiceOutputPanel,
@@ -302,8 +355,14 @@ export function WorkspaceOutputMenu({
   voiceOutputPanel,
   voiceState
 }) {
+  const t = (key, fallback = "") => translate(language, key, fallback);
   const outputDevices = buildUniqueDevices(voiceDevices.audiooutput || [], "audiooutput");
-  const currentOutputLabel = getSelectedDeviceLabel("audiooutput");
+  const currentOutputLabel = localizeGeneratedDeviceLabel(
+    getSelectedDeviceLabel("audiooutput"),
+    "audiooutput",
+    language,
+    t
+  );
   const isDefaultOutputSelected =
     selectedVoiceDevices.audiooutput === "default" ||
     !outputDevices.some((device) => device.deviceId === selectedVoiceDevices.audiooutput);
@@ -313,47 +372,65 @@ export function WorkspaceOutputMenu({
 
     if (isDefault) {
       return {
-        badge: "Windows",
-        description: "Umbra sigue la salida predeterminada del sistema en tiempo real.",
+        badge: t("voice.output.badge.windows", "Windows"),
+        description: t(
+          "voice.output.desc.default",
+          "Umbra sigue la salida predeterminada del sistema en tiempo real."
+        ),
         tone: "system"
       };
     }
 
     if (/vb-audio|voicemeeter|virtual|cable/.test(normalized)) {
       return {
-        badge: "Virtual",
-        description: "Ideal para mezclar escenas, streams y rutas sonoras alternativas.",
+        badge: t("voice.output.badge.virtual", "Virtual"),
+        description: t(
+          "voice.output.desc.virtual",
+          "Ideal para mezclar escenas, streams y rutas sonoras alternativas."
+        ),
         tone: "virtual"
       };
     }
 
     if (/bluetooth|airpods|buds|wireless/.test(normalized)) {
       return {
-        badge: "Inalambrico",
-        description: "Salida ligera para moverte por Umbra sin cables de por medio.",
+        badge: t("voice.output.badge.wireless", "Inalambrico"),
+        description: t(
+          "voice.output.desc.wireless",
+          "Salida ligera para moverte por Umbra sin cables de por medio."
+        ),
         tone: "wireless"
       };
     }
 
     if (/usb|headset|audif|auric|webcam/.test(normalized)) {
       return {
-        badge: "USB",
-        description: "Ruta estable para monitoreo directo, llamadas y sesiones largas.",
+        badge: t("voice.output.badge.usb", "USB"),
+        description: t(
+          "voice.output.desc.usb",
+          "Ruta estable para monitoreo directo, llamadas y sesiones largas."
+        ),
         tone: "usb"
       };
     }
 
     if (/speaker|altavoc|realtek|high definition|hd audio/.test(normalized)) {
       return {
-        badge: "Sistema",
-        description: "Salida principal del equipo, limpia y lista para escuchar el canal.",
+        badge: t("voice.output.badge.system", "Sistema"),
+        description: t(
+          "voice.output.desc.system",
+          "Salida principal del equipo, limpia y lista para escuchar el canal."
+        ),
         tone: "system"
       };
     }
 
     return {
-      badge: "Ruta",
-      description: "Una salida disponible para dejar pasar la voz y el ambiente de Umbra.",
+      badge: t("voice.output.badge.route", "Ruta"),
+      description: t(
+        "voice.output.desc.generic",
+        "Una salida disponible para dejar pasar la voz y el ambiente de Umbra."
+      ),
       tone: "umbra"
     };
   }
@@ -371,8 +448,10 @@ export function WorkspaceOutputMenu({
       <div className="floating-surface voice-control-menu voice-control-submenu">
         <div className="voice-control-submenu-header">
           <div className="voice-control-heading">
-            <strong>Ruta de salida</strong>
-            <small>Escoge por donde Umbra deja caer la voz del canal.</small>
+            <strong>{t("voice.output.routeTitle", "Ruta de salida")}</strong>
+            <small>
+              {t("voice.output.routeSubtitle", "Escoge por donde Umbra deja caer la voz del canal.")}
+            </small>
           </div>
         </div>
 
@@ -384,22 +463,31 @@ export function WorkspaceOutputMenu({
             onClick={() => {
               handleVoiceDeviceChange("audiooutput", "default");
               setVoiceOutputPanel(null);
-              showUiNotice("Salida en configuracion predeterminada de Windows.");
+              showUiNotice(
+                t(
+                  "voice.output.noticeDefault",
+                  "Salida en configuracion predeterminada de Windows."
+                )
+              );
             }}
             type="button"
           >
             <span className="voice-output-choice-copy">
-              <strong>Configuracion predeterminada de Windows</strong>
+              <strong>{t("voice.output.windowsDefault", "Configuracion predeterminada de Windows")}</strong>
               <small>{describeOutputRoute(currentOutputLabel, { isDefault: true }).description}</small>
             </span>
             <span className="voice-output-choice-meta">
-              <em className="voice-route-badge system">Windows</em>
+              <em className="voice-route-badge system">
+                {t("voice.output.badge.windows", "Windows")}
+              </em>
               <i className={`voice-control-radio ${isDefaultOutputSelected ? "selected" : ""}`.trim()} />
             </span>
           </button>
 
           {outputDevices.map((device, index) => {
-            const label = device.label || fallbackDeviceLabel("audiooutput", index);
+            const label =
+              device.label ||
+              fallbackDeviceLabel("audiooutput", index, language);
             const selected = selectedVoiceDevices.audiooutput === device.deviceId;
             const route = describeOutputRoute(label);
 
@@ -410,7 +498,7 @@ export function WorkspaceOutputMenu({
                 onClick={() => {
                   handleVoiceDeviceChange("audiooutput", device.deviceId);
                   setVoiceOutputPanel(null);
-                  showUiNotice(`Salida: ${label}.`);
+                  showUiNotice(`${t("voice.output.noticeRoute", "Salida")}: ${label}.`);
                 }}
                 type="button"
               >
@@ -442,7 +530,9 @@ export function WorkspaceOutputMenu({
         type="button"
       >
         <span className="voice-route-card-copy">
-          <small className="voice-route-eyebrow">Ruta sonora</small>
+          <small className="voice-route-eyebrow">
+            {t("voice.output.routeEyebrow", "Ruta sonora")}
+          </small>
           <strong>{currentOutputLabel}</strong>
           <small>{currentOutputRoute.description}</small>
         </span>
@@ -458,7 +548,7 @@ export function WorkspaceOutputMenu({
 
       <div className="voice-control-slider-block">
         <div className="voice-control-title-row">
-          <strong>Volumen de salida</strong>
+          <strong>{t("voice.output.volume", "Volumen de salida")}</strong>
           <small>{voiceState.outputVolume}%</small>
         </div>
         <input
@@ -474,7 +564,7 @@ export function WorkspaceOutputMenu({
 
       <div className="voice-control-footer">
         <button className="ghost-button small" onClick={() => setSettingsOpen(true)} type="button">
-          Ajustes de voz
+          {t("voice.common.settings", "Ajustes de voz")}
         </button>
       </div>
 
@@ -483,41 +573,125 @@ export function WorkspaceOutputMenu({
   );
 }
 
-export function WorkspaceShareMenu({ showUiNotice, toggleVoiceState, voiceState }) {
+export function WorkspaceShareMenu({
+  onChangeScreenShareQuality,
+  onChangeShareSource,
+  onToggleScreenShare,
+  onToggleShareAudio,
+  language = "es",
+  screenSharePickerOpen = false,
+  screenShareQualityLabel = "720P 30 FPS",
+  shareQualityOptions = [],
+  showUiNotice,
+  voiceShareStatus,
+  voiceState
+}) {
+  const t = (key, fallback = "") => translate(language, key, fallback);
+  const [shareSubmenu, setShareSubmenu] = useState(null);
+
+  useEffect(() => {
+    if (!voiceState.screenShareEnabled && !screenSharePickerOpen) {
+      setShareSubmenu(null);
+    }
+  }, [screenSharePickerOpen, voiceState.screenShareEnabled]);
+
+  function renderQualitySubmenu() {
+    if (shareSubmenu !== "quality") {
+      return null;
+    }
+
+    return (
+      <div className="floating-surface voice-control-menu voice-control-submenu">
+        <div className="voice-control-submenu-header">
+          <div className="voice-control-heading">
+            <strong>{t("voice.share.quality", "Calidad de la transmision")}</strong>
+            <small>{screenShareQualityLabel}</small>
+          </div>
+        </div>
+
+        <div className="voice-control-option-list">
+          {shareQualityOptions.map((option) => {
+            const selected = voiceState.screenShareQuality === option.id;
+            return (
+              <button
+                className={`voice-control-option ${selected ? "selected" : ""}`.trim()}
+                key={option.id}
+                onClick={() => {
+                  onChangeScreenShareQuality?.(option.id);
+                  setShareSubmenu(null);
+                }}
+                type="button"
+              >
+                <span>
+                  <strong>{option.label}</strong>
+                  <small>{option.description}</small>
+                </span>
+                <i className={`voice-control-radio ${selected ? "selected" : ""}`.trim()} />
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="floating-surface voice-control-menu share-menu">
       <button
         className={`voice-control-link danger ${voiceState.screenShareEnabled ? "active" : ""}`}
-        onClick={() => toggleVoiceState("screenShareEnabled")}
+        onClick={() => {
+          onToggleScreenShare?.();
+          setShareSubmenu(null);
+        }}
         type="button"
       >
         <span>
-          <strong>{voiceState.screenShareEnabled ? "Dejar de transmitir" : "Iniciar transmision"}</strong>
+          <strong>
+            {voiceState.screenShareEnabled
+              ? t("voice.share.stop", "Dejar de transmitir")
+              : t("voice.share.start", "Iniciar transmision")}
+          </strong>
         </span>
         <Icon name="screenShare" size={16} />
       </button>
 
-      <button className="voice-control-link" type="button">
+      <button
+        className="voice-control-link"
+        onClick={() => {
+          onChangeShareSource?.();
+          setShareSubmenu(null);
+        }}
+        type="button"
+      >
         <span>
-          <strong>Cambiar transmision</strong>
-          <small>Ventana o pantalla local</small>
+          <strong>{t("voice.share.change", "Cambiar transmision")}</strong>
+          <small>
+            {voiceShareStatus?.label ||
+              t("voice.share.changeCopy", "Ventana o pantalla local")}
+          </small>
         </span>
         <Icon name="screenShare" size={16} />
       </button>
 
-      <button className="voice-control-link" type="button">
+      <button
+        className={`voice-control-link ${shareSubmenu === "quality" ? "panel-open" : ""}`.trim()}
+        onClick={() =>
+          setShareSubmenu((previous) => (previous === "quality" ? null : "quality"))
+        }
+        type="button"
+      >
         <span>
-          <strong>Calidad de la transmision</strong>
-          <small>720P 30 FPS</small>
+          <strong>{t("voice.share.quality", "Calidad de la transmision")}</strong>
+          <small>{screenShareQualityLabel}</small>
         </span>
         <Icon name="arrowRight" size={15} />
       </button>
 
       <label className="voice-control-check">
-        <span>Compartir audio de la transmision</span>
+        <span>{t("voice.share.audio", "Compartir audio de la transmision")}</span>
         <input
           checked={voiceState.shareAudio}
-          onChange={() => toggleVoiceState("shareAudio")}
+          onChange={() => onToggleShareAudio?.()}
           type="checkbox"
         />
       </label>
@@ -526,14 +700,20 @@ export function WorkspaceShareMenu({ showUiNotice, toggleVoiceState, voiceState 
 
       <button
         className="voice-control-link danger"
-        onClick={() => showUiNotice("Registro de incidencias de transmision pendiente.")}
+        onClick={() =>
+          showUiNotice(
+            t("voice.share.reportNotice", "Registro de incidencias de transmision pendiente.")
+          )
+        }
         type="button"
       >
         <span>
-          <strong>Informar problema</strong>
+          <strong>{t("voice.share.report", "Informar problema")}</strong>
         </span>
         <Icon name="help" size={16} />
       </button>
+
+      {renderQualitySubmenu()}
     </div>
   );
 }

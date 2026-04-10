@@ -139,11 +139,41 @@ export function createWorkspaceCoreActions(context) {
     setUiNotice,
     setUploadingAttachments,
     setVoiceMenu,
+    setVoiceSessions,
     setVoiceState,
     setWorkspace,
     voiceDevices,
     workspace
   } = context;
+  const currentUserId = workspace?.current_user?.id || "";
+
+  function applyLocalVoicePresence(nextChannelId = null) {
+    if (!currentUserId) {
+      return;
+    }
+
+    setVoiceSessions((previous) => {
+      const nextState = {};
+
+      Object.entries(previous || {}).forEach(([channelId, userIds]) => {
+        const filteredIds = (Array.isArray(userIds) ? userIds : []).filter(
+          (userId) => userId !== currentUserId
+        );
+        if (filteredIds.length) {
+          nextState[channelId] = filteredIds;
+        }
+      });
+
+      if (nextChannelId) {
+        const existing = nextState[nextChannelId] || [];
+        nextState[nextChannelId] = existing.includes(currentUserId)
+          ? existing
+          : [...existing, currentUserId];
+      }
+
+      return nextState;
+    });
+  }
 
   function scrollToBottom() {
     requestAnimationFrame(() => {
@@ -771,6 +801,7 @@ export function createWorkspaceCoreActions(context) {
     });
 
     if (channel.is_voice && accessToken) {
+      applyLocalVoicePresence(channel.id);
       getSocket(accessToken).emit("voice:join", {
         channelId: channel.id
       });
@@ -800,6 +831,7 @@ export function createWorkspaceCoreActions(context) {
       }));
     }
 
+    applyLocalVoicePresence(selectedChannel.id);
     getSocket(accessToken).emit("voice:join", {
       channelId: selectedChannel.id
     });
@@ -807,18 +839,31 @@ export function createWorkspaceCoreActions(context) {
   }
 
   function handleVoiceLeave() {
-    if (!joinedVoiceChannelId || !accessToken) {
-      return;
-    }
-
-    getSocket(accessToken).emit("voice:leave");
+    const previousChannelId = joinedVoiceChannelId;
+    applyLocalVoicePresence(null);
     setVoiceMenu(null);
+    setHeaderPanel(null);
     setJoinedVoiceChannelId(null);
     setVoiceState((previous) => ({
       ...previous,
       cameraEnabled: false,
+      deafen: false,
+      micMuted: false,
       screenShareEnabled: false
     }));
+    setAppError("");
+
+    if (!previousChannelId || !accessToken) {
+      return;
+    }
+
+    try {
+      getSocket(accessToken).emit("voice:leave", {
+        channelId: previousChannelId
+      });
+    } catch {
+      // Keep optimistic local cleanup even if the socket is not ready.
+    }
   }
 
   return {

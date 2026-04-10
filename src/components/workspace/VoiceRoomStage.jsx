@@ -1,9 +1,9 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 import { Avatar } from "../Avatar.jsx";
 import { Icon } from "../Icon.jsx";
 
-function VoiceStageVideo({ stream, user }) {
+function VoiceStageVideo({ muted = true, stream, user, volume = 1 }) {
   const videoRef = useRef(null);
 
   useEffect(() => {
@@ -12,13 +12,15 @@ function VoiceStageVideo({ stream, user }) {
     }
 
     videoRef.current.srcObject = stream || null;
+    videoRef.current.muted = Boolean(muted);
+    videoRef.current.volume = Math.max(0, Math.min(1, Number(volume) || 0));
 
     return () => {
       if (videoRef.current) {
         videoRef.current.srcObject = null;
       }
     };
-  }, [stream]);
+  }, [muted, stream, volume]);
 
   return (
     <video
@@ -40,18 +42,34 @@ export function VoiceRoomStage({
   isDirectCall,
   joinedVoiceChannelId,
   onHandleVoiceLeave,
+  onOpenParticipantMenu,
   onJoinVoiceChannel,
   onOpenProfileCard,
+  onToggleScreenShare,
   onShowNotice,
   onToggleVoiceMenu,
   onToggleVoiceState,
   shareMenuNode,
+  screenShareQualityLabel = "720P 30 FPS",
   voiceMenu,
   voiceInputLevel,
   voiceStageParticipants,
   voiceState,
   workspace
 }) {
+  const [expandedStreamOpen, setExpandedStreamOpen] = useState(false);
+  const featuredStreamUser =
+    voiceStageParticipants.find((user) => user.localScreenShareStream) || null;
+  const secondaryParticipants = featuredStreamUser
+    ? voiceStageParticipants.filter((user) => user.id !== featuredStreamUser.id)
+    : voiceStageParticipants;
+
+  useEffect(() => {
+    if (!featuredStreamUser?.localScreenShareStream && expandedStreamOpen) {
+      setExpandedStreamOpen(false);
+    }
+  }, [expandedStreamOpen, featuredStreamUser]);
+
   return (
     <section className="voice-room-stage">
       <div className="voice-room-hero">
@@ -85,63 +103,207 @@ export function VoiceRoomStage({
         )}
       </div>
 
-      <div className={`voice-stage-grid tile-count-${Math.max(voiceStageParticipants.length, 1)}`}>
-        {voiceStageParticipants.length ? (
-          voiceStageParticipants.map((user) => (
-            <button
-              className={`voice-stage-tile ${user.isStreaming ? "streaming" : ""} ${user.isSpeaking ? "speaking" : ""}`.trim()}
-              key={user.id}
-              onClick={(event) => onOpenProfileCard(event, user, user.display_name)}
-              style={user.stageStyle}
-              type="button"
-            >
-              <div className="voice-stage-tile-top">
-                {user.isStreaming ? (
-                  <>
-                    <span className="voice-stage-quality">720P 30 FPS</span>
-                    <span className="voice-stage-live">EN VIVO</span>
-                  </>
-                ) : (
-                  <span className="voice-stage-quality subtle">
-                    {user.custom_status || "Umbra voice"}
-                  </span>
-                )}
-              </div>
+      {featuredStreamUser ? (
+        <div className="voice-stage-featured-layout">
+          <button
+            className={`voice-stage-featured ${featuredStreamUser.isSpeaking ? "speaking" : ""}`.trim()}
+            onClick={() => setExpandedStreamOpen(true)}
+            onContextMenu={(event) => onOpenParticipantMenu?.(event, featuredStreamUser)}
+            style={featuredStreamUser.stageStyle}
+            type="button"
+          >
+            <div className="voice-stage-featured-top">
+              <span className="voice-stage-quality">{screenShareQualityLabel}</span>
+              <span className="voice-stage-live">EN VIVO</span>
+            </div>
 
-              <div className="voice-stage-center">
-                {user.isCameraOn && user.localCameraStream ? (
-                  <div className="voice-stage-video-shell">
-                    <VoiceStageVideo stream={user.localCameraStream} user={user} />
-                  </div>
-                ) : (
-                  <Avatar
-                    hue={user.avatar_hue}
-                    label={user.display_name || user.username}
-                    size={84}
-                    src={user.avatar_url}
-                    status={user.status}
+            <div className="voice-stage-video-shell featured">
+              <VoiceStageVideo
+                muted={featuredStreamUser.mediaMuted}
+                stream={featuredStreamUser.localScreenShareStream}
+                user={featuredStreamUser}
+                volume={featuredStreamUser.mediaVolume}
+              />
+            </div>
+
+            <div className="voice-stage-featured-pip">
+              {featuredStreamUser.isCameraOn && featuredStreamUser.localCameraStream ? (
+                <div className="voice-stage-video-shell pip">
+                  <VoiceStageVideo
+                    muted={featuredStreamUser.mediaMuted}
+                    stream={featuredStreamUser.localCameraStream}
+                    user={featuredStreamUser}
+                    volume={featuredStreamUser.mediaVolume}
                   />
-                )}
-              </div>
+                </div>
+              ) : (
+                <Avatar
+                  hue={featuredStreamUser.avatar_hue}
+                  label={featuredStreamUser.display_name || featuredStreamUser.username}
+                  size={84}
+                  src={featuredStreamUser.avatar_url}
+                  status={featuredStreamUser.status}
+                />
+              )}
+            </div>
 
-              <div className="voice-stage-nameplate">
-                <strong>{user.display_name || user.username}</strong>
-                {user.id === workspace.current_user.id && voiceState.micMuted ? (
-                  <Icon name="micOff" size={14} />
-                ) : null}
-                {user.id === workspace.current_user.id && !voiceState.micMuted ? (
-                  <span className="voice-stage-level-chip">{Math.round(voiceInputLevel)}%</span>
-                ) : null}
+            <div className="voice-stage-nameplate featured">
+              <strong>{featuredStreamUser.display_name || featuredStreamUser.username}</strong>
+            </div>
+          </button>
+
+          <div className="voice-stage-thumbnail-strip">
+            {secondaryParticipants.length ? (
+              secondaryParticipants.map((user) => (
+                <button
+                  className={`voice-stage-thumbnail ${user.isSpeaking ? "speaking" : ""}`.trim()}
+                  key={user.id}
+                  onClick={(event) => {
+                    if (user.isStreaming && user.localScreenShareStream) {
+                      setExpandedStreamOpen(true);
+                      return;
+                    }
+
+                    onOpenProfileCard(event, user, user.display_name);
+                  }}
+                  onContextMenu={(event) => onOpenParticipantMenu?.(event, user)}
+                  style={user.stageStyle}
+                  type="button"
+                >
+                  {user.isCameraOn && user.localCameraStream ? (
+                    <div className="voice-stage-video-shell thumbnail">
+                      <VoiceStageVideo
+                        muted={user.mediaMuted}
+                        stream={user.localCameraStream}
+                        user={user}
+                        volume={user.mediaVolume}
+                      />
+                    </div>
+                  ) : user.isVideoHiddenForMe && (user.isStreaming || user.isCameraOn) ? (
+                    <div className="voice-stage-hidden-media">
+                      <Avatar
+                        hue={user.avatar_hue}
+                        label={user.display_name || user.username}
+                        size={72}
+                        src={user.avatar_url}
+                        status={user.status}
+                      />
+                      <span>{user.hiddenVideoLabel || "Video oculto"}</span>
+                    </div>
+                  ) : (
+                    <Avatar
+                      hue={user.avatar_hue}
+                      label={user.display_name || user.username}
+                      size={72}
+                      src={user.avatar_url}
+                      status={user.status}
+                    />
+                  )}
+
+                  <div className="voice-stage-nameplate thumbnail">
+                    <strong>{user.display_name || user.username}</strong>
+                  </div>
+                </button>
+              ))
+            ) : (
+              <div className="voice-stage-thumbnail-empty">
+                Comparte la pantalla mientras mantienes la llamada viva con tu camara o avatar.
               </div>
-            </button>
-          ))
-        ) : (
-          <div className="empty-state compact voice-empty-stage">
-            <h3>Aun no hay participantes.</h3>
-            <p>Cuando alguien entre al canal, aparecera aqui su tile de voz.</p>
+            )}
           </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className={`voice-stage-grid tile-count-${Math.max(voiceStageParticipants.length, 1)}`}>
+          {voiceStageParticipants.length ? (
+            voiceStageParticipants.map((user) => (
+              <button
+                className={`voice-stage-tile ${user.isStreaming ? "streaming" : ""} ${user.isSpeaking ? "speaking" : ""}`.trim()}
+                key={user.id}
+                onClick={(event) => {
+                  if (user.isStreaming && user.localScreenShareStream) {
+                    setExpandedStreamOpen(true);
+                    return;
+                  }
+
+                  onOpenProfileCard(event, user, user.display_name);
+                }}
+                onContextMenu={(event) => onOpenParticipantMenu?.(event, user)}
+                style={user.stageStyle}
+                type="button"
+              >
+                <div className="voice-stage-tile-top">
+                  {user.isStreaming ? (
+                    <>
+                      <span className="voice-stage-quality">{user.screenShareQualityLabel || screenShareQualityLabel}</span>
+                      <span className="voice-stage-live">EN VIVO</span>
+                    </>
+                  ) : (
+                    <span className="voice-stage-quality subtle">
+                      {user.custom_status || "Umbra voice"}
+                    </span>
+                  )}
+                </div>
+
+                <div className="voice-stage-center">
+                  {user.isStreaming && user.localScreenShareStream ? (
+                    <div className="voice-stage-video-shell">
+                      <VoiceStageVideo
+                        muted={user.mediaMuted}
+                        stream={user.localScreenShareStream}
+                        user={user}
+                        volume={user.mediaVolume}
+                      />
+                    </div>
+                  ) : user.isCameraOn && user.localCameraStream ? (
+                    <div className="voice-stage-video-shell">
+                      <VoiceStageVideo
+                        muted={user.mediaMuted}
+                        stream={user.localCameraStream}
+                        user={user}
+                        volume={user.mediaVolume}
+                      />
+                    </div>
+                  ) : user.isVideoHiddenForMe && (user.isStreaming || user.isCameraOn) ? (
+                    <div className="voice-stage-hidden-media">
+                      <Avatar
+                        hue={user.avatar_hue}
+                        label={user.display_name || user.username}
+                        size={84}
+                        src={user.avatar_url}
+                        status={user.status}
+                      />
+                      <span>{user.hiddenVideoLabel || "Video oculto"}</span>
+                    </div>
+                  ) : (
+                    <Avatar
+                      hue={user.avatar_hue}
+                      label={user.display_name || user.username}
+                      size={84}
+                      src={user.avatar_url}
+                      status={user.status}
+                    />
+                  )}
+                </div>
+
+                <div className="voice-stage-nameplate">
+                  <strong>{user.display_name || user.username}</strong>
+                  {user.id === workspace.current_user.id && voiceState.micMuted ? (
+                    <Icon name="micOff" size={14} />
+                  ) : null}
+                  {user.id === workspace.current_user.id && !voiceState.micMuted ? (
+                    <span className="voice-stage-level-chip">{Math.round(voiceInputLevel)}%</span>
+                  ) : null}
+                </div>
+              </button>
+            ))
+          ) : (
+            <div className="empty-state compact voice-empty-stage">
+              <h3>Aun no hay participantes.</h3>
+              <p>Cuando alguien entre al canal, aparecera aqui su tile de voz.</p>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="voice-stage-bottom-bar">
         <div className="voice-stage-control-group voice-stage-menu-shell">
@@ -202,7 +364,7 @@ export function VoiceRoomStage({
               voiceState.screenShareEnabled ? "Detener transmision" : "Compartir pantalla"
             }
             data-tooltip-position="top"
-            onClick={() => onToggleVoiceState("screenShareEnabled")}
+            onClick={onToggleScreenShare}
             type="button"
           >
             <Icon name="screenShare" />
@@ -241,7 +403,14 @@ export function VoiceRoomStage({
             className="voice-stage-control tooltip-anchor"
             data-tooltip="Pantalla completa"
             data-tooltip-position="top"
-            onClick={() => onShowNotice("Vista expandida preparada para la shell desktop.")}
+            onClick={() => {
+              if (featuredStreamUser?.localScreenShareStream) {
+                setExpandedStreamOpen(true);
+                return;
+              }
+
+              onShowNotice("Primero inicia una transmision para ampliarla.");
+            }}
             type="button"
           >
             <Icon name="expand" />
@@ -267,6 +436,48 @@ export function VoiceRoomStage({
           <Icon name="close" />
         </button>
       </div>
+
+      {expandedStreamOpen && featuredStreamUser?.localScreenShareStream ? (
+        <div
+          className="voice-stage-stream-overlay"
+          onClick={() => setExpandedStreamOpen(false)}
+          role="presentation"
+        >
+          <div
+            className="voice-stage-stream-modal"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <div className="voice-stage-stream-modal-top">
+              <div className="voice-stage-stream-modal-badges">
+                <span className="voice-stage-quality">{screenShareQualityLabel}</span>
+                <span className="voice-stage-live">EN VIVO</span>
+              </div>
+              <button
+                className="voice-stage-stream-close"
+                onClick={() => setExpandedStreamOpen(false)}
+                type="button"
+              >
+                <Icon name="close" size={16} />
+              </button>
+            </div>
+
+            <div className="voice-stage-stream-frame">
+              <div className="voice-stage-video-shell stream-modal">
+                <VoiceStageVideo
+                  stream={featuredStreamUser.localScreenShareStream}
+                  user={featuredStreamUser}
+                />
+              </div>
+
+              <div className="voice-stage-stream-chip">
+                <strong>{featuredStreamUser.display_name || featuredStreamUser.username}</strong>
+                <small>{featuredStreamUser.custom_status || "Transmision activa"}</small>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -47,6 +47,9 @@ export function useWorkspaceShellState({
       return {};
     }
   });
+  const [voiceParticipantMenu, setVoiceParticipantMenu] = useState(null);
+  const [voiceParticipantPrefs, setVoiceParticipantPrefs] = useState({});
+  const [voiceParticipantPrefsLoaded, setVoiceParticipantPrefsLoaded] = useState(false);
   const [serverFolders, setServerFolders] = useState([]);
   const desktopShellRef = useRef(null);
   const appShellRef = useRef(null);
@@ -60,6 +63,41 @@ export function useWorkspaceShellState({
   useEffect(() => {
     localStorage.setItem("umbra-dm-menu-prefs", JSON.stringify(dmMenuPrefs));
   }, [dmMenuPrefs]);
+
+  useEffect(() => {
+    setVoiceParticipantPrefsLoaded(false);
+
+    if (!currentUserId) {
+      setVoiceParticipantPrefs({});
+      setVoiceParticipantPrefsLoaded(true);
+      return;
+    }
+
+    try {
+      const saved = localStorage.getItem(`umbra-voice-participant-prefs-${currentUserId}`);
+      const parsed = saved ? JSON.parse(saved) : {};
+      setVoiceParticipantPrefs(parsed && typeof parsed === "object" ? parsed : {});
+    } catch {
+      setVoiceParticipantPrefs({});
+    }
+
+    setVoiceParticipantPrefsLoaded(true);
+  }, [currentUserId]);
+
+  useEffect(() => {
+    if (!currentUserId || !voiceParticipantPrefsLoaded) {
+      return;
+    }
+
+    try {
+      localStorage.setItem(
+        `umbra-voice-participant-prefs-${currentUserId}`,
+        JSON.stringify(voiceParticipantPrefs)
+      );
+    } catch {
+      // Ignore local-only persistence issues.
+    }
+  }, [currentUserId, voiceParticipantPrefs, voiceParticipantPrefsLoaded]);
 
   useEffect(() => {
     if (!currentUserId) {
@@ -180,9 +218,13 @@ export function useWorkspaceShellState({
     setMembersPanelWidth,
     setServerFolders,
     setServerSettingsGuildId,
+    setVoiceParticipantMenu,
+    setVoiceParticipantPrefs,
     setVoiceInputPanel,
     setVoiceOutputPanel,
     viewportWidth,
+    voiceParticipantMenu,
+    voiceParticipantPrefs,
     voiceInputPanel,
     voiceOutputPanel
   };

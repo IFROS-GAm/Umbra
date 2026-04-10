@@ -62,6 +62,7 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
     pushToTalk: false,
     outputVolume: 52,
     screenShareEnabled: false,
+    screenShareQuality: "720p30",
     shareAudio: true
   });
   const [voiceSessions, setVoiceSessions] = useState({});
@@ -291,6 +292,7 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
     setUiNotice,
     setUploadingAttachments,
     setVoiceMenu,
+    setVoiceSessions,
     setVoiceState,
     setWorkspace,
     voiceDevices,

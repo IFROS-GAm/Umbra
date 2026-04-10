@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, shell, desktopCapturer } = require("electron");
 const dotenv = require("dotenv");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -274,6 +274,26 @@ ipcMain.handle("umbra:consume-auth-callback", async () => {
   const callbackUrl = pendingAuthCallback;
   pendingAuthCallback = null;
   return callbackUrl;
+});
+
+ipcMain.handle("umbra:list-display-sources", async () => {
+  const sources = await desktopCapturer.getSources({
+    fetchWindowIcons: true,
+    thumbnailSize: {
+      height: 360,
+      width: 640
+    },
+    types: ["window", "screen"]
+  });
+
+  return sources.map((source) => ({
+    appIconDataUrl: source.appIcon?.isEmpty?.() ? "" : source.appIcon?.toDataURL?.() || "",
+    displayId: source.display_id || "",
+    id: source.id,
+    kind: String(source.id || "").startsWith("screen:") ? "screen" : "window",
+    name: source.name,
+    thumbnailDataUrl: source.thumbnail?.isEmpty?.() ? "" : source.thumbnail?.toDataURL?.() || ""
+  }));
 });
 
 ipcMain.on("umbra:get-runtime-config", (event) => {

@@ -160,16 +160,38 @@ export function buildVoiceStageTone(hue = 220) {
   };
 }
 
-export function fallbackDeviceLabel(kind, index) {
+export function fallbackDeviceLabel(kind, index, language = "es") {
+  const fallbackMap = {
+    en: {
+      audioinput: "Microphone",
+      audiooutput: "Speakers",
+      videoinput: "Camera",
+      unknown: "Device"
+    },
+    fr: {
+      audioinput: "Micro",
+      audiooutput: "Haut-parleurs",
+      videoinput: "Camera",
+      unknown: "Peripherique"
+    },
+    es: {
+      audioinput: "Microfono",
+      audiooutput: "Altavoces",
+      videoinput: "Camara",
+      unknown: "Dispositivo"
+    }
+  };
+  const labels = fallbackMap[language] || fallbackMap.es;
+
   switch (kind) {
     case "audioinput":
-      return `Microfono ${index + 1}`;
+      return `${labels.audioinput} ${index + 1}`;
     case "audiooutput":
-      return `Altavoces ${index + 1}`;
+      return `${labels.audiooutput} ${index + 1}`;
     case "videoinput":
-      return `Camara ${index + 1}`;
+      return `${labels.videoinput} ${index + 1}`;
     default:
-      return `Dispositivo ${index + 1}`;
+      return `${labels.unknown} ${index + 1}`;
   }
 }
 

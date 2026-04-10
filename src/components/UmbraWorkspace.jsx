@@ -1,12 +1,14 @@
-import React, { Suspense, lazy, useEffect, useMemo, useRef } from "react";
+import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 
 import { api } from "../api.js";
+import { translate } from "../i18n.js";
 import { UserProfileCard } from "./UserProfileCard.jsx";
 import { UserProfileModal } from "./UserProfileModal.jsx";
 import { ChatHeaderPanel } from "./workspace/ChatHeaderPanel.jsx";
 import { ChatHeader } from "./workspace/ChatHeader.jsx";
 import { DesktopTopbar } from "./workspace/DesktopTopbar.jsx";
 import { MembersPanel } from "./workspace/MembersPanel.jsx";
+import { WorkspaceScreenSharePicker } from "./workspace/WorkspaceScreenSharePicker.jsx";
 import {
   WorkspaceCameraMenu,
   WorkspaceInputMenu,
@@ -14,6 +16,10 @@ import {
   WorkspaceShareMenu
 } from "./workspace/WorkspaceVoiceMenus.jsx";
 import { WorkspaceNavigation } from "./workspace/WorkspaceNavigation.jsx";
+import {
+  createVoiceScreenShareSession,
+  SCREEN_SHARE_QUALITY_PRESETS
+} from "./workspace/voiceScreenShareSession.js";
 import {
   applyServerFolderAction,
   reorderGuildList,
@@ -50,6 +56,10 @@ const ServerSettingsModal = lazyNamed(
 const SettingsModal = lazyNamed(() => import("./SettingsModal.jsx"), "SettingsModal");
 const MessageStage = lazyNamed(() => import("./workspace/MessageStage.jsx"), "MessageStage");
 const VoiceRoomStage = lazyNamed(() => import("./workspace/VoiceRoomStage.jsx"), "VoiceRoomStage");
+const VoiceParticipantContextMenu = lazyNamed(
+  () => import("./workspace/VoiceParticipantContextMenu.jsx"),
+  "VoiceParticipantContextMenu"
+);
 
 function WorkspacePanelFallback({ compact = false }) {
   return (
@@ -67,6 +77,7 @@ export function UmbraWorkspace({
   onChangeLanguage,
   onSignOut
 }) {
+  const t = (key, fallback = "") => translate(language, key, fallback);
   const {
     activeChannel, activeGuild, activeGuildTextChannels, activeGuildVoiceChannels, activeSelection,
     appError, attachmentInputRef, booting, cameraStatus, cameraStream, composer, composerAttachments, composerMenuOpen,
@@ -89,6 +100,26 @@ export function UmbraWorkspace({
     cycleVoiceDevice, getSelectedDeviceLabel, selectedVoiceDevices
   } = useUmbraWorkspaceCore({ accessToken, initialSelection, onSignOut });
   const openingDmRequestsRef = useRef(new Map());
+  const screenShareSessionRef = useRef(null);
+  const [screenShareStream, setScreenShareStream] = useState(null);
+  const [screenShareStatus, setScreenShareStatus] = useState({
+    audioAvailable: false,
+    error: "",
+    kind: "window",
+    label: "",
+    quality: SCREEN_SHARE_QUALITY_PRESETS["720p30"],
+    ready: false,
+    sourceId: ""
+  });
+  const [screenSharePicker, setScreenSharePicker] = useState({
+    loading: false,
+    open: false,
+    quality: "720p30",
+    selectedSourceId: "",
+    shareAudio: true,
+    sources: [],
+    tab: "applications"
+  });
   const {
     appShellRef,
     desktopShellRef,
@@ -114,9 +145,13 @@ export function UmbraWorkspace({
     setMembersPanelWidth,
     setServerFolders,
     setServerSettingsGuildId,
+    setVoiceParticipantMenu,
+    setVoiceParticipantPrefs,
     setVoiceInputPanel,
     setVoiceOutputPanel,
     viewportWidth,
+    voiceParticipantMenu,
+    voiceParticipantPrefs,
     voiceInputPanel,
     voiceOutputPanel
   } = useWorkspaceShellState({
@@ -175,6 +210,10 @@ export function UmbraWorkspace({
     resolvedMembersPanelWidth
   ]);
 
+  useEffect(() => {
+    setVoiceParticipantMenu(null);
+  }, [activeChannel?.id, joinedVoiceChannelId, setVoiceParticipantMenu]);
+
   useEffect(
     () => () => {
       if (membersResizeCleanupRef.current) {
@@ -207,6 +246,60 @@ export function UmbraWorkspace({
     } catch {
       showUiNotice("No se pudo copiar el ID del usuario.");
     }
+  }
+
+  function getVoiceParticipantPref(userId) {
+    const current = voiceParticipantPrefs?.[userId] || {};
+    const volume = Number(current.volume);
+
+    return {
+      muted: Boolean(current.muted),
+      videoHidden: Boolean(current.videoHidden),
+      volume: Number.isFinite(volume) ? Math.max(0, Math.min(200, Math.round(volume))) : 100
+    };
+  }
+
+  function updateVoiceParticipantPref(userId, nextValues) {
+    if (!userId) {
+      return;
+    }
+
+    setVoiceParticipantPrefs((previous) => {
+      const current = previous?.[userId] || {};
+      const nextPref = {
+        ...current,
+        ...nextValues
+      };
+      const nextVolume = Number(nextPref.volume);
+      nextPref.volume = Number.isFinite(nextVolume)
+        ? Math.max(0, Math.min(200, Math.round(nextVolume)))
+        : 100;
+
+      return {
+        ...previous,
+        [userId]: nextPref
+      };
+    });
+  }
+
+  function handleToggleVoiceParticipantMuted(userId) {
+    const current = getVoiceParticipantPref(userId);
+    updateVoiceParticipantPref(userId, {
+      muted: !current.muted
+    });
+  }
+
+  function handleToggleVoiceParticipantVideo(userId) {
+    const current = getVoiceParticipantPref(userId);
+    updateVoiceParticipantPref(userId, {
+      videoHidden: !current.videoHidden
+    });
+  }
+
+  function handleUpdateVoiceParticipantVolume(userId, value) {
+    updateVoiceParticipantPref(userId, {
+      volume: value
+    });
   }
 
   function handleStartMembersResize(event) {
@@ -267,6 +360,37 @@ export function UmbraWorkspace({
         top: rect.top
       },
       profile: resolved
+    });
+  }
+
+  function openVoiceParticipantMenu(event, targetUser) {
+    const resolved = buildProfileCardData(
+      targetUser,
+      targetUser?.display_name || targetUser?.displayName || targetUser?.username
+    );
+    if (!targetUser?.id || !resolved) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    setProfileCard(null);
+    setVoiceParticipantMenu({
+      currentUserId,
+      position: {
+        anchorRect: {
+          bottom: rect.bottom,
+          left: rect.left,
+          right: rect.right,
+          top: rect.top
+        },
+        x: event.clientX + 10,
+        y: event.clientY + 6
+      },
+      profile: resolved,
+      user: targetUser
     });
   }
 
@@ -468,24 +592,70 @@ export function UmbraWorkspace({
   }, [activeChannel, activeSelection.kind, workspace, activeGuild]);
   const isDirectCallActive =
     isCallableDirectConversation && joinedVoiceChannelId === activeChannel?.id;
+  const screenShareQualityOptions = useMemo(
+    () => [
+      {
+        description: t(
+          "voice.share.quality.sdCopy",
+          "Video mas fluido para chats rapidos y equipos mas modestos."
+        ),
+        id: "720p30",
+        label: "720P 30 FPS",
+        shortLabel: "SD"
+      },
+      {
+        description: t(
+          "voice.share.quality.hdCopy",
+          "Mas detalle visual para apps, codigo y ventanas pequenas."
+        ),
+        id: "1080p30",
+        label: "1080P 30 FPS",
+        shortLabel: "HD"
+      }
+    ],
+    [language]
+  );
+  const screenShareQualityLabel =
+    screenShareQualityOptions.find((option) => option.id === voiceState.screenShareQuality)?.label ||
+    SCREEN_SHARE_QUALITY_PRESETS["720p30"].label;
   const voiceStageParticipants = useMemo(
     () =>
-      voiceUsers.map((user) => ({
-        ...user,
-        isStreaming: user.id === currentUserId && voiceState.screenShareEnabled,
-        isCameraOn: user.id === currentUserId && voiceState.cameraEnabled,
-        localCameraStream: user.id === currentUserId ? cameraStream : null,
-        isSpeaking:
-          user.id === currentUserId &&
-          !voiceState.micMuted &&
-          !voiceState.deafen &&
-          voiceInputSpeaking,
-        stageStyle: buildVoiceStageTone(user.avatar_hue || 220)
-      })),
+      voiceUsers.map((user) => {
+        const userPrefs = getVoiceParticipantPref(user.id);
+        const isCurrentVoiceUser = user.id === currentUserId;
+
+        return {
+          ...user,
+          hiddenVideoLabel: t("voice.participant.hiddenVideo", "Video oculto"),
+          isCameraOn: isCurrentVoiceUser && voiceState.cameraEnabled,
+          isLocallyMuted: userPrefs.muted,
+          isSpeaking:
+            isCurrentVoiceUser &&
+            !voiceState.micMuted &&
+            !voiceState.deafen &&
+            voiceInputSpeaking,
+          isStreaming: isCurrentVoiceUser && voiceState.screenShareEnabled,
+          isVideoHiddenForMe: userPrefs.videoHidden,
+          localCameraStream:
+            userPrefs.videoHidden || !isCurrentVoiceUser ? null : cameraStream,
+          localScreenShareStream:
+            userPrefs.videoHidden || !isCurrentVoiceUser ? null : screenShareStream,
+          mediaMuted: isCurrentVoiceUser || userPrefs.muted,
+          mediaVolume: Math.max(0, Math.min(1, userPrefs.volume / 100)),
+          screenShareQualityLabel:
+            isCurrentVoiceUser ? screenShareQualityLabel : "720P 30 FPS",
+          stageStyle: buildVoiceStageTone(user.avatar_hue || 220),
+          volumeForMe: userPrefs.volume
+        };
+      }),
     [
       cameraStream,
       currentUserId,
+      screenShareQualityLabel,
+      screenShareStream,
+      t,
       voiceInputSpeaking,
+      voiceParticipantPrefs,
       voiceState.cameraEnabled,
       voiceState.deafen,
       voiceState.micMuted,
@@ -503,22 +673,34 @@ export function UmbraWorkspace({
   );
   const voiceSuppressionLabel =
     voiceInputStatus.engine === "speex"
-      ? "Speex DSP activo"
+      ? t("voice.input.label.speex", "Speex DSP activo")
       : voiceInputStatus.engine === "native"
-        ? "Filtro nativo del navegador"
-        : "Sin supresion adicional";
+        ? t("voice.input.label.native", "Filtro nativo del navegador")
+        : t("voice.input.label.off", "Sin supresion adicional");
   const voiceSuppressionCopy = voiceInputStatus.error
     ? voiceInputStatus.error
     : voiceState.noiseSuppression
       ? voiceInputStatus.ready
-        ? "Umbra esta limpiando el ruido del microfono en tiempo real."
-        : "Activa la supresion y Umbra preparara el microfono cuando abras voz."
-      : "La entrada llega sin filtro adicional para mantener la voz natural.";
+        ? t(
+            "voice.input.copy.activeReady",
+            "Umbra esta limpiando el ruido del microfono en tiempo real."
+          )
+        : t(
+            "voice.input.copy.activePending",
+            "Activa la supresion y Umbra preparara el microfono cuando abras voz."
+          )
+      : t(
+          "voice.input.copy.off",
+          "La entrada llega sin filtro adicional para mantener la voz natural."
+        );
   const voiceProfileOptions = [
     {
-      description: "Filtro fuerte para reducir fondo y ruido continuo.",
+      description: t(
+        "voice.profile.isolation.description",
+        "Filtro fuerte para reducir fondo y ruido continuo."
+      ),
       id: "isolation",
-      label: "Aislamiento de voz",
+      label: t("voice.profile.isolation.label", "Aislamiento de voz"),
       settings: {
         inputProfile: "isolation",
         inputVolume: 76,
@@ -526,9 +708,12 @@ export function UmbraWorkspace({
       }
     },
     {
-      description: "Entrada mas natural para microfonos limpios o estudio.",
+      description: t(
+        "voice.profile.studio.description",
+        "Entrada mas natural para microfonos limpios o estudio."
+      ),
       id: "studio",
-      label: "Estudio",
+      label: t("voice.profile.studio.label", "Estudio"),
       settings: {
         inputProfile: "studio",
         inputVolume: 82,
@@ -536,9 +721,12 @@ export function UmbraWorkspace({
       }
     },
     {
-      description: "Control manual del volumen y del filtro.",
+      description: t(
+        "voice.profile.custom.description",
+        "Control manual del volumen y del filtro."
+      ),
       id: "custom",
-      label: "Personalizar",
+      label: t("voice.profile.custom.label", "Personalizar"),
       settings: {
         inputProfile: "custom"
       }
@@ -546,7 +734,8 @@ export function UmbraWorkspace({
   ];
   const activeInputProfile = voiceState.inputProfile || "custom";
   const activeInputProfileLabel =
-    voiceProfileOptions.find((option) => option.id === activeInputProfile)?.label || "Personalizar";
+    voiceProfileOptions.find((option) => option.id === activeInputProfile)?.label ||
+    t("voice.profile.custom.label", "Personalizar");
 
   useEffect(() => {
     if (voiceMenu !== "input" && voiceInputPanel) {
@@ -560,14 +749,59 @@ export function UmbraWorkspace({
     }
   }, [voiceOutputPanel, voiceMenu]);
 
+  useEffect(
+    () => () => {
+      if (screenShareSessionRef.current) {
+        screenShareSessionRef.current.destroy().catch(() => {});
+        screenShareSessionRef.current = null;
+      }
+    },
+    []
+  );
+
   useEffect(() => {
-    if (!voiceMenu && !voiceInputPanel && !voiceOutputPanel) {
+    setScreenSharePicker((previous) => ({
+      ...previous,
+      quality: voiceState.screenShareQuality,
+      shareAudio: voiceState.shareAudio
+    }));
+  }, [voiceState.screenShareQuality, voiceState.shareAudio]);
+
+  useEffect(() => {
+    if (joinedVoiceChannelId === activeChannel?.id) {
+      return;
+    }
+
+    if (!screenShareSessionRef.current) {
+      return;
+    }
+
+    screenShareSessionRef.current.destroy().catch(() => {});
+    screenShareSessionRef.current = null;
+    setScreenShareStream(null);
+    setScreenShareStatus({
+      audioAvailable: false,
+      error: "",
+      kind: "window",
+      label: "",
+      quality: SCREEN_SHARE_QUALITY_PRESETS[voiceState.screenShareQuality] || SCREEN_SHARE_QUALITY_PRESETS["720p30"],
+      ready: false,
+      sourceId: ""
+    });
+    if (voiceState.screenShareEnabled) {
+      updateVoiceSetting("screenShareEnabled", false);
+    }
+  }, [activeChannel?.id, joinedVoiceChannelId, voiceState.screenShareEnabled, voiceState.screenShareQuality]);
+
+  useEffect(() => {
+    if (!voiceMenu && !voiceInputPanel && !voiceOutputPanel && !screenSharePicker.open) {
       return undefined;
     }
 
     function handlePointerDown(event) {
       const target = event.target;
       if (
+        target?.closest?.(".screen-share-picker") ||
         target?.closest?.(".voice-control-menu") ||
         target?.closest?.(".dock-split-control") ||
         target?.closest?.(".voice-stage-menu-shell")
@@ -577,6 +811,14 @@ export function UmbraWorkspace({
 
       setVoiceInputPanel(null);
       setVoiceOutputPanel(null);
+      setScreenSharePicker((previous) =>
+        previous.open
+          ? {
+              ...previous,
+              open: false
+            }
+          : previous
+      );
       if (voiceMenu) {
         toggleVoiceMenu(voiceMenu);
       }
@@ -584,7 +826,7 @@ export function UmbraWorkspace({
 
     document.addEventListener("mousedown", handlePointerDown);
     return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, [toggleVoiceMenu, voiceInputPanel, voiceMenu, voiceOutputPanel]);
+  }, [screenSharePicker.open, toggleVoiceMenu, voiceInputPanel, voiceMenu, voiceOutputPanel]);
 
   function handleApplyVoiceProfile(profile) {
     updateVoiceSetting("inputProfile", profile.id);
@@ -595,7 +837,289 @@ export function UmbraWorkspace({
       updateVoiceSetting("inputVolume", profile.settings.inputVolume);
     }
     setVoiceInputPanel(null);
-    showUiNotice(`Perfil de entrada: ${profile.label}.`);
+    showUiNotice(`${t("voice.input.profile", "Perfil de entrada")}: ${profile.label}.`);
+  }
+
+  function getDesktopBridge() {
+    if (typeof window === "undefined") {
+      return null;
+    }
+
+    return window.umbraDesktop || null;
+  }
+
+  function buildFallbackScreenShareSources() {
+    return [
+      {
+        id: "native-window",
+        kind: "window",
+        name: t("voice.share.nativeWindow", "Elegir aplicacion o ventana"),
+        thumbnailDataUrl: ""
+      },
+      {
+        id: "native-screen",
+        kind: "screen",
+        name: t("voice.share.nativeScreen", "Elegir pantalla completa"),
+        thumbnailDataUrl: ""
+      }
+    ];
+  }
+
+  async function loadScreenShareSources(nextTab = "applications") {
+    const desktopBridge = getDesktopBridge();
+    const fallbackSources = buildFallbackScreenShareSources();
+    const fallbackSource =
+      nextTab === "screen"
+        ? fallbackSources.find((source) => source.kind === "screen")
+        : fallbackSources.find((source) => source.kind === "window");
+
+    if (!desktopBridge?.listDisplaySources) {
+      setScreenSharePicker((previous) => ({
+        ...previous,
+        loading: false,
+        open: true,
+        selectedSourceId: previous.selectedSourceId || fallbackSource?.id || "native-window",
+        shareAudio: voiceState.shareAudio,
+        sources: fallbackSources,
+        tab: nextTab
+      }));
+
+      return fallbackSources;
+    }
+
+    setScreenSharePicker((previous) => ({
+      ...previous,
+      loading: true,
+      open: true,
+      tab: nextTab
+    }));
+
+    try {
+      const sources = await desktopBridge.listDisplaySources();
+      const fallbackSource =
+        sources.find((source) => source.kind === (nextTab === "screen" ? "screen" : "window")) ||
+        sources[0] ||
+        null;
+
+      setScreenSharePicker((previous) => ({
+        ...previous,
+        loading: false,
+        open: true,
+        selectedSourceId: previous.selectedSourceId || fallbackSource?.id || "",
+        shareAudio: voiceState.shareAudio,
+        sources,
+        tab: nextTab
+      }));
+
+      return sources;
+    } catch (error) {
+      const handlerMissing = /No handler registered/i.test(String(error?.message || ""));
+      if (handlerMissing) {
+        setScreenSharePicker((previous) => ({
+          ...previous,
+          loading: false,
+          open: true,
+          selectedSourceId: previous.selectedSourceId || fallbackSource?.id || "native-window",
+          shareAudio: voiceState.shareAudio,
+          sources: fallbackSources,
+          tab: nextTab
+        }));
+        showUiNotice(
+          t(
+            "voice.share.fallbackNotice",
+            "Umbra usara el selector nativo de pantalla en esta sesion."
+          )
+        );
+        return fallbackSources;
+      }
+
+      setScreenSharePicker((previous) => ({
+        ...previous,
+        loading: false,
+        open: false
+      }));
+      setScreenShareStatus((previous) => ({
+        ...previous,
+        error: error.message || "No se pudieron listar las fuentes para compartir."
+      }));
+      showUiNotice(error.message || "No se pudieron listar las fuentes para compartir.");
+      return [];
+    }
+  }
+
+  async function stopScreenShare({ notify = true } = {}) {
+    if (screenShareSessionRef.current) {
+      await screenShareSessionRef.current.destroy().catch(() => {});
+      screenShareSessionRef.current = null;
+    }
+
+    setScreenShareStream(null);
+    setScreenShareStatus({
+      audioAvailable: false,
+      error: "",
+      kind: "window",
+      label: "",
+      quality: SCREEN_SHARE_QUALITY_PRESETS[voiceState.screenShareQuality] || SCREEN_SHARE_QUALITY_PRESETS["720p30"],
+      ready: false,
+      sourceId: ""
+    });
+    setScreenSharePicker((previous) => ({
+      ...previous,
+      open: false
+    }));
+    if (voiceState.screenShareEnabled) {
+      updateVoiceSetting("screenShareEnabled", false);
+    }
+    if (notify) {
+      showUiNotice("Transmision detenida.");
+    }
+  }
+
+  async function handleLeaveVoiceSession() {
+    await stopScreenShare({ notify: false });
+    handleVoiceLeave();
+  }
+
+  async function startScreenShareSession({
+    label = "",
+    sourceId = "",
+    sourceKind = "window"
+  } = {}) {
+    if (joinedVoiceChannelId !== activeChannel?.id) {
+      showUiNotice("Unete primero a la llamada para compartir pantalla.");
+      return;
+    }
+
+    if (screenShareSessionRef.current) {
+      await screenShareSessionRef.current.destroy().catch(() => {});
+      screenShareSessionRef.current = null;
+    }
+
+    const resolvedSourceId = String(sourceId || "").startsWith("native-") ? "" : sourceId;
+
+    try {
+      const session = await createVoiceScreenShareSession({
+        includeAudio: voiceState.shareAudio,
+        label,
+        onEnded: () => {
+          stopScreenShare({ notify: true }).catch(() => {});
+        },
+        quality: voiceState.screenShareQuality,
+        sourceId: resolvedSourceId,
+        sourceKind
+      });
+
+      screenShareSessionRef.current = session;
+      session.setEnabled(true);
+      setScreenShareStream(session.stream);
+      setScreenShareStatus({
+        audioAvailable: session.audioAvailable,
+        error: "",
+        kind: session.kind,
+        label: session.label,
+        quality: session.quality,
+        ready: true,
+        sourceId: sourceId === "native-display" ? "native-display" : session.sourceId
+      });
+      setScreenSharePicker((previous) => ({
+        ...previous,
+        open: false
+      }));
+      updateVoiceSetting("screenShareEnabled", true);
+      setVoiceMenu(null);
+      if (voiceState.shareAudio && !session.audioAvailable) {
+        showUiNotice("La pantalla se esta compartiendo sin audio del sistema.");
+      } else {
+        showUiNotice(`Transmitiendo ${session.label}.`);
+      }
+    } catch (error) {
+      setScreenShareStream(null);
+      setScreenShareStatus({
+        audioAvailable: false,
+        error: error.message || "No se pudo iniciar la transmision.",
+        kind: sourceKind,
+        label,
+        quality:
+          SCREEN_SHARE_QUALITY_PRESETS[voiceState.screenShareQuality] ||
+          SCREEN_SHARE_QUALITY_PRESETS["720p30"],
+        ready: false,
+        sourceId
+      });
+      updateVoiceSetting("screenShareEnabled", false);
+      showUiNotice(error.message || "No se pudo iniciar la transmision.");
+    }
+  }
+
+  async function openScreenSharePicker(tab = "applications") {
+    setScreenSharePicker((previous) => ({
+      ...previous,
+      loading: true,
+      open: true,
+      quality: voiceState.screenShareQuality,
+      shareAudio: voiceState.shareAudio,
+      tab
+    }));
+
+    await loadScreenShareSources(tab);
+  }
+
+  async function handleToggleScreenShare() {
+    if (voiceState.screenShareEnabled) {
+      await stopScreenShare();
+      return;
+    }
+
+    await openScreenSharePicker("applications");
+  }
+
+  async function handleConfirmScreenShare() {
+    const selectedSource =
+      screenSharePicker.sources.find((source) => source.id === screenSharePicker.selectedSourceId) ||
+      null;
+
+    if (!selectedSource) {
+      showUiNotice("Elige una ventana o pantalla para continuar.");
+      return;
+    }
+
+    await startScreenShareSession({
+      label: selectedSource.name,
+      sourceId: selectedSource.id,
+      sourceKind: selectedSource.kind
+    });
+  }
+
+  async function handleChangeScreenShareQuality(nextQuality) {
+    updateVoiceSetting("screenShareQuality", nextQuality);
+
+    if (!screenShareSessionRef.current || !voiceState.screenShareEnabled) {
+      return;
+    }
+
+    await startScreenShareSession({
+      label: screenShareStatus.label,
+      sourceId: screenShareStatus.sourceId,
+      sourceKind: screenShareStatus.kind
+    });
+  }
+
+  async function handleToggleShareAudio() {
+    const nextShareAudio = !voiceState.shareAudio;
+    updateVoiceSetting("shareAudio", nextShareAudio);
+    setScreenSharePicker((previous) => ({
+      ...previous,
+      shareAudio: nextShareAudio
+    }));
+
+    if (!screenShareSessionRef.current || !voiceState.screenShareEnabled) {
+      return;
+    }
+
+    await startScreenShareSession({
+      label: screenShareStatus.label,
+      sourceId: screenShareStatus.sourceId,
+      sourceKind: screenShareStatus.kind
+    });
   }
 
   const inputMenuNode = (
@@ -607,6 +1131,7 @@ export function UmbraWorkspace({
       handleApplyVoiceProfile={handleApplyVoiceProfile}
       handleVoiceDeviceChange={handleVoiceDeviceChange}
       inputMeterBars={inputMeterBars}
+      language={language}
       selectedVoiceDevices={selectedVoiceDevices}
       setSettingsOpen={setSettingsOpen}
       setVoiceInputPanel={setVoiceInputPanel}
@@ -627,6 +1152,7 @@ export function UmbraWorkspace({
     <WorkspaceCameraMenu
       cameraStatus={cameraStatus}
       getSelectedDeviceLabel={getSelectedDeviceLabel}
+      language={language}
       setSettingsOpen={setSettingsOpen}
       toggleVoiceState={toggleVoiceState}
       voiceState={voiceState}
@@ -636,6 +1162,7 @@ export function UmbraWorkspace({
     <WorkspaceOutputMenu
       getSelectedDeviceLabel={getSelectedDeviceLabel}
       handleVoiceDeviceChange={handleVoiceDeviceChange}
+      language={language}
       selectedVoiceDevices={selectedVoiceDevices}
       setSettingsOpen={setSettingsOpen}
       setVoiceOutputPanel={setVoiceOutputPanel}
@@ -648,8 +1175,16 @@ export function UmbraWorkspace({
   );
   const shareMenuNode = (
     <WorkspaceShareMenu
+      onChangeScreenShareQuality={handleChangeScreenShareQuality}
+      onChangeShareSource={() => openScreenSharePicker(screenShareStatus.kind === "screen" ? "screen" : "applications")}
+      onToggleScreenShare={handleToggleScreenShare}
+      onToggleShareAudio={handleToggleShareAudio}
+      language={language}
+      screenSharePickerOpen={screenSharePicker.open}
+      screenShareQualityLabel={screenShareQualityLabel}
+      shareQualityOptions={screenShareQualityOptions}
       showUiNotice={showUiNotice}
-      toggleVoiceState={toggleVoiceState}
+      voiceShareStatus={screenShareStatus}
       voiceState={voiceState}
     />
   );
@@ -1228,7 +1763,7 @@ export function UmbraWorkspace({
             isVoiceChannel={isVoiceChannel}
             joinedVoiceChannel={joinedVoiceChannel}
             joinedVoiceChannelId={joinedVoiceChannelId}
-            onHandleVoiceLeave={handleVoiceLeave}
+            onHandleVoiceLeave={handleLeaveVoiceSession}
             onOpenDialog={openDialog}
             onOpenGuildPrivacy={handleOpenGuildPrivacy}
             onOpenGuildSettings={handleOpenGuildSettings}
@@ -1338,16 +1873,19 @@ export function UmbraWorkspace({
                     inputMenuNode={voiceMenu === "input" ? inputMenuNode : null}
                     isDirectCall={isDirectConversation}
                     joinedVoiceChannelId={joinedVoiceChannelId}
-                    onHandleVoiceLeave={handleVoiceLeave}
+                    onHandleVoiceLeave={handleLeaveVoiceSession}
                     onJoinVoiceChannel={() =>
                       isVoiceChannel
                         ? handleSelectGuildChannel(activeChannel)
                         : handleJoinDirectCall()
                     }
+                    onOpenParticipantMenu={openVoiceParticipantMenu}
                     onOpenProfileCard={openProfileCard}
+                    onToggleScreenShare={handleToggleScreenShare}
                     onShowNotice={showUiNotice}
                     onToggleVoiceMenu={toggleVoiceMenu}
                     onToggleVoiceState={toggleVoiceState}
+                    screenShareQualityLabel={screenShareQualityLabel}
                     shareMenuNode={voiceMenu === "share" ? shareMenuNode : null}
                     voiceMenu={voiceMenu}
                     voiceInputLevel={voiceInputLevel}
@@ -1513,6 +2051,27 @@ export function UmbraWorkspace({
           />
         ) : null}
 
+        {voiceParticipantMenu ? (
+          <Suspense fallback={null}>
+            <VoiceParticipantContextMenu
+              language={language}
+              menu={voiceParticipantMenu}
+              onClose={() => setVoiceParticipantMenu(null)}
+              onCopyId={handleCopyProfileId}
+              onOpenProfile={(profile) => setFullProfile(profile)}
+              onOpenSelfProfile={() => {
+                setVoiceParticipantMenu(null);
+                setSettingsOpen(true);
+              }}
+              onSendMessage={handleOpenDmFromCard}
+              onToggleMuted={handleToggleVoiceParticipantMuted}
+              onToggleVideoHidden={handleToggleVoiceParticipantVideo}
+              onUpdateVolume={handleUpdateVoiceParticipantVolume}
+              prefs={getVoiceParticipantPref(voiceParticipantMenu.user.id)}
+            />
+          </Suspense>
+        ) : null}
+
         {dialog ? (
           <Suspense fallback={<WorkspacePanelFallback compact />}>
             <Dialog
@@ -1574,6 +2133,41 @@ export function UmbraWorkspace({
               title={`Abandonar ${leaveGuildTarget.name}?`}
             />
           </Suspense>
+        ) : null}
+
+        {screenSharePicker.open ? (
+          <WorkspaceScreenSharePicker
+            language={language}
+            loading={screenSharePicker.loading}
+            onClose={() =>
+              setScreenSharePicker((previous) => ({
+                ...previous,
+                open: false
+              }))
+            }
+            onConfirm={handleConfirmScreenShare}
+            onSelectQuality={handleChangeScreenShareQuality}
+            onSelectSource={(sourceId) =>
+              setScreenSharePicker((previous) => ({
+                ...previous,
+                selectedSourceId: sourceId
+              }))
+            }
+            onSelectTab={(tab) => {
+              if (tab === "devices") {
+                setScreenSharePicker((previous) => ({
+                  ...previous,
+                  tab
+                }));
+                return;
+              }
+
+              loadScreenShareSources(tab);
+            }}
+            onToggleShareAudio={handleToggleShareAudio}
+            picker={screenSharePicker}
+            qualityOptions={screenShareQualityOptions}
+          />
         ) : null}
       </div>
     </div>
