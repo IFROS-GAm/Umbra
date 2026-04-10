@@ -693,6 +693,7 @@ export function UmbraWorkspace({
           "voice.input.copy.off",
           "La entrada llega sin filtro adicional para mantener la voz natural."
         );
+  const voiceSuppressionAmountLabel = `${voiceState.noiseSuppressionAmount}%`;
   const voiceProfileOptions = [
     {
       description: t(
@@ -704,6 +705,7 @@ export function UmbraWorkspace({
       settings: {
         inputProfile: "isolation",
         inputVolume: 76,
+        noiseSuppressionAmount: 78,
         noiseSuppression: true
       }
     },
@@ -717,6 +719,7 @@ export function UmbraWorkspace({
       settings: {
         inputProfile: "studio",
         inputVolume: 82,
+        noiseSuppressionAmount: 18,
         noiseSuppression: false
       }
     },
@@ -832,6 +835,9 @@ export function UmbraWorkspace({
     updateVoiceSetting("inputProfile", profile.id);
     if (typeof profile.settings.noiseSuppression === "boolean") {
       updateVoiceSetting("noiseSuppression", profile.settings.noiseSuppression);
+    }
+    if (typeof profile.settings.noiseSuppressionAmount === "number") {
+      updateVoiceSetting("noiseSuppressionAmount", profile.settings.noiseSuppressionAmount);
     }
     if (typeof profile.settings.inputVolume === "number") {
       updateVoiceSetting("inputVolume", profile.settings.inputVolume);
@@ -1143,6 +1149,7 @@ export function UmbraWorkspace({
       voiceInputPanel={voiceInputPanel}
       voiceInputStatus={voiceInputStatus}
       voiceProfileOptions={voiceProfileOptions}
+      voiceSuppressionAmountLabel={voiceSuppressionAmountLabel}
       voiceState={voiceState}
       voiceSuppressionCopy={voiceSuppressionCopy}
       voiceSuppressionLabel={voiceSuppressionLabel}

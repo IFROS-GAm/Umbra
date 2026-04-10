@@ -848,6 +848,7 @@ export function createWorkspaceCoreActions(context) {
       ...previous,
       cameraEnabled: false,
       deafen: false,
+      inputMonitoring: false,
       micMuted: false,
       screenShareEnabled: false
     }));

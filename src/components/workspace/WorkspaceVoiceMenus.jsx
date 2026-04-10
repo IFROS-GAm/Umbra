@@ -62,6 +62,7 @@ export function WorkspaceInputMenu({
   voiceInputPanel,
   voiceInputStatus,
   voiceProfileOptions,
+  voiceSuppressionAmountLabel,
   voiceState,
   voiceSuppressionCopy,
   voiceSuppressionLabel
@@ -225,6 +226,29 @@ export function WorkspaceInputMenu({
 
       <div className="voice-control-slider-block">
         <div className="voice-control-title-row">
+          <strong>{t("voice.input.intensity", "Intensidad de supresion")}</strong>
+          <small>{voiceSuppressionAmountLabel}</small>
+        </div>
+        <input
+          max="100"
+          min="0"
+          onChange={(event) => {
+            updateVoiceSetting("inputProfile", "custom");
+            updateVoiceSetting("noiseSuppressionAmount", Number(event.target.value));
+          }}
+          type="range"
+          value={voiceState.noiseSuppressionAmount}
+        />
+        <small className="voice-control-slider-caption">
+          {t(
+            "voice.input.intensityCopy",
+            "Ajusta cuanto filtra Umbra el ruido de fondo antes de dejar pasar tu voz."
+          )}
+        </small>
+      </div>
+
+      <div className="voice-control-slider-block">
+        <div className="voice-control-title-row">
           <strong>{t("voice.input.volume", "Volumen de entrada")}</strong>
           <small>{voiceState.inputVolume}%</small>
         </div>
@@ -252,6 +276,39 @@ export function WorkspaceInputMenu({
                   "voice.input.openAnalyzer",
                   "Abre este panel o entra a una sala para activar el analizador."
                 )}
+        </small>
+      </div>
+
+      <div className="voice-control-slider-block">
+        <div className="voice-control-title-row">
+          <strong>{t("voice.input.micTest", "Prueba de microfono")}</strong>
+        </div>
+        <div className="voice-mic-test-row">
+          <button
+            className="ghost-button small voice-mic-test-button"
+            onClick={() => updateVoiceSetting("inputMonitoring", !voiceState.inputMonitoring)}
+            type="button"
+          >
+            {voiceState.inputMonitoring
+              ? t("voice.input.stopTest", "Detener")
+              : t("voice.input.startTest", "Probar")}
+          </button>
+          <div className="voice-input-meter compact">
+            {inputMeterBars.map((bar) => (
+              <i className={bar < activeInputBars ? "active" : ""} key={`test-input-${bar}`} />
+            ))}
+          </div>
+        </div>
+        <small className="voice-control-slider-caption">
+          {voiceState.inputMonitoring
+            ? t(
+                "voice.input.testActive",
+                "Umbra esta reproduciendo tu microfono localmente para que ajustes el filtro."
+              )
+            : t(
+                "voice.input.testIdle",
+                "Escucha tu propia voz para calibrar la supresion y el volumen."
+              )}
         </small>
       </div>
 

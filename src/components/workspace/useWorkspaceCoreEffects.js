@@ -562,6 +562,8 @@ export function useWorkspaceCoreEffects({
         const session = await createVoiceInputProcessingSession({
           deviceId: selectedVoiceDevices.audioinput,
           inputVolume: voiceState.micMuted ? 0 : voiceState.inputVolume,
+          monitorEnabled: voiceState.inputMonitoring,
+          noiseSuppressionAmount: voiceState.noiseSuppressionAmount,
           noiseSuppressionEnabled: voiceState.noiseSuppression,
           onLevelChange: (level) => {
             if (!cancelled) {
@@ -614,6 +616,8 @@ export function useWorkspaceCoreEffects({
     joinedVoiceChannelId,
     selectedVoiceDevices.audioinput,
     voiceMenu,
+    voiceState.inputMonitoring,
+    voiceState.noiseSuppressionAmount,
     voiceState.noiseSuppression
   ]);
 
@@ -622,6 +626,10 @@ export function useWorkspaceCoreEffects({
       voiceState.micMuted ? 0 : voiceState.inputVolume
     );
   }, [voiceState.inputVolume, voiceState.micMuted]);
+
+  useEffect(() => {
+    voiceInputSessionRef.current?.setMonitoringEnabled(Boolean(voiceState.inputMonitoring));
+  }, [voiceState.inputMonitoring]);
 
   useEffect(() => {
     const shouldProcessCamera = Boolean(

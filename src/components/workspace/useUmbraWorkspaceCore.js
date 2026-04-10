@@ -55,9 +55,11 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
   const [voiceState, setVoiceState] = useState({
     cameraEnabled: false,
     deafen: false,
+    inputMonitoring: false,
     inputProfile: "custom",
     inputVolume: 84,
     micMuted: false,
+    noiseSuppressionAmount: 44,
     noiseSuppression: true,
     pushToTalk: false,
     outputVolume: 52,

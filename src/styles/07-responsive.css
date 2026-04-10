@@ -1259,6 +1259,17 @@
   flex: 1;
 }
 
+.voice-mic-test-row {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.voice-mic-test-button {
+  flex: 0 0 auto;
+  min-width: 86px;
+}
+
 .voice-noise-footer {
   align-items: flex-end;
   display: flex;
