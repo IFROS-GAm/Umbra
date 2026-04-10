@@ -33,6 +33,7 @@ export function WorkspaceNavigation({
   onHandleVoiceLeave,
   onOpenDialog,
   onOpenProfileCard,
+  onOpenSelfMenu,
   onOpenSettings,
   onOpenGuildPrivacy,
   onOpenGuildSettings,
@@ -1011,6 +1012,7 @@ export function WorkspaceNavigation({
           inputMenuNode={inputMenuNode}
           joinedVoiceChannel={joinedVoiceChannel}
           onHandleVoiceLeave={onHandleVoiceLeave}
+          onOpenSelfMenu={onOpenSelfMenu}
           onOpenSettings={onOpenSettings}
           onSelectGuildChannel={onSelectGuildChannel}
           onToggleVoiceMenu={onToggleVoiceMenu}

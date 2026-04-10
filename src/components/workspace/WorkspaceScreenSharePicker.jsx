@@ -5,10 +5,11 @@ import { Icon } from "../Icon.jsx";
 
 function SourceCard({ language = "es", layout = "list", onClick, selected, source }) {
   const t = (key, fallback = "") => translate(language, key, fallback);
+  const isApplicationsLayout = layout === "grid";
 
   return (
     <button
-      className={`screen-share-source-card ${layout === "grid" ? "grid-layout" : "list-layout"} ${selected ? "selected" : ""}`.trim()}
+      className={`screen-share-source-card ${isApplicationsLayout ? "applications-card" : "list-layout"} ${selected ? "selected" : ""}`.trim()}
       onClick={() => onClick(source.id)}
       type="button"
     >
@@ -23,7 +24,16 @@ function SourceCard({ language = "es", layout = "list", onClick, selected, sourc
       </div>
 
       <div className="screen-share-source-copy">
-        <strong>{source.name}</strong>
+        <div className="screen-share-source-title-row">
+          <span className="screen-share-source-app-icon">
+            {source.appIconDataUrl ? (
+              <img alt="" src={source.appIconDataUrl} />
+            ) : (
+              <Icon name={source.kind === "screen" ? "screenShare" : "appGrid"} size={14} />
+            )}
+          </span>
+          <strong>{source.name}</strong>
+        </div>
         <small>
           {source.kind === "screen"
             ? t("voice.share.source.screen", "Pantalla completa")
@@ -31,7 +41,10 @@ function SourceCard({ language = "es", layout = "list", onClick, selected, sourc
         </small>
       </div>
 
-      <i className={`voice-control-radio ${selected ? "selected" : ""}`.trim()} />
+      <i
+        aria-hidden="true"
+        className={`voice-control-radio ${selected ? "selected" : ""}`.trim()}
+      />
     </button>
   );
 }

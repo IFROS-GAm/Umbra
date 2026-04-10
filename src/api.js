@@ -109,6 +109,9 @@ export const api = {
   bootstrap() {
     return request("/api/bootstrap");
   },
+  fetchVoiceState() {
+    return request("/api/voice/state");
+  },
   fetchMessages({ before, channelId, limit = 30, signal } = {}) {
     const params = new URLSearchParams({
       limit: String(limit)

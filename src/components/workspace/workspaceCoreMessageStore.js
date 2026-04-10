@@ -11,6 +11,39 @@ import {
 
 export const BACKGROUND_PREFETCH_COOLDOWN_MS = 90_000;
 
+function messageSignature(message) {
+  if (!message) {
+    return "";
+  }
+
+  return [
+    message.id || message.client_nonce || "",
+    message.content || "",
+    message.created_at || "",
+    message.edited_at || "",
+    message.deleted_at || "",
+    message.author?.id || "",
+    (message.attachments || []).length,
+    (message.reactions || [])
+      .map((reaction) => `${reaction.emoji}:${reaction.count}:${reaction.selected ? 1 : 0}`)
+      .join("|")
+  ].join("::");
+}
+
+function areMessageListsEquivalent(previousMessages = [], nextMessages = []) {
+  if (previousMessages.length !== nextMessages.length) {
+    return false;
+  }
+
+  for (let index = 0; index < previousMessages.length; index += 1) {
+    if (messageSignature(previousMessages[index]) !== messageSignature(nextMessages[index])) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export function createWorkspaceMessageStore({
   accessTokenRef,
   activeSelection,
@@ -77,9 +110,25 @@ export function createWorkspaceMessageStore({
       return;
     }
 
+    const previousEntry = messageCacheRef.current.get(channelId) || null;
+    const previousMessages = previousEntry?.messages || [];
+    const resolvedHasMore = nextHasMore ?? previousEntry?.hasMore ?? true;
+    const isSamePayload =
+      previousEntry &&
+      previousEntry.hasMore === resolvedHasMore &&
+      areMessageListsEquivalent(previousMessages, nextMessages);
+
+    if (isSamePayload) {
+      messageCacheRef.current.set(channelId, {
+        ...previousEntry,
+        fetchedAt
+      });
+      return;
+    }
+
     const nextEntry = {
       fetchedAt,
-      hasMore: nextHasMore,
+      hasMore: resolvedHasMore,
       messages: nextMessages
     };
     messageCacheRef.current.set(channelId, nextEntry);
@@ -87,7 +136,7 @@ export function createWorkspaceMessageStore({
     if (activeSelectionRef.current.channelId === channelId) {
       startTransition(() => {
         setMessages(nextMessages);
-        setHasMore(nextHasMore);
+        setHasMore(resolvedHasMore);
       });
     }
   }

@@ -1248,7 +1248,11 @@ export class DemoStore {
       (item) => item.id !== requestId
     );
     await this.save();
-    return { ok: true, request_id: requestId };
+    return {
+      ok: true,
+      other_user_id: request.requester_id === userId ? request.recipient_id : request.requester_id,
+      request_id: requestId
+    };
   }
 
   async removeFriend({ friendId, userId }) {

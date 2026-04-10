@@ -769,6 +769,70 @@ export function TermsSettingsPanel({ legalSections, locale, termsReviewDate }) {
   );
 }
 
+export function CreditsSettingsPanel({ locale }) {
+  const credits = locale.credits;
+
+  return (
+    <div className="settings-stack">
+      <section className="settings-card settings-legal-hero settings-credits-hero">
+        <div className="settings-card-title">
+          <h3>{credits.title}</h3>
+          <span>{credits.subtitle}</span>
+        </div>
+
+        <div className="settings-legal-summary">
+          <div className="settings-legal-summary-copy">
+            <strong>{credits.companyTitle}</strong>
+            <p>{credits.companyBody}</p>
+          </div>
+          <div className="settings-legal-summary-note">
+            <strong>{credits.companyTag}</strong>
+            <span>mia S.S</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="settings-card settings-legal-card">
+        <div className="settings-card-title">
+          <h3>{credits.executiveTitle}</h3>
+          <span>{credits.noteTitle}</span>
+        </div>
+
+        <div className="settings-credits-grid">
+          <article className="settings-credits-person-card">
+            <span className="settings-row-icon">
+              <Icon name="profile" size={16} />
+            </span>
+            <strong>{credits.people.ceoName}</strong>
+            <span>{credits.people.ceoRole}</span>
+          </article>
+
+          <article className="settings-credits-person-card">
+            <span className="settings-row-icon">
+              <Icon name="sparkles" size={16} />
+            </span>
+            <strong>{credits.people.engineerNames}</strong>
+            <span>{credits.people.engineerRole}</span>
+          </article>
+
+          <article className="settings-credits-person-card">
+            <span className="settings-row-icon">
+              <Icon name="community" size={16} />
+            </span>
+            <strong>{credits.people.adminName}</strong>
+            <span>{credits.people.adminRole}</span>
+          </article>
+        </div>
+
+        <div className="settings-empty-state settings-empty-state-solid">
+          <strong>{credits.noteTitle}</strong>
+          <span>{credits.noteBody}</span>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export function LanguageSettingsPanel({
   activeLanguageOption,
   language,

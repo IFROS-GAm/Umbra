@@ -10,6 +10,7 @@ import {
 } from "./SettingsModalAccountPanels.jsx";
 import { SettingsModalLayout } from "./SettingsModalLayout.jsx";
 import {
+  CreditsSettingsPanel,
   ConnectionsSettingsPanel,
   DevicesSettingsPanel,
   LanguageSettingsPanel,
@@ -50,6 +51,8 @@ import {
 export function SettingsModal({
   dmCount,
   guildCount,
+  initialEditorOpen = false,
+  initialTab = "security",
   language = "es",
   onClose,
   onChangeLanguage,
@@ -73,8 +76,8 @@ export function SettingsModal({
     [language]
   );
 
-  const [tab, setTab] = useState("security");
-  const [editorOpen, setEditorOpen] = useState(false);
+  const [tab, setTab] = useState(initialTab);
+  const [editorOpen, setEditorOpen] = useState(Boolean(initialEditorOpen));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
@@ -142,7 +145,8 @@ export function SettingsModal({
       imageUrl: "",
       open: false
     });
-    setEditorOpen(false);
+    setEditorOpen(Boolean(initialEditorOpen));
+    setTab(initialTab || "security");
     setError("");
     setSaved("");
     setSaving(false);
@@ -152,7 +156,7 @@ export function SettingsModal({
     setNewPasswordDraft("");
     setConfirmPasswordDraft("");
     setReauthNonceDraft("");
-  }, [user]);
+  }, [initialEditorOpen, initialTab, user]);
 
   useEffect(() => {
     if (error === "sanitizeUsername is not defined") {
@@ -301,7 +305,9 @@ export function SettingsModal({
                           ? t("settings.nav.theme", item.label)
                           : item.id === "language"
                             ? t("settings.nav.language", item.label)
-                            : t("settings.nav.terms", item.label)
+                            : item.id === "credits"
+                              ? t("settings.nav.credits", item.label)
+                              : t("settings.nav.terms", item.label)
         }))
       })),
     [t]
@@ -873,6 +879,8 @@ export function SettingsModal({
     <TermsSettingsPanel legalSections={legalSections} locale={locale} termsReviewDate={termsReviewDate} />
   );
 
+  const creditsSettingsContent = <CreditsSettingsPanel locale={locale} />;
+
   const activeLanguageOption = LANGUAGE_OPTIONS.find((option) => option.value === language) || LANGUAGE_OPTIONS[0];
 
   const languageSettingsContent = (
@@ -976,6 +984,8 @@ export function SettingsModal({
       languageSettingsContent
     ) : tab === "terms" ? (
       termsSettingsContent
+    ) : tab === "credits" ? (
+      creditsSettingsContent
     ) : (
       connectionsSettingsContent
     );

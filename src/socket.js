@@ -23,6 +23,13 @@ export function getSocket(accessToken) {
     socket = io(nextSocketUrl, {
       autoConnect: false,
       auth: accessToken ? { token: accessToken } : {},
+      path: "/socket.io",
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 500,
+      reconnectionDelayMax: 3000,
+      randomizationFactor: 0.2,
+      withCredentials: false,
       transports: ["websocket"],
       upgrade: false,
       rememberUpgrade: true,

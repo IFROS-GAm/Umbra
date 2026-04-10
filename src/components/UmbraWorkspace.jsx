@@ -2,6 +2,8 @@ import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from "rea
 
 import { api } from "../api.js";
 import { translate } from "../i18n.js";
+import { AccountManagerModal } from "./AccountManagerModal.jsx";
+import { CurrentUserMenu } from "./CurrentUserMenu.jsx";
 import { UserProfileCard } from "./UserProfileCard.jsx";
 import { UserProfileModal } from "./UserProfileModal.jsx";
 import { ChatHeaderPanel } from "./workspace/ChatHeaderPanel.jsx";
@@ -33,6 +35,7 @@ import {
 import { buildWorkspaceProfileCardData } from "./workspace/workspaceProfileCard.js";
 import { createWorkspaceSocialActions } from "./workspace/workspaceSocialActions.js";
 import { useUmbraWorkspaceCore } from "./workspace/useUmbraWorkspaceCore.js";
+import { useWorkspaceDesktopNotifications } from "./workspace/useWorkspaceDesktopNotifications.js";
 import { useWorkspaceShellState } from "./workspace/useWorkspaceShellState.js";
 
 const lazyNamed = (loader, exportName) =>
@@ -85,7 +88,7 @@ export function UmbraWorkspace({
     handleAttachmentSelection, handleComposerChange, handleComposerShortcut, handleDeleteMessage,
     handleDialogSubmit, handlePickerInsert, handleProfileUpdate, handleReaction, handleScroll,
     handleStickerSelect,
-    handleJoinDirectCall, handleSelectGuildChannel, handleStatusChange, handleSubmitMessage, handleVoiceDeviceChange, handleVoiceLeave,
+    handleJoinDirectCall, joinVoiceChannelById, handleSelectGuildChannel, handleStatusChange, handleSubmitMessage, handleVoiceDeviceChange, handleVoiceLeave,
     headerActionsRef, headerCopy, headerPanel, headerPanelRef, hoveredVoiceChannelId, inboxTab,
     isVoiceChannel, joinedVoiceChannelId, listRef, loadBootstrap, loadingMessages, messageMenuFor, messages,
     membersPanelVisible, profileCard, reactionPickerFor, removeComposerAttachment,
@@ -101,7 +104,14 @@ export function UmbraWorkspace({
   } = useUmbraWorkspaceCore({ accessToken, initialSelection, onSignOut });
   const openingDmRequestsRef = useRef(new Map());
   const screenShareSessionRef = useRef(null);
+  const statusResetTimeoutRef = useRef(null);
   const [screenShareStream, setScreenShareStream] = useState(null);
+  const [currentUserMenuAnchorRect, setCurrentUserMenuAnchorRect] = useState(null);
+  const [accountManagerOpen, setAccountManagerOpen] = useState(false);
+  const [settingsView, setSettingsView] = useState({
+    initialEditorOpen: false,
+    initialTab: "security"
+  });
   const [screenShareStatus, setScreenShareStatus] = useState({
     audioAvailable: false,
     error: "",
@@ -159,8 +169,32 @@ export function UmbraWorkspace({
     guilds: workspace?.guilds
   });
 
+  useWorkspaceDesktopNotifications({
+    accessToken,
+    dmMenuPrefs,
+    guildMenuPrefs,
+    joinVoiceChannelById,
+    joinedVoiceChannelId,
+    language,
+    showUiNotice,
+    voiceSessions,
+    workspace
+  });
+
   const currentUser = workspace?.current_user || null;
   const currentUserId = currentUser?.id || "";
+  const currentUserProfile = useMemo(
+    () =>
+      currentUser
+        ? buildWorkspaceProfileCardData({
+            activeChannel,
+            activeGuild,
+            targetUser: currentUser,
+            workspace
+          })
+        : null,
+    [activeChannel, activeGuild, currentUser, workspace]
+  );
   const isDirectConversation = activeSelection?.kind === "dm";
   const isGroupDirectConversation = isDirectConversation && activeChannel?.type === "group_dm";
   const isCallableDirectConversation =
@@ -224,6 +258,16 @@ export function UmbraWorkspace({
     []
   );
 
+  useEffect(
+    () => () => {
+      if (statusResetTimeoutRef.current) {
+        window.clearTimeout(statusResetTimeoutRef.current);
+        statusResetTimeoutRef.current = null;
+      }
+    },
+    []
+  );
+
   function buildProfileCardData(targetUser, displayNameOverride = null) {
     return buildWorkspaceProfileCardData({
       activeChannel,
@@ -232,6 +276,74 @@ export function UmbraWorkspace({
       targetUser,
       workspace
     });
+  }
+
+  function openSettingsDialog(preset = {}) {
+    setCurrentUserMenuAnchorRect(null);
+    setProfileCard(null);
+    setVoiceParticipantMenu(null);
+    setSettingsView({
+      initialEditorOpen: Boolean(preset.initialEditorOpen),
+      initialTab: preset.initialTab || "security"
+    });
+    setSettingsOpen(true);
+  }
+
+  function openCurrentUserMenu(event) {
+    if (!currentUser?.id) {
+      return;
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    setProfileCard(null);
+    setVoiceParticipantMenu(null);
+    setCurrentUserMenuAnchorRect({
+      bottom: rect.bottom,
+      left: rect.left,
+      right: rect.right,
+      top: rect.top
+    });
+  }
+
+  function openAccountManager() {
+    setCurrentUserMenuAnchorRect(null);
+    setAccountManagerOpen(true);
+  }
+
+  async function handleCurrentUserStatusChange(status, durationMs = null) {
+    if (statusResetTimeoutRef.current) {
+      window.clearTimeout(statusResetTimeoutRef.current);
+      statusResetTimeoutRef.current = null;
+    }
+
+    await handleStatusChange(status);
+
+    if (durationMs) {
+      statusResetTimeoutRef.current = window.setTimeout(() => {
+        handleStatusChange("online").catch(() => {});
+        statusResetTimeoutRef.current = null;
+      }, durationMs);
+    }
+  }
+
+  async function handleCurrentUserExit() {
+    setCurrentUserMenuAnchorRect(null);
+    setAccountManagerOpen(false);
+    await onSignOut?.();
+  }
+
+  async function handleCopyCurrentUserId() {
+    if (!currentUserId) {
+      showUiNotice("No hay ID visible para copiar.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(String(currentUserId));
+      showUiNotice("ID del usuario copiado.");
+    } catch {
+      showUiNotice("No se pudo copiar el ID del usuario.");
+    }
   }
 
   async function handleCopyProfileId(profile) {
@@ -1777,7 +1889,8 @@ export function UmbraWorkspace({
             onOpenFullProfile={openFullProfile}
             onOpenInviteModal={openInviteModal}
             onOpenProfileCard={openProfileCard}
-            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenSelfMenu={openCurrentUserMenu}
+            onOpenSettings={() => openSettingsDialog()}
             onCloseDm={handleCloseDm}
             onCopyDmId={handleCopyDmId}
             onCopyGuildId={handleCopyGuildId}
@@ -2007,6 +2120,8 @@ export function UmbraWorkspace({
             <SettingsModal
               dmCount={workspace.dms.length}
               guildCount={workspace.guilds.length}
+              initialEditorOpen={settingsView.initialEditorOpen}
+              initialTab={settingsView.initialTab}
               language={language}
               onClose={() => setSettingsOpen(false)}
               onChangeLanguage={onChangeLanguage}
@@ -2017,6 +2132,38 @@ export function UmbraWorkspace({
               user={workspace.current_user}
             />
           </Suspense>
+        ) : null}
+
+        {currentUserMenuAnchorRect && currentUserProfile ? (
+          <CurrentUserMenu
+            anchorRect={currentUserMenuAnchorRect}
+            language={language}
+            onChangeStatus={handleCurrentUserStatusChange}
+            onClose={() => setCurrentUserMenuAnchorRect(null)}
+            onCopyId={handleCopyCurrentUserId}
+            onEditProfile={() =>
+              openSettingsDialog({
+                initialEditorOpen: true,
+                initialTab: "security"
+              })
+            }
+            onManageAccounts={() =>
+              openAccountManager()
+            }
+            onSignOut={handleCurrentUserExit}
+            onSwitchAccount={openAccountManager}
+            profile={currentUserProfile}
+          />
+        ) : null}
+
+        {accountManagerOpen && currentUser ? (
+          <AccountManagerModal
+            language={language}
+            onAddAccount={handleCurrentUserExit}
+            onClose={() => setAccountManagerOpen(false)}
+            onSignOut={handleCurrentUserExit}
+            user={currentUser}
+          />
         ) : null}
 
         {profileCard ? (
@@ -2034,7 +2181,10 @@ export function UmbraWorkspace({
             onSendDm={handleSendDmFromCard}
             onOpenSelfProfile={() => {
               setProfileCard(null);
-              setSettingsOpen(true);
+              openSettingsDialog({
+                initialEditorOpen: true,
+                initialTab: "security"
+              });
             }}
             onShowNotice={showUiNotice}
           />
@@ -2068,7 +2218,10 @@ export function UmbraWorkspace({
               onOpenProfile={(profile) => setFullProfile(profile)}
               onOpenSelfProfile={() => {
                 setVoiceParticipantMenu(null);
-                setSettingsOpen(true);
+                openSettingsDialog({
+                  initialEditorOpen: true,
+                  initialTab: "security"
+                });
               }}
               onSendMessage={handleOpenDmFromCard}
               onToggleMuted={handleToggleVoiceParticipantMuted}

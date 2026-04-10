@@ -1,4 +1,13 @@
-const { app, BrowserWindow, ipcMain, shell, desktopCapturer } = require("electron");
+const {
+  app,
+  BrowserWindow,
+  Notification,
+  desktopCapturer,
+  ipcMain,
+  nativeImage,
+  screen,
+  shell
+} = require("electron");
 const dotenv = require("dotenv");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -12,6 +21,71 @@ const serverPort = Number(process.env.ELECTRON_SERVER_PORT || 3130);
 let mainWindow = null;
 let pendingAuthCallback = null;
 let embeddedServer = null;
+let incomingCallWindow = null;
+let incomingCallPayload = null;
+let callSoundInterval = null;
+let callSoundEchoTimeout = null;
+
+function clearCallSoundEcho() {
+  if (callSoundEchoTimeout) {
+    clearTimeout(callSoundEchoTimeout);
+    callSoundEchoTimeout = null;
+  }
+}
+
+function playBeepPattern(kind = "message") {
+  try {
+    shell.beep();
+  } catch {
+    // Ignore platform-specific beep issues.
+  }
+
+  if (kind === "call") {
+    clearCallSoundEcho();
+    callSoundEchoTimeout = setTimeout(() => {
+      try {
+        shell.beep();
+      } catch {
+        // Ignore platform-specific beep issues.
+      }
+    }, 180);
+    return;
+  }
+
+  if (kind === "friend-request") {
+    clearCallSoundEcho();
+    callSoundEchoTimeout = setTimeout(() => {
+      try {
+        shell.beep();
+      } catch {
+        // Ignore platform-specific beep issues.
+      }
+    }, 120);
+    setTimeout(() => {
+      try {
+        shell.beep();
+      } catch {
+        // Ignore platform-specific beep issues.
+      }
+    }, 320);
+  }
+}
+
+function stopCallSoundLoop() {
+  if (callSoundInterval) {
+    clearInterval(callSoundInterval);
+    callSoundInterval = null;
+  }
+  clearCallSoundEcho();
+}
+
+function startCallSoundLoop() {
+  stopCallSoundLoop();
+  playBeepPattern("call");
+  callSoundInterval = setInterval(() => {
+    playBeepPattern("call");
+  }, 2600);
+}
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -115,6 +189,22 @@ function resolveDesktopIconPath() {
   ];
 
   return candidates.find((candidatePath) => candidatePath && fs.existsSync(candidatePath)) || null;
+}
+
+function resolveNotificationIcon(iconDataUrl = "") {
+  if (iconDataUrl) {
+    try {
+      const image = nativeImage.createFromDataURL(iconDataUrl);
+      if (!image.isEmpty()) {
+        return image;
+      }
+    } catch {
+      // Fall back to the desktop icon.
+    }
+  }
+
+  const iconPath = resolveDesktopIconPath();
+  return iconPath ? nativeImage.createFromPath(iconPath) : undefined;
 }
 
 function registerProtocolClient() {
@@ -246,6 +336,92 @@ async function createWindow() {
   });
 }
 
+function getIncomingCallWindowBounds() {
+  const workArea = screen.getPrimaryDisplay().workArea;
+  const width = 214;
+  const height = 264;
+
+  return {
+    height,
+    width,
+    x: Math.max(workArea.x + 16, workArea.x + workArea.width - width - 20),
+    y: Math.max(workArea.y + 16, workArea.y + workArea.height - height - 28)
+  };
+}
+
+async function ensureIncomingCallWindow() {
+  if (incomingCallWindow && !incomingCallWindow.isDestroyed()) {
+    return incomingCallWindow;
+  }
+
+  const bounds = getIncomingCallWindowBounds();
+  incomingCallWindow = new BrowserWindow({
+    ...bounds,
+    frame: false,
+    fullscreenable: false,
+    hasShadow: true,
+    maximizable: false,
+    minimizable: false,
+    movable: true,
+    resizable: false,
+    roundedCorners: true,
+    show: false,
+    skipTaskbar: true,
+    transparent: true,
+    alwaysOnTop: true,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      preload: path.join(__dirname, "incoming-call-preload.cjs")
+    }
+  });
+
+  incomingCallWindow.on("closed", () => {
+    incomingCallWindow = null;
+    incomingCallPayload = null;
+    stopCallSoundLoop();
+  });
+
+  await incomingCallWindow.loadFile(path.join(__dirname, "incoming-call.html"));
+  incomingCallWindow.webContents.on("did-finish-load", () => {
+    if (incomingCallPayload && incomingCallWindow && !incomingCallWindow.isDestroyed()) {
+      incomingCallWindow.webContents.send("umbra:call-popup-data", incomingCallPayload);
+    }
+  });
+
+  return incomingCallWindow;
+}
+
+async function showIncomingCallWindow(payload) {
+  incomingCallPayload = payload;
+  const popupWindow = await ensureIncomingCallWindow();
+  const bounds = getIncomingCallWindowBounds();
+  popupWindow.setBounds(bounds);
+
+  if (popupWindow.webContents.isLoading()) {
+    popupWindow.webContents.once("did-finish-load", () => {
+      if (incomingCallPayload && popupWindow && !popupWindow.isDestroyed()) {
+        popupWindow.webContents.send("umbra:call-popup-data", incomingCallPayload);
+      }
+    });
+  } else {
+    popupWindow.webContents.send("umbra:call-popup-data", incomingCallPayload);
+  }
+
+  popupWindow.showInactive();
+  startCallSoundLoop();
+}
+
+function hideIncomingCallWindow() {
+  stopCallSoundLoop();
+
+  if (incomingCallWindow && !incomingCallWindow.isDestroyed()) {
+    incomingCallWindow.hide();
+  }
+
+  incomingCallPayload = null;
+}
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 }
@@ -294,8 +470,8 @@ ipcMain.handle("umbra:list-display-sources", async () => {
   const sources = await desktopCapturer.getSources({
     fetchWindowIcons: true,
     thumbnailSize: {
-      height: 360,
-      width: 640
+      height: 540,
+      width: 960
     },
     types: ["window", "screen"]
   });
@@ -308,6 +484,78 @@ ipcMain.handle("umbra:list-display-sources", async () => {
     name: source.name,
     thumbnailDataUrl: source.thumbnail?.isEmpty?.() ? "" : source.thumbnail?.toDataURL?.() || ""
   }));
+});
+
+ipcMain.handle("umbra:show-native-notification", async (_event, payload = {}) => {
+  const title = String(payload.title || "Umbra").trim() || "Umbra";
+  const body = String(payload.body || "").trim();
+  const kind = String(payload.kind || "message").trim().toLowerCase();
+  const icon = resolveNotificationIcon(payload.iconDataUrl || "");
+
+  if (Notification.isSupported()) {
+    const notification = new Notification({
+      body,
+      icon,
+      silent: true,
+      title
+    });
+    notification.show();
+  }
+
+  if (payload.playSound !== false) {
+    playBeepPattern(
+      kind === "call"
+        ? "call"
+        : kind === "friend-request"
+          ? "friend-request"
+          : "message"
+    );
+  }
+  return true;
+});
+
+ipcMain.handle("umbra:show-incoming-call-popup", async (_event, payload = {}) => {
+  const normalizedPayload = {
+    avatarUrl: String(payload.avatarUrl || "").trim(),
+    body: String(payload.body || "").trim(),
+    callId: String(payload.callId || payload.channelId || "").trim(),
+    callerName: String(payload.callerName || "Umbra").trim() || "Umbra",
+    channelId: String(payload.channelId || "").trim(),
+    channelName: String(payload.channelName || "").trim(),
+    kind: String(payload.kind || "call").trim().toLowerCase()
+  };
+
+  await showIncomingCallWindow(normalizedPayload);
+  return true;
+});
+
+ipcMain.handle("umbra:hide-incoming-call-popup", async () => {
+  hideIncomingCallWindow();
+  return true;
+});
+
+ipcMain.on("umbra:incoming-call-popup-action", (_event, payload = {}) => {
+  const action = String(payload.action || "").trim().toLowerCase();
+  const forwardedPayload = {
+    action,
+    callId: String(payload.callId || incomingCallPayload?.callId || "").trim(),
+    channelId: String(payload.channelId || incomingCallPayload?.channelId || "").trim()
+  };
+
+  hideIncomingCallWindow();
+
+  if (action === "accept" && mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore();
+    }
+
+    mainWindow.show();
+    mainWindow.focus();
+  }
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("umbra:incoming-call-action", forwardedPayload);
+  }
 });
 
 ipcMain.on("umbra:get-runtime-config", (event) => {
@@ -339,6 +587,7 @@ process.on("unhandledRejection", (error) => {
 });
 
 app.on("before-quit", async () => {
+  hideIncomingCallWindow();
   if (embeddedServer?.close) {
     try {
       await embeddedServer.close();

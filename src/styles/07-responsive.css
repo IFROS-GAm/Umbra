@@ -829,7 +829,8 @@
   display: flex;
   flex-direction: column;
   gap: 18px;
-  max-height: min(86vh, 920px);
+  height: min(88vh, 920px);
+  max-height: min(88vh, 920px);
   max-width: 980px;
   overflow: hidden;
   padding: 18px;
@@ -870,12 +871,13 @@
 
 .screen-share-source-grid {
   display: grid;
+  flex: 1 1 auto;
   gap: 16px;
   grid-template-columns: 1fr;
-  max-height: min(58vh, 640px);
-  min-height: 420px;
+  max-height: min(60vh, 660px);
+  min-height: 0;
   overflow-y: auto;
-  padding-right: 8px;
+  padding-right: 10px;
   scrollbar-gutter: stable;
 }
 
@@ -897,12 +899,13 @@
   text-align: left;
 }
 
-.screen-share-source-card.grid-layout {
+.screen-share-source-card.applications-card {
   align-content: start;
   display: grid;
-  gap: 10px;
-  grid-template-rows: 210px auto;
-  min-height: 300px;
+  gap: 12px;
+  grid-template-rows: auto auto;
+  min-height: 298px;
+  padding: 14px;
 }
 
 .screen-share-source-card.selected {
@@ -918,9 +921,11 @@
   overflow: hidden;
 }
 
-.screen-share-source-card.grid-layout .screen-share-source-preview {
+.screen-share-source-card.applications-card .screen-share-source-preview {
+  aspect-ratio: 16 / 9;
   flex: 0 0 auto;
-  height: 210px;
+  height: auto;
+  min-height: 188px;
   width: 100%;
 }
 
@@ -928,7 +933,12 @@
   display: block;
   height: 100%;
   object-fit: cover;
+  object-position: center center;
   width: 100%;
+}
+
+.screen-share-source-card.applications-card .screen-share-source-preview img {
+  object-fit: contain;
 }
 
 .screen-share-source-placeholder {
@@ -947,11 +957,38 @@
   min-width: 0;
 }
 
-.screen-share-source-card.grid-layout .screen-share-source-copy {
+.screen-share-source-card.applications-card .screen-share-source-copy {
   align-self: start;
-  min-height: 54px;
+  gap: 5px;
   justify-content: flex-start;
-  padding: 2px 4px 0;
+  padding: 0 2px 2px;
+}
+
+.screen-share-source-title-row {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.screen-share-source-app-icon {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  color: var(--text-1);
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 28px;
+  justify-content: center;
+  overflow: hidden;
+  width: 28px;
+}
+
+.screen-share-source-app-icon img {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
 }
 
 .screen-share-source-copy strong {
@@ -979,6 +1016,10 @@
   border: 2px solid transparent;
   border-radius: 999px;
   background-clip: padding-box;
+}
+
+.screen-share-source-grid::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .screen-share-source-card .voice-control-radio {
@@ -1790,9 +1831,12 @@
     height: 220px;
   }
 
-  .screen-share-source-card.grid-layout {
-    grid-template-rows: 220px auto;
+  .screen-share-source-card.applications-card {
     min-height: 0;
+  }
+
+  .screen-share-source-card.applications-card .screen-share-source-preview {
+    min-height: 210px;
   }
 
   .screen-share-quality-inline {

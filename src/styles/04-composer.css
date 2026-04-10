@@ -737,6 +737,289 @@
   font-size: 0.96rem;
 }
 
+.current-user-menu {
+  overflow: visible;
+  width: 320px;
+}
+
+.current-user-menu-body {
+  gap: 16px;
+}
+
+.current-user-avatar-wrap {
+  min-height: 86px;
+}
+
+.current-user-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.current-user-identity h3,
+.current-user-identity p,
+.current-user-bio {
+  margin: 0;
+}
+
+.current-user-identity h3 {
+  font-size: 1.08rem;
+}
+
+.current-user-identity p {
+  color: var(--text-2);
+  font-size: 0.92rem;
+}
+
+.current-user-bio {
+  color: var(--text-1);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.current-user-action-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.current-user-main-action {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.current-user-main-action .user-profile-utility-copy span,
+.current-user-status-row .user-profile-utility-copy span {
+  color: var(--text-0);
+}
+
+.current-user-utility-box {
+  background: #111214;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  padding: 8px;
+}
+
+.current-user-utility-box .user-profile-utility-row {
+  border-color: transparent;
+  border-radius: 12px;
+}
+
+.current-user-utility-box .user-profile-utility-row + .user-profile-utility-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.current-user-utility-box .user-profile-utility-row.danger {
+  color: #ff8f98;
+}
+
+.current-user-floating-menu {
+  background: #1a1c21;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.42);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  position: fixed;
+  width: 286px;
+  z-index: 48;
+}
+
+.current-user-floating-menu-narrow {
+  width: 214px;
+}
+
+.current-user-floating-row {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 12px;
+  color: var(--text-0);
+  display: flex;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 10px 12px;
+  text-align: left;
+  width: 100%;
+}
+
+.current-user-floating-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.current-user-floating-copy {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+}
+
+.current-user-floating-copy > span {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.current-user-floating-copy strong,
+.current-user-duration-row span,
+.current-user-account-entry strong {
+  font-size: 0.95rem;
+}
+
+.current-user-floating-copy small,
+.current-user-account-entry small {
+  color: var(--text-2);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.current-user-duration-row {
+  min-height: 42px;
+}
+
+.current-user-accounts-menu {
+  width: 258px;
+}
+
+.current-user-account-entry {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(88, 101, 242, 0.18);
+  border-radius: 12px;
+  color: var(--text-0);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 10px 12px;
+}
+
+.current-user-account-entry.selected .umbra-icon {
+  color: #cfd6ff;
+}
+
+.account-manager-modal {
+  background: #1a1c21;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 22px;
+  width: min(520px, calc(100vw - 32px));
+}
+
+.account-manager-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+}
+
+.account-manager-header h3 {
+  color: var(--text-0);
+  font-size: 1.85rem;
+  margin: 0 0 8px;
+}
+
+.account-manager-header p {
+  color: var(--text-2);
+  line-height: 1.5;
+  margin: 0;
+  max-width: 360px;
+}
+
+.account-manager-close {
+  flex-shrink: 0;
+}
+
+.account-manager-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.account-manager-entry {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 14px;
+}
+
+.account-manager-entry.selected {
+  border-color: rgba(88, 101, 242, 0.32);
+  position: relative;
+}
+
+.account-manager-entry-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.account-manager-entry-copy strong {
+  color: var(--text-0);
+  font-size: 1rem;
+}
+
+.account-manager-entry-copy span {
+  color: #66d18f;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.account-manager-entry-menu {
+  background: #181a20;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.42);
+  min-width: 184px;
+  padding: 8px;
+  position: absolute;
+  right: 14px;
+  top: calc(100% - 6px);
+  z-index: 3;
+}
+
+.account-manager-entry-menu-button {
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  color: var(--text-0);
+  display: flex;
+  min-height: 42px;
+  padding: 10px 12px;
+  width: 100%;
+}
+
+.account-manager-entry-menu-button:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.account-manager-entry-menu-button.danger {
+  color: #ff8f98;
+}
+
+.account-manager-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.account-manager-actions .primary-button,
+.account-manager-actions .ghost-button {
+  justify-content: center;
+  min-height: 48px;
+}
+
 .settings-backdrop {
   align-items: center;
   background: rgba(0, 0, 0, 0.82);
@@ -942,6 +1225,38 @@
 
 .settings-legal-card {
   background: #15171d;
+}
+
+.settings-credits-hero {
+  background:
+    linear-gradient(180deg, rgba(88, 101, 242, 0.12), rgba(15, 17, 22, 0.98)),
+    #15171c;
+}
+
+.settings-credits-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.settings-credits-person-card {
+  background: #111214;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 146px;
+  padding: 16px;
+}
+
+.settings-credits-person-card strong {
+  font-size: 1rem;
+}
+
+.settings-credits-person-card span:last-child {
+  color: var(--text-2);
+  line-height: 1.45;
 }
 
 .settings-legal-section-list {

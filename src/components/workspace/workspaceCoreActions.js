@@ -270,6 +270,14 @@ export function createWorkspaceCoreActions(context) {
     });
   }
 
+  function getLiveSocket() {
+    const socket = getSocket(accessToken);
+    if (!socket.connected) {
+      socket.connect();
+    }
+    return socket;
+  }
+
   function handleComposerChange(value) {
     setComposer(value);
     const now = Date.now();
@@ -278,7 +286,7 @@ export function createWorkspaceCoreActions(context) {
       workspace?.current_user &&
       now - lastTypingAtRef.current > 1200
     ) {
-      getSocket(accessToken).emit("typing:start", {
+      getLiveSocket().emit("typing:start", {
         channelId: activeSelection.channelId
       });
       lastTypingAtRef.current = now;
@@ -792,21 +800,76 @@ export function createWorkspaceCoreActions(context) {
     );
   }
 
+  function joinVoiceChannelById(channelId, { enableCamera = false } = {}) {
+    if (!accessToken || !channelId) {
+      return false;
+    }
+
+    const targetLookup = findChannelInSession(workspace, channelId);
+    const targetChannel = targetLookup?.channel || null;
+
+    if (!targetChannel) {
+      return false;
+    }
+
+    if (targetLookup.kind === "guild") {
+      if (!targetChannel.is_voice || !targetLookup.guild) {
+        return false;
+      }
+
+      setVoiceMenu(null);
+      setActiveSelection({
+        channelId: targetChannel.id,
+        guildId: targetLookup.guild.id,
+        kind: "guild"
+      });
+      applyLocalVoicePresence(targetChannel.id);
+      getLiveSocket().emit("voice:join", {
+        channelId: targetChannel.id
+      });
+      setJoinedVoiceChannelId(targetChannel.id);
+      return true;
+    }
+
+    if (targetLookup.kind === "dm" && DIRECT_CALL_TYPES.has(targetChannel.type)) {
+      setVoiceMenu(null);
+      setActiveSelection({
+        channelId: targetChannel.id,
+        guildId: null,
+        kind: "dm"
+      });
+
+      if (enableCamera) {
+        setVoiceState((previous) => ({
+          ...previous,
+          cameraEnabled: true
+        }));
+      }
+
+      applyLocalVoicePresence(targetChannel.id);
+      getLiveSocket().emit("voice:join", {
+        channelId: targetChannel.id
+      });
+      setJoinedVoiceChannelId(targetChannel.id);
+      return true;
+    }
+
+    return false;
+  }
+
   function handleSelectGuildChannel(channel) {
+    if (channel.is_voice) {
+      if (joinVoiceChannelById(channel.id)) {
+        return;
+      }
+    }
+
     setVoiceMenu(null);
     setActiveSelection({
       channelId: channel.id,
       guildId: activeGuild.id,
       kind: "guild"
     });
-
-    if (channel.is_voice && accessToken) {
-      applyLocalVoicePresence(channel.id);
-      getSocket(accessToken).emit("voice:join", {
-        channelId: channel.id
-      });
-      setJoinedVoiceChannelId(channel.id);
-    }
   }
 
   function handleJoinDirectCall({ enableCamera = false } = {}) {
@@ -823,19 +886,7 @@ export function createWorkspaceCoreActions(context) {
       return;
     }
 
-    setVoiceMenu(null);
-    if (enableCamera) {
-      setVoiceState((previous) => ({
-        ...previous,
-        cameraEnabled: true
-      }));
-    }
-
-    applyLocalVoicePresence(selectedChannel.id);
-    getSocket(accessToken).emit("voice:join", {
-      channelId: selectedChannel.id
-    });
-    setJoinedVoiceChannelId(selectedChannel.id);
+    joinVoiceChannelById(selectedChannel.id, { enableCamera });
   }
 
   function handleVoiceLeave() {
@@ -859,7 +910,7 @@ export function createWorkspaceCoreActions(context) {
     }
 
     try {
-      getSocket(accessToken).emit("voice:leave", {
+      getLiveSocket().emit("voice:leave", {
         channelId: previousChannelId
       });
     } catch {
@@ -881,6 +932,7 @@ export function createWorkspaceCoreActions(context) {
     handleProfileUpdate,
     handleReaction,
     handleScroll,
+    joinVoiceChannelById,
     handleSelectGuildChannel,
     handleStatusChange,
     handleStickerSelect,

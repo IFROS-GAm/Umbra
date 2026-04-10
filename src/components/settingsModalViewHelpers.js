@@ -21,7 +21,8 @@ export function buildTranslatedPanelTitle(tab, translate, fallbackTitle) {
     connections: "settings.panel.connections",
     status: "settings.panel.status",
     language: "settings.panel.language",
-    terms: "settings.panel.terms"
+    terms: "settings.panel.terms",
+    credits: "settings.panel.credits"
   };
 
   return translate(keyMap[tab] || keyMap.terms, fallbackTitle);

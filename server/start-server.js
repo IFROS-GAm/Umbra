@@ -281,14 +281,54 @@ export async function startServer(options = {}) {
     io.emit("navigation:update", payload);
   }
 
+  function emitNavigationUpdateToUsers(userIds = [], payload = {}) {
+    const targetIds = [...new Set((userIds || []).map((id) => String(id || "").trim()).filter(Boolean))];
+    if (!targetIds.length) {
+      emitNavigationUpdate(payload);
+      return;
+    }
+
+    targetIds.forEach((userId) => {
+      io.to(`user:${userId}`).emit("navigation:update", payload);
+    });
+  }
+
+  function emitFriendRequestToUser(recipientUserId, payload = {}) {
+    const normalizedRecipientId = String(recipientUserId || "").trim();
+    if (!normalizedRecipientId) {
+      return;
+    }
+
+    io.to(`user:${normalizedRecipientId}`).emit("friend:request", payload);
+  }
+
   async function emitChannelPreview(channelId, preview) {
     if (!channelId || !preview) {
       return;
     }
 
-    const audienceUserIds = await store.listChannelAudienceIds(channelId);
+    const audienceUserIds =
+      typeof store.listChannelAudienceIds === "function"
+        ? await store.listChannelAudienceIds(channelId)
+        : [];
     for (const audienceUserId of audienceUserIds) {
       io.to(`user:${audienceUserId}`).emit("channel:preview", { preview });
+    }
+  }
+
+  async function emitChannelEvent(channelId, eventName, payload = {}) {
+    if (!channelId || !eventName) {
+      return;
+    }
+
+    io.to(`channel:${channelId}`).emit(eventName, payload);
+
+    const audienceUserIds =
+      typeof store.listChannelAudienceIds === "function"
+        ? await store.listChannelAudienceIds(channelId)
+        : [];
+    for (const audienceUserId of audienceUserIds) {
+      io.to(`user:${audienceUserId}`).emit(eventName, payload);
     }
   }
 
@@ -350,6 +390,16 @@ export async function startServer(options = {}) {
       res.json({
         mode: store.getMode(),
         ...data
+      });
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.get("/api/voice/state", requireViewer, async (_req, res) => {
+    try {
+      res.json({
+        sessions: serializeVoiceState()
       });
     } catch (error) {
       sendError(res, error);
@@ -419,10 +469,10 @@ export async function startServer(options = {}) {
       const message = created?.message || created;
       const preview = created?.preview || (await store.getChannelPreview(req.params.channelId));
 
-      io.to(`channel:${req.params.channelId}`).emit("message:create", {
+      emitChannelEvent(req.params.channelId, "message:create", {
         message,
         preview
-      });
+      }).catch(() => {});
       emitChannelPreview(req.params.channelId, preview).catch(() => {});
 
       res.status(201).json({ message, preview });
@@ -458,10 +508,10 @@ export async function startServer(options = {}) {
       });
       const preview = await store.getChannelPreview(message.channel_id);
 
-      io.to(`channel:${message.channel_id}`).emit("message:update", {
+      emitChannelEvent(message.channel_id, "message:update", {
         message,
         preview
-      });
+      }).catch(() => {});
       emitChannelPreview(message.channel_id, preview).catch(() => {});
 
       res.json({ message, preview });
@@ -478,10 +528,10 @@ export async function startServer(options = {}) {
       });
       const preview = await store.getChannelPreview(payload.channel_id);
 
-      io.to(`channel:${payload.channel_id}`).emit("message:delete", {
+      emitChannelEvent(payload.channel_id, "message:delete", {
         ...payload,
         preview
-      });
+      }).catch(() => {});
       emitChannelPreview(payload.channel_id, preview).catch(() => {});
 
       res.json({
@@ -502,7 +552,7 @@ export async function startServer(options = {}) {
         userId: req.viewer.id
       });
 
-      io.to(`channel:${message.channel_id}`).emit("reaction:update", { message });
+      emitChannelEvent(message.channel_id, "reaction:update", { message }).catch(() => {});
       res.json({ message });
     } catch (error) {
       sendError(res, error);
@@ -785,11 +835,23 @@ export async function startServer(options = {}) {
         requesterId: req.viewer.id
       });
 
-      emitNavigationUpdate({
+      emitNavigationUpdateToUsers([req.viewer.id, req.body.recipientId], {
         type: "friends:update",
         userId: req.viewer.id,
         targetUserId: req.body.recipientId || null
       });
+
+      if (payload?.status === "pending" && payload?.request?.id && req.body.recipientId) {
+        emitFriendRequestToUser(req.body.recipientId, {
+          request: payload.request,
+          requester: {
+            avatar_url: req.viewer.avatar_url || "",
+            display_name: req.viewer.display_name || req.viewer.username || "Umbra",
+            id: req.viewer.id,
+            username: req.viewer.username || "umbra_user"
+          }
+        });
+      }
 
       res.status(201).json(payload);
     } catch (error) {
@@ -804,7 +866,7 @@ export async function startServer(options = {}) {
         userId: req.viewer.id
       });
 
-      emitNavigationUpdate({
+      emitNavigationUpdateToUsers([req.viewer.id, payload.friend_id || null], {
         type: "friends:update",
         userId: req.viewer.id,
         targetUserId: payload.friend_id || null
@@ -823,7 +885,7 @@ export async function startServer(options = {}) {
         userId: req.viewer.id
       });
 
-      emitNavigationUpdate({
+      emitNavigationUpdateToUsers([req.viewer.id, payload.other_user_id || null], {
         type: "friends:update",
         userId: req.viewer.id
       });
@@ -841,7 +903,7 @@ export async function startServer(options = {}) {
         userId: req.viewer.id
       });
 
-      emitNavigationUpdate({
+      emitNavigationUpdateToUsers([req.viewer.id, req.params.friendId], {
         type: "friends:update",
         userId: req.viewer.id,
         targetUserId: req.params.friendId
@@ -860,7 +922,7 @@ export async function startServer(options = {}) {
         userId: req.viewer.id
       });
 
-      emitNavigationUpdate({
+      emitNavigationUpdateToUsers([req.viewer.id, req.params.userId], {
         type: "friends:update",
         userId: req.viewer.id,
         targetUserId: req.params.userId

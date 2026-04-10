@@ -1,5 +1,6 @@
-import { startTransition, useEffect } from "react";
+import { startTransition, useEffect, useRef } from "react";
 
+import { api } from "../../api.js";
 import { getSocket } from "../../socket.js";
 import {
   applyChannelPreviewToWorkspace,
@@ -11,6 +12,26 @@ import {
 import { BACKGROUND_PREFETCH_COOLDOWN_MS } from "./workspaceCoreMessageStore.js";
 import { createVoiceCameraSession } from "./voiceCameraSession.js";
 import { createVoiceInputProcessingSession } from "./voiceInputProcessing.js";
+
+function areVoiceSessionsEqual(previous = {}, next = {}) {
+  const previousKeys = Object.keys(previous);
+  const nextKeys = Object.keys(next);
+
+  if (previousKeys.length !== nextKeys.length) {
+    return false;
+  }
+
+  return previousKeys.every((key) => {
+    const previousUsers = previous[key] || [];
+    const nextUsers = next[key] || [];
+
+    if (previousUsers.length !== nextUsers.length) {
+      return false;
+    }
+
+    return previousUsers.every((userId, index) => userId === nextUsers[index]);
+  });
+}
 
 export function useWorkspaceCoreEffects({
   accessToken,
@@ -29,6 +50,8 @@ export function useWorkspaceCoreEffects({
   loadMessages,
   localReadStateRef,
   messageMenuFor,
+  onIncomingMessage,
+  onVoiceUpdateNotification,
   patchChannelMessages,
   queueMarkRead,
   readChannelCache,
@@ -70,9 +93,16 @@ export function useWorkspaceCoreEffects({
   voiceInputSessionRef,
   voiceMenu,
   voiceState,
+  workspaceRef,
   workspace,
   cameraSessionRef
 }) {
+  const voiceSessionsRef = useRef({});
+  const previewRefreshTimersRef = useRef(new Map());
+  const channelFallbackSyncRef = useRef(false);
+  const bootstrapFallbackSyncRef = useRef(false);
+  const voiceFallbackSyncRef = useRef(false);
+
   useEffect(() => {
     if (!accessToken) {
       return;
@@ -187,6 +217,18 @@ export function useWorkspaceCoreEffects({
         patchChannelMessages(message.channel_id, (previous) =>
           upsertChannelMessage(previous, message)
         );
+      }
+
+      if (
+        message?.author?.id &&
+        message.author.id !== workspaceRef.current?.current_user?.id &&
+        typeof onIncomingMessage === "function"
+      ) {
+        onIncomingMessage({
+          message,
+          preview,
+          workspace: workspaceRef.current
+        });
       }
 
       if (message?.channel_id === activeSelectionRef.current.channelId) {
@@ -310,18 +352,35 @@ export function useWorkspaceCoreEffects({
     };
 
     const onVoiceState = (payload) => {
+      voiceSessionsRef.current = payload || {};
       setVoiceSessions(payload || {});
     };
 
     const onVoiceUpdate = ({ channelId, userIds }) => {
+      const previousUserIds = voiceSessionsRef.current?.[channelId] || [];
       if (!channelId) {
         return;
       }
 
-      setVoiceSessions((previous) => ({
-        ...previous,
-        [channelId]: userIds || []
-      }));
+      const normalizedUserIds = userIds || [];
+
+      setVoiceSessions((previous) => {
+        const nextVoiceSessions = {
+          ...previous,
+          [channelId]: normalizedUserIds
+        };
+        voiceSessionsRef.current = nextVoiceSessions;
+        return nextVoiceSessions;
+      });
+
+      if (typeof onVoiceUpdateNotification === "function") {
+        onVoiceUpdateNotification({
+          channelId,
+          previousUserIds,
+          userIds: normalizedUserIds,
+          workspace: workspaceRef.current
+        });
+      }
     };
 
     const onChannelPreview = ({ preview }) => {
@@ -329,12 +388,54 @@ export function useWorkspaceCoreEffects({
         return;
       }
 
+      const openChannelId = activeSelectionRef.current.channelId;
+      const isOpenChannel = preview.id === openChannelId;
+      const cachedOpenChannel = isOpenChannel ? readChannelCache(preview.id) : null;
+      const cachedLastMessageId = String(
+        cachedOpenChannel?.messages?.[cachedOpenChannel.messages.length - 1]?.id || ""
+      ).trim();
+      const previewLastMessageId = String(preview.last_message_id || "").trim();
+
       setWorkspace((previous) =>
         applyChannelPreviewToWorkspace(previous, preview, {
           localReadStateByChannel: localReadStateRef.current,
-          openChannelId: activeSelectionRef.current.channelId
+          openChannelId
         })
       );
+
+      if (
+        isOpenChannel &&
+        previewLastMessageId &&
+        previewLastMessageId !== cachedLastMessageId
+      ) {
+        const existingTimer = previewRefreshTimersRef.current.get(preview.id);
+        if (existingTimer) {
+          window.clearTimeout(existingTimer);
+        }
+
+        const timer = window.setTimeout(() => {
+          previewRefreshTimersRef.current.delete(preview.id);
+
+          const latestCachedLastMessageId = String(
+            readChannelCache(preview.id)?.messages?.[
+              (readChannelCache(preview.id)?.messages?.length || 1) - 1
+            ]?.id || ""
+          ).trim();
+
+          if (
+            activeSelectionRef.current.channelId === preview.id &&
+            latestCachedLastMessageId !== previewLastMessageId
+          ) {
+            loadMessages({
+              channelId: preview.id,
+              force: true,
+              silent: true
+            });
+          }
+        }, 900);
+
+        previewRefreshTimersRef.current.set(preview.id, timer);
+      }
     };
 
     const onRoomError = (payload) => {
@@ -349,6 +450,12 @@ export function useWorkspaceCoreEffects({
     };
 
     const onConnect = () => {
+      if (activeSelectionRef.current?.channelId) {
+        socket.emit("room:join", {
+          channelId: activeSelectionRef.current.channelId
+        });
+      }
+
       if (joinedVoiceChannelIdRef.current) {
         socket.emit("voice:join", {
           channelId: joinedVoiceChannelIdRef.current
@@ -371,6 +478,10 @@ export function useWorkspaceCoreEffects({
     socket.on("room:error", onRoomError);
 
     return () => {
+      previewRefreshTimersRef.current.forEach((timer) => {
+        window.clearTimeout(timer);
+      });
+      previewRefreshTimersRef.current.clear();
       socket.off("message:create", onMessageCreate);
       socket.off("message:update", onMessageUpdate);
       socket.off("message:delete", onMessageDelete);
@@ -389,9 +500,139 @@ export function useWorkspaceCoreEffects({
 
   useEffect(() => {
     if (activeSelection.channelId && accessToken) {
-      getSocket(accessToken).emit("room:join", { channelId: activeSelection.channelId });
+      const socket = getSocket(accessToken);
+      if (!socket.connected) {
+        socket.connect();
+      }
+      socket.emit("room:join", { channelId: activeSelection.channelId });
     }
   }, [accessToken, activeSelection.channelId]);
+
+  useEffect(() => {
+    if (!accessToken || !workspace || !activeSelection.channelId || activeChannel?.is_voice) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function syncActiveChannelMessages() {
+      if (cancelled || channelFallbackSyncRef.current) {
+        return;
+      }
+
+      channelFallbackSyncRef.current = true;
+
+      try {
+        await loadMessages({
+          channelId: activeSelection.channelId,
+          force: true,
+          limit: 24,
+          silent: true
+        });
+      } catch {
+        // Keep the fallback quiet; socket events remain the primary realtime path.
+      } finally {
+        channelFallbackSyncRef.current = false;
+      }
+    }
+
+    syncActiveChannelMessages();
+
+    const interval = window.setInterval(
+      syncActiveChannelMessages,
+      document.hidden ? 2800 : 1400
+    );
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      channelFallbackSyncRef.current = false;
+    };
+  }, [accessToken, activeChannel?.is_voice, activeSelection.channelId, Boolean(workspace)]);
+
+  useEffect(() => {
+    if (!accessToken || !workspace) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function syncWorkspaceShell() {
+      if (cancelled || bootstrapFallbackSyncRef.current) {
+        return;
+      }
+
+      bootstrapFallbackSyncRef.current = true;
+
+      try {
+        await loadBootstrapRef.current?.(activeSelectionRef.current);
+      } catch {
+        // Background sync should not surface noisy errors.
+      } finally {
+        bootstrapFallbackSyncRef.current = false;
+      }
+    }
+
+    syncWorkspaceShell();
+
+    const interval = window.setInterval(
+      syncWorkspaceShell,
+      document.hidden ? 6500 : 3200
+    );
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      bootstrapFallbackSyncRef.current = false;
+    };
+  }, [accessToken, Boolean(workspace)]);
+
+  useEffect(() => {
+    if (!accessToken || !workspace) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function syncVoiceSessions() {
+      if (cancelled || voiceFallbackSyncRef.current) {
+        return;
+      }
+
+      voiceFallbackSyncRef.current = true;
+
+      try {
+        const payload = await api.fetchVoiceState();
+        if (cancelled) {
+          return;
+        }
+
+        const nextSessions = payload?.sessions || {};
+        if (areVoiceSessionsEqual(voiceSessionsRef.current, nextSessions)) {
+          return;
+        }
+        voiceSessionsRef.current = nextSessions;
+        setVoiceSessions(nextSessions);
+      } catch {
+        // Voice fallback stays silent while the primary socket path is healthy.
+      } finally {
+        voiceFallbackSyncRef.current = false;
+      }
+    }
+
+    syncVoiceSessions();
+
+    const interval = window.setInterval(
+      syncVoiceSessions,
+      document.hidden ? 3200 : 1600
+    );
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      voiceFallbackSyncRef.current = false;
+    };
+  }, [accessToken, Boolean(workspace), setVoiceSessions]);
 
   useEffect(() => {
     if (!workspace || !accessToken) {

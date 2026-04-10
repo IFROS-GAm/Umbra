@@ -8,6 +8,7 @@ export function WorkspaceNavigatorFooter({
   inputMenuNode,
   joinedVoiceChannel,
   onHandleVoiceLeave,
+  onOpenSelfMenu,
   onOpenSettings,
   onSelectGuildChannel,
   onToggleVoiceMenu,
@@ -49,7 +50,7 @@ export function WorkspaceNavigatorFooter({
       {outputMenuNode}
 
       <div className="user-dock">
-        <button className="profile-card profile-card-button user-dock-profile" onClick={onOpenSettings} type="button">
+        <button className="profile-card profile-card-button user-dock-profile" onClick={onOpenSelfMenu} type="button">
           <Avatar
             hue={workspace.current_user.avatar_hue}
             label={workspace.current_user.username}

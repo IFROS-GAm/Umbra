@@ -1929,6 +1929,10 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
 
     return {
       ok: true,
+      other_user_id:
+        String(request.requester_id) === String(userId)
+          ? request.recipient_id
+          : request.requester_id,
       request_id: requestId
     };
   }

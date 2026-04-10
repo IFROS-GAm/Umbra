@@ -62,7 +62,10 @@ export const SETTINGS_NAV_GROUPS = [
   {
     title: "Legal",
     className: "settings-nav-group-legal",
-    items: [{ id: "terms", icon: "help", label: "Terminos y condiciones", active: false }]
+    items: [
+      { id: "terms", icon: "help", label: "Terminos y condiciones", active: false },
+      { id: "credits", icon: "community", label: "Creditos y demas", active: false }
+    ]
   }
 ];
 
@@ -201,6 +204,8 @@ export function settingsPanelTitle(tab) {
       return "Idiomas";
     case "terms":
       return "Terminos y condiciones";
+    case "credits":
+      return "Creditos y demas";
     case "status":
       return "Estado";
     default:
@@ -433,6 +438,29 @@ export function getSettingsLocale(language) {
           "Cuidar tus accesos, dispositivos y metodos de recuperacion.",
           "Usar de forma responsable stickers, perfiles, servidores y conexiones visibles."
         ]
+      },
+      credits: {
+        title: "Creditos y demas",
+        subtitle: "Reconocimiento oficial al equipo y a la vision que sostiene a Umbra.",
+        companyTitle: "Empresa",
+        companyBody:
+          "mia S.S impulsa Umbra como producto, identidad y base operativa para experiencias sociales, voz y comunidad.",
+        companyTag: "Casa matriz",
+        executiveTitle: "Direccion ejecutiva",
+        leadershipTitle: "Liderazgo",
+        adminTitle: "Administracion ejecutiva",
+        engineeringTitle: "Programacion y sistemas",
+        noteTitle: "Nota del proyecto",
+        noteBody:
+          "Umbra mezcla autoria humana, apoyo de IA y una direccion creativa propia para construir una plataforma con identidad.",
+        people: {
+          adminRole: "Administradora ejecutiva",
+          adminName: "Ssanlings",
+          ceoRole: "CEO",
+          ceoName: "IFROS_GAm",
+          engineerRole: "Programadores",
+          engineerNames: "IFROS-GAm · IA-Lins"
+        }
       }
     },
     en: {
@@ -650,6 +678,29 @@ export function getSettingsLocale(language) {
           "Protect your access, devices and recovery methods.",
           "Use stickers, profiles, servers and visible connections responsibly."
         ]
+      },
+      credits: {
+        title: "Credits and more",
+        subtitle: "Official recognition for the team and vision behind Umbra.",
+        companyTitle: "Company",
+        companyBody:
+          "mia S.S powers Umbra as a product, identity and operational base for social, voice and community experiences.",
+        companyTag: "Core company",
+        executiveTitle: "Executive direction",
+        leadershipTitle: "Leadership",
+        adminTitle: "Executive administration",
+        engineeringTitle: "Engineering and systems",
+        noteTitle: "Project note",
+        noteBody:
+          "Umbra combines human authorship, AI support and a distinct creative direction to build a platform with its own identity.",
+        people: {
+          adminRole: "Executive administrator",
+          adminName: "Ssanlings",
+          ceoRole: "CEO",
+          ceoName: "IFROS_GAm",
+          engineerRole: "Developers",
+          engineerNames: "IFROS-GAm · IA-Lins"
+        }
       }
     },
     fr: {
@@ -868,6 +919,29 @@ export function getSettingsLocale(language) {
           "Protege tes acces, tes appareils et tes moyens de recuperation.",
           "Utilise les stickers, profils, serveurs et connexions visibles de facon responsable."
         ]
+      },
+      credits: {
+        title: "Credits et plus",
+        subtitle: "Reconnaissance officielle de l'equipe et de la vision qui portent Umbra.",
+        companyTitle: "Entreprise",
+        companyBody:
+          "mia S.S propulse Umbra comme produit, identite et base operationnelle pour les experiences sociales, vocales et communautaires.",
+        companyTag: "Maison principale",
+        executiveTitle: "Direction executive",
+        leadershipTitle: "Leadership",
+        adminTitle: "Administration executive",
+        engineeringTitle: "Programmation et systemes",
+        noteTitle: "Note du projet",
+        noteBody:
+          "Umbra melange creation humaine, soutien de l'IA et direction creative propre pour construire une plateforme avec identite.",
+        people: {
+          adminRole: "Administratrice executive",
+          adminName: "Ssanlings",
+          ceoRole: "PDG",
+          ceoName: "IFROS_GAm",
+          engineerRole: "Programmeurs",
+          engineerNames: "IFROS-GAm · IA-Lins"
+        }
       }
     }
   };

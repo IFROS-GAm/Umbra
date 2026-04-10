@@ -8,7 +8,13 @@ import { createWorkspaceCoreActions } from "./workspaceCoreActions.js";
 import { useWorkspaceCoreEffects } from "./useWorkspaceCoreEffects.js";
 import { createWorkspaceMessageStore } from "./workspaceCoreMessageStore.js";
 
-export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, onSignOut }) {
+export function useUmbraWorkspaceCore({
+  accessToken,
+  initialSelection = null,
+  onIncomingMessage = null,
+  onVoiceUpdateNotification = null,
+  onSignOut
+}) {
   const [workspace, setWorkspace] = useState(null);
   const [activeSelection, setActiveSelection] = useState({
     channelId: initialSelection?.channelId || null,
@@ -95,6 +101,7 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
   const loadBootstrapRef = useRef(null);
   const accessTokenRef = useRef(accessToken);
   const joinedVoiceChannelIdRef = useRef(joinedVoiceChannelId);
+  const workspaceRef = useRef(workspace);
   const voiceInputSessionRef = useRef(null);
   const cameraSessionRef = useRef(null);
   const messageCacheRef = useRef(new Map());
@@ -108,6 +115,7 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
   activeSelectionRef.current = activeSelection;
   accessTokenRef.current = accessToken;
   joinedVoiceChannelIdRef.current = joinedVoiceChannelId;
+  workspaceRef.current = workspace;
 
   const activeLookup = findChannelInSession(workspace, activeSelection.channelId);
   const activeChannel = activeLookup?.channel || null;
@@ -179,6 +187,8 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
     loadMessages,
     localReadStateRef,
     messageMenuFor,
+    onIncomingMessage,
+    onVoiceUpdateNotification,
     patchChannelMessages,
     queueMarkRead,
     readChannelCache,
@@ -220,6 +230,7 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
     voiceInputSessionRef,
     voiceMenu,
     voiceState,
+    workspaceRef,
     workspace
   });
 
@@ -237,6 +248,7 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
     handleProfileUpdate,
     handleReaction,
     handleScroll,
+    joinVoiceChannelById,
     handleSelectGuildChannel,
     handleStatusChange,
     handleStickerSelect,
@@ -307,7 +319,7 @@ export function useUmbraWorkspaceCore({ accessToken, initialSelection = null, on
     cameraStatus, cameraStream,
     composerMenuOpen, composerPicker, composerRef, currentUserLabel, cycleVoiceDevice, dialog, directUnreadCount, editingMessage,
     handleAttachmentSelection, handleComposerChange, handleComposerShortcut, handleDeleteMessage, handleDialogSubmit,
-    handlePickerInsert, handleProfileUpdate, handleReaction, handleScroll, handleSelectGuildChannel,
+    handlePickerInsert, handleProfileUpdate, handleReaction, handleScroll, joinVoiceChannelById, handleSelectGuildChannel,
     handleStickerSelect,
     handleStatusChange, handleSubmitMessage, handleVoiceDeviceChange, handleVoiceLeave, handleJoinDirectCall, hasMore, headerActionsRef,
     getSelectedDeviceLabel, headerCopy, headerPanel, headerPanelRef, hoveredVoiceChannelId, inboxTab, isVoiceChannel, joinedVoiceChannelId,

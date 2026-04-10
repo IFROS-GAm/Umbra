@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Umbra incoming call</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        background: transparent;
+        font-family: "Segoe UI", system-ui, sans-serif;
+      }
+
+      body {
+        display: flex;
+        align-items: flex-end;
+        justify-content: flex-end;
+        padding: 12px;
+      }
+
+      .call-popup {
+        width: 190px;
+        min-height: 236px;
+        padding: 14px 14px 16px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 22px;
+        background:
+          radial-gradient(circle at top, rgba(110, 95, 255, 0.16), transparent 34%),
+          rgba(15, 18, 24, 0.96);
+        box-shadow: 0 22px 48px rgba(0, 0, 0, 0.36);
+        color: #f6f8ff;
+        -webkit-app-region: drag;
+      }
+
+      .call-popup-actions,
+      .call-popup button {
+        -webkit-app-region: no-drag;
+      }
+
+      .avatar-shell {
+        display: flex;
+        justify-content: center;
+        margin: 4px 0 12px;
+      }
+
+      .avatar {
+        width: 72px;
+        height: 72px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #6c63ff, #3a7bf4);
+        object-fit: cover;
+        box-shadow: 0 10px 22px rgba(0, 0, 0, 0.28);
+      }
+
+      .title {
+        margin: 0;
+        font-size: 12px;
+        letter-spacing: 0.12em;
+        text-align: center;
+        text-transform: uppercase;
+        color: rgba(215, 224, 255, 0.62);
+      }
+
+      .caller-name {
+        margin: 8px 0 0;
+        font-size: 28px;
+        line-height: 1.05;
+        font-weight: 800;
+        text-align: center;
+      }
+
+      .body {
+        margin: 8px 0 0;
+        min-height: 34px;
+        font-size: 13px;
+        line-height: 1.35;
+        text-align: center;
+        color: rgba(224, 231, 255, 0.76);
+      }
+
+      .call-popup-actions {
+        display: flex;
+        justify-content: center;
+        gap: 14px;
+        margin-top: 18px;
+      }
+
+      .call-popup-button {
+        width: 52px;
+        height: 52px;
+        border: none;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: transform 120ms ease, opacity 120ms ease;
+      }
+
+      .call-popup-button:hover {
+        transform: translateY(-1px);
+      }
+
+      .call-popup-button:active {
+        transform: translateY(0);
+      }
+
+      .call-popup-button.reject {
+        background: #ed5151;
+      }
+
+      .call-popup-button.accept {
+        background: #27b966;
+      }
+
+      .call-popup-button svg {
+        width: 22px;
+        height: 22px;
+        fill: none;
+        stroke: #fff;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 2.2;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="call-popup">
+      <div class="avatar-shell">
+        <img alt="Caller avatar" class="avatar" id="avatar" />
+      </div>
+      <p class="title">Umbra call</p>
+      <h1 class="caller-name" id="caller-name">Umbra</h1>
+      <p class="body" id="body">Incoming call...</p>
+      <div class="call-popup-actions">
+        <button class="call-popup-button reject" id="reject-button" title="Decline" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M17.5 15.5 6.5 4.5" />
+            <path d="M6.5 15.5 17.5 4.5" />
+          </svg>
+        </button>
+        <button class="call-popup-button accept" id="accept-button" title="Accept" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M5 8.5c3.5-2.8 10.5-2.8 14 0" />
+            <path d="M8.5 10.5 12 14l3.5-3.5" />
+          </svg>
+        </button>
+      </div>
+    </div>
+    <script src="./incoming-call-renderer.js"></script>
+  </body>
+</html>
