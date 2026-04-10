@@ -1,19 +1,8 @@
 import React, { useMemo, useState } from "react";
 
+import { buildInviteUrl } from "../api.js";
 import { Avatar } from "./Avatar.jsx";
 import { Icon } from "./Icon.jsx";
-
-function buildInviteLink(inviteCode) {
-  if (!inviteCode) {
-    return "";
-  }
-
-  if (typeof window === "undefined") {
-    return inviteCode;
-  }
-
-  return `${window.location.origin}/invite/${inviteCode}`;
-}
 
 export function InviteServerModal({
   channelName,
@@ -31,7 +20,7 @@ export function InviteServerModal({
   const [search, setSearch] = useState("");
 
   const inviteCode = invite?.code || "";
-  const inviteLink = useMemo(() => buildInviteLink(inviteCode), [inviteCode]);
+  const inviteLink = useMemo(() => buildInviteUrl(inviteCode), [inviteCode]);
   const filteredFriends = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) {

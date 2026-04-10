@@ -6,6 +6,23 @@ function getApiBase() {
   return (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 }
 
+function getPublicAppBase() {
+  if (typeof window !== "undefined" && window.umbraDesktop?.publicAppUrl) {
+    return String(window.umbraDesktop.publicAppUrl).replace(/\/$/, "");
+  }
+
+  const configuredPublicUrl = (import.meta.env.VITE_PUBLIC_APP_URL || "").replace(/\/$/, "");
+  if (configuredPublicUrl) {
+    return configuredPublicUrl;
+  }
+
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return String(window.location.origin).replace(/\/$/, "");
+  }
+
+  return "";
+}
+
 let getAccessToken = () => null;
 
 function buildUrl(path) {
@@ -16,6 +33,28 @@ function buildUrl(path) {
   }
 
   return `${apiBase}${path}`;
+}
+
+export function buildPublicAppUrl(path = "") {
+  const publicBase = getPublicAppBase();
+  if (!publicBase) {
+    return path || "";
+  }
+
+  if (!path) {
+    return publicBase;
+  }
+
+  const normalizedPath = String(path).startsWith("/") ? path : `/${path}`;
+  return `${publicBase}${normalizedPath}`;
+}
+
+export function buildInviteUrl(inviteCode) {
+  if (!inviteCode) {
+    return "";
+  }
+
+  return buildPublicAppUrl(`/invite/${encodeURIComponent(inviteCode)}`);
 }
 
 export function resolveAssetUrl(path) {

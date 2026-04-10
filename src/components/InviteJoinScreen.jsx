@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 
-import { api, resolveAssetUrl } from "../api.js";
+import { api, buildInviteUrl, resolveAssetUrl } from "../api.js";
 import { Icon } from "./Icon.jsx";
 import { UmbraLogo } from "./UmbraLogo.jsx";
 
@@ -50,13 +50,7 @@ export function InviteJoinScreen({
     };
   }, [inviteCode]);
 
-  const inviteLink = useMemo(() => {
-    if (typeof window === "undefined") {
-      return "";
-    }
-
-    return `${window.location.origin}/invite/${inviteCode}`;
-  }, [inviteCode]);
+  const inviteLink = useMemo(() => buildInviteUrl(inviteCode), [inviteCode]);
   const isDesktopRuntime =
     typeof window !== "undefined" && Boolean(window.umbraDesktop);
 

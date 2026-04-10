@@ -33,10 +33,17 @@ function getDesktopRuntimeConfig() {
         process.env.VITE_SOCKET_URL ||
         apiBaseUrl
     );
+    const publicAppUrl = trimTrailingSlash(
+      process.env.ELECTRON_PUBLIC_APP_URL ||
+        process.env.PUBLIC_APP_URL ||
+        process.env.VITE_PUBLIC_APP_URL ||
+        ""
+    );
 
     return {
       apiBaseUrl,
       isDesktop: true,
+      publicAppUrl,
       redirectUri: "umbra://auth/callback",
       socketBaseUrl
     };
@@ -45,10 +52,17 @@ function getDesktopRuntimeConfig() {
   const embeddedBaseUrl = trimTrailingSlash(
     embeddedServer?.url || `http://127.0.0.1:${serverPort}`
   );
+  const publicAppUrl = trimTrailingSlash(
+    process.env.ELECTRON_PUBLIC_APP_URL ||
+      process.env.PUBLIC_APP_URL ||
+      process.env.VITE_PUBLIC_APP_URL ||
+      embeddedBaseUrl
+  );
 
   return {
     apiBaseUrl: embeddedBaseUrl,
     isDesktop: true,
+    publicAppUrl,
     redirectUri: "umbra://auth/callback",
     socketBaseUrl: embeddedBaseUrl
   };

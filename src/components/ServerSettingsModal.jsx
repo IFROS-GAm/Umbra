@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
-import { api, resolveAssetUrl } from "../api.js";
+import { api, buildInviteUrl, resolveAssetUrl } from "../api.js";
 import { translate } from "../i18n.js";
 import { Icon } from "./Icon.jsx";
 import { ServerStickersPanel } from "./ServerStickersPanel.jsx";
@@ -517,7 +517,7 @@ export function ServerSettingsModal({ guild, language = "es", memberCount = 0, o
   }
 
   async function handleCopyInvite(code) {
-    const inviteUrl = `${window.location.origin}/invite/${code}`;
+    const inviteUrl = buildInviteUrl(code) || code;
 
     try {
       await navigator.clipboard.writeText(inviteUrl);
@@ -854,7 +854,7 @@ export function ServerSettingsModal({ guild, language = "es", memberCount = 0, o
                 invitesState.invites.map((invite) => (
                   <div className="server-settings-list-row invite-row" key={invite.id}>
                     <div className="server-settings-invite-copy">
-                      <strong>{window.location.origin}/invite/{invite.code}</strong>
+                      <strong>{buildInviteUrl(invite.code) || invite.code}</strong>
                       <span>
                         {replaceName(
                           copy.createdBy,
