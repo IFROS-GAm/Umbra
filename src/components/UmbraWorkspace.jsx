@@ -278,6 +278,59 @@ export function UmbraWorkspace({
     });
   }
 
+  useEffect(() => {
+    if (!workspace) {
+      return;
+    }
+
+    if (profileCard?.profile?.id) {
+      const refreshedCardProfile = buildWorkspaceProfileCardData({
+        activeChannel,
+        activeGuild,
+        displayNameOverride: profileCard.profile.displayName,
+        targetUser: { id: profileCard.profile.id },
+        workspace
+      });
+
+      if (refreshedCardProfile) {
+        setProfileCard((previous) =>
+          previous?.profile?.id === refreshedCardProfile.id
+            ? {
+                ...previous,
+                profile: refreshedCardProfile
+              }
+            : previous
+        );
+      }
+    }
+
+    if (fullProfile?.id) {
+      const refreshedFullProfile = buildWorkspaceProfileCardData({
+        activeChannel,
+        activeGuild,
+        displayNameOverride: fullProfile.displayName,
+        targetUser: { id: fullProfile.id },
+        workspace
+      });
+
+      if (refreshedFullProfile) {
+        setFullProfile((previous) =>
+          previous?.id === refreshedFullProfile.id ? refreshedFullProfile : previous
+        );
+      }
+    }
+  }, [
+    activeChannel,
+    activeGuild,
+    fullProfile?.displayName,
+    fullProfile?.id,
+    profileCard?.profile?.displayName,
+    profileCard?.profile?.id,
+    setFullProfile,
+    setProfileCard,
+    workspace
+  ]);
+
   function openSettingsDialog(preset = {}) {
     setCurrentUserMenuAnchorRect(null);
     setProfileCard(null);

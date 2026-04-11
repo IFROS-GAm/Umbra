@@ -33,6 +33,87 @@ function areVoiceSessionsEqual(previous = {}, next = {}) {
   });
 }
 
+function patchProfileEntry(entry, userPatch) {
+  if (!entry || entry.id !== userPatch.id) {
+    return entry;
+  }
+
+  return {
+    ...entry,
+    ...userPatch
+  };
+}
+
+function patchFriendRequestEntry(entry, userPatch) {
+  if (!entry?.user || entry.user.id !== userPatch.id) {
+    return entry;
+  }
+
+  return {
+    ...entry,
+    user: {
+      ...entry.user,
+      ...userPatch
+    }
+  };
+}
+
+function patchWorkspaceUser(previous, userPatch) {
+  if (!previous || !userPatch?.id) {
+    return previous;
+  }
+
+  return {
+    ...previous,
+    available_users: (previous.available_users || []).map((item) =>
+      patchProfileEntry(item, userPatch)
+    ),
+    blocked_users: (previous.blocked_users || []).map((item) =>
+      patchProfileEntry(item, userPatch)
+    ),
+    current_user:
+      previous.current_user?.id === userPatch.id
+        ? {
+            ...previous.current_user,
+            ...userPatch
+          }
+        : previous.current_user,
+    dms: (previous.dms || []).map((dm) => {
+      const nextParticipants = (dm.participants || []).map((participant) =>
+        patchProfileEntry(participant, userPatch)
+      );
+
+      if (
+        dm.type === "dm" &&
+        nextParticipants.some((participant) => participant.id === userPatch.id) &&
+        previous.current_user?.id !== userPatch.id
+      ) {
+        return {
+          ...dm,
+          display_name: userPatch.username || dm.display_name,
+          participants: nextParticipants
+        };
+      }
+
+      return {
+        ...dm,
+        participants: nextParticipants
+      };
+    }),
+    friend_requests_received: (previous.friend_requests_received || []).map((entry) =>
+      patchFriendRequestEntry(entry, userPatch)
+    ),
+    friend_requests_sent: (previous.friend_requests_sent || []).map((entry) =>
+      patchFriendRequestEntry(entry, userPatch)
+    ),
+    friends: (previous.friends || []).map((item) => patchProfileEntry(item, userPatch)),
+    guilds: (previous.guilds || []).map((guild) => ({
+      ...guild,
+      members: (guild.members || []).map((member) => patchProfileEntry(member, userPatch))
+    }))
+  };
+}
+
 export function useWorkspaceCoreEffects({
   accessToken,
   activeChannel,
@@ -187,7 +268,6 @@ export function useWorkspaceCoreEffects({
           "channel:create",
           "channel:move",
           "dm:create",
-          "profile:update",
           "friends:update"
         ].includes(payload?.type)
       ) {
@@ -195,12 +275,6 @@ export function useWorkspaceCoreEffects({
       }
 
       await loadBootstrapRef.current?.(activeSelectionRef.current);
-
-      if (payload?.type === "profile:update" && activeSelectionRef.current.channelId) {
-        await loadMessages({
-          channelId: activeSelectionRef.current.channelId
-        });
-      }
     };
 
     const onMessageCreate = async ({ message, preview }) => {
@@ -310,33 +384,25 @@ export function useWorkspaceCoreEffects({
           status: nextStatus
         };
 
-        return {
-          ...previous,
-          available_users: previous.available_users.map((item) =>
-            item.id === user.id ? { ...item, ...nextUserPatch } : item
-          ),
-          current_user:
-            previous.current_user.id === user.id
-              ? { ...previous.current_user, ...nextUserPatch }
-              : previous.current_user,
-          guilds: previous.guilds.map((guild) => ({
-            ...guild,
-            members: guild.members.map((member) =>
-              member.id === user.id
-                ? { ...member, ...nextUserPatch }
-                : member
-            )
-          })),
-          dms: previous.dms.map((dm) => ({
-            ...dm,
-            participants: dm.participants.map((participant) =>
-              participant.id === user.id
-                ? { ...participant, ...nextUserPatch }
-                : participant
-            )
-          }))
-        };
+        return patchWorkspaceUser(previous, nextUserPatch);
       });
+
+      if (activeSelectionRef.current.channelId) {
+        patchChannelMessages(activeSelectionRef.current.channelId, (previousMessages) =>
+          previousMessages.map((message) =>
+            message.author?.id === user.id
+              ? {
+                  ...message,
+                  author: {
+                    ...message.author,
+                    ...user,
+                    status: nextStatus
+                  }
+                }
+              : message
+          )
+        );
+      }
     };
 
     const onTypingUpdate = (payload) => {
@@ -540,7 +606,7 @@ export function useWorkspaceCoreEffects({
 
     const interval = window.setInterval(
       syncActiveChannelMessages,
-      document.hidden ? 2800 : 1400
+      document.hidden ? 1800 : 900
     );
 
     return () => {
@@ -577,7 +643,7 @@ export function useWorkspaceCoreEffects({
 
     const interval = window.setInterval(
       syncWorkspaceShell,
-      document.hidden ? 6500 : 3200
+      document.hidden ? 3600 : 1800
     );
 
     return () => {
