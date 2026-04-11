@@ -15,6 +15,48 @@
   overflow-x: hidden;
 }
 
+.incoming-call-inline-card {
+  bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: min(360px, calc(100vw - 32px));
+  padding: 18px;
+  position: fixed;
+  right: 24px;
+  z-index: 80;
+}
+
+.incoming-call-inline-eyebrow {
+  color: rgba(123, 212, 255, 0.82);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.incoming-call-inline-card strong {
+  color: var(--text-0);
+  font-size: 1.02rem;
+}
+
+.incoming-call-inline-card p {
+  color: var(--text-2);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.incoming-call-inline-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.incoming-call-inline-actions .ghost-button,
+.incoming-call-inline-actions .primary-button {
+  min-width: 112px;
+}
+
 .channel-row {
   min-width: 0;
   width: 100%;
@@ -145,6 +187,24 @@
   display: flex;
   gap: 6px;
   margin-top: 12px;
+}
+
+@media (max-width: 720px) {
+  .incoming-call-inline-card {
+    bottom: 16px;
+    left: 16px;
+    max-width: none;
+    right: 16px;
+  }
+
+  .incoming-call-inline-actions {
+    justify-content: stretch;
+  }
+
+  .incoming-call-inline-actions .ghost-button,
+  .incoming-call-inline-actions .primary-button {
+    flex: 1 1 0;
+  }
 }
 
 .message-date-divider {

@@ -33,6 +33,17 @@ function areVoiceSessionsEqual(previous = {}, next = {}) {
   });
 }
 
+function normalizeVoiceSessions(sessions = {}) {
+  return Object.fromEntries(
+    Object.entries(sessions || {})
+      .map(([channelId, userIds]) => [
+        channelId,
+        [...new Set((Array.isArray(userIds) ? userIds : []).filter(Boolean))]
+      ])
+      .filter(([channelId, userIds]) => channelId && userIds.length)
+  );
+}
+
 function patchProfileEntry(entry, userPatch) {
   if (!entry || entry.id !== userPatch.id) {
     return entry;
@@ -354,21 +365,37 @@ export function useWorkspaceCoreEffects({
       }
     };
 
+    const applyVoiceSessions = (payload = {}) => {
+      const normalizedSessions = normalizeVoiceSessions(payload);
+      voiceSessionsRef.current = normalizedSessions;
+      setVoiceSessions(normalizedSessions);
+      return normalizedSessions;
+    };
+
+    const syncVoiceSessionsNow = async () => {
+      try {
+        const payload = await api.fetchVoiceState();
+        applyVoiceSessions(payload?.sessions || {});
+      } catch {
+        // Socket remains the primary path; this is a silent consistency sweep.
+      }
+    };
+
     const onPresenceUpdate = ({ user }) => {
       if (!user) {
         return;
       }
 
+      const nextStatus = user.status === "invisible" ? "offline" : user.status;
+      const nextUserPatch = {
+        ...user,
+        status: nextStatus
+      };
+
       setWorkspace((previous) => {
         if (!previous) {
           return previous;
         }
-
-        const nextStatus = user.status === "invisible" ? "offline" : user.status;
-        const nextUserPatch = {
-          ...user,
-          status: nextStatus
-        };
 
         return patchWorkspaceUser(previous, nextUserPatch);
       });
@@ -404,8 +431,7 @@ export function useWorkspaceCoreEffects({
     };
 
     const onVoiceState = (payload) => {
-      voiceSessionsRef.current = payload || {};
-      setVoiceSessions(payload || {});
+      applyVoiceSessions(payload || {});
     };
 
     const onVoiceUpdate = ({ channelId, userIds }) => {
@@ -414,16 +440,27 @@ export function useWorkspaceCoreEffects({
         return;
       }
 
-      const normalizedUserIds = userIds || [];
+      const normalizedUserIds = [...new Set((userIds || []).filter(Boolean))];
+      const currentUserId = workspaceRef.current?.current_user?.id || "";
 
       setVoiceSessions((previous) => {
-        const nextVoiceSessions = {
-          ...previous,
-          [channelId]: normalizedUserIds
-        };
+        const nextVoiceSessions = { ...previous };
+        if (normalizedUserIds.length) {
+          nextVoiceSessions[channelId] = normalizedUserIds;
+        } else {
+          delete nextVoiceSessions[channelId];
+        }
         voiceSessionsRef.current = nextVoiceSessions;
         return nextVoiceSessions;
       });
+
+      if (
+        currentUserId &&
+        joinedVoiceChannelIdRef.current === channelId &&
+        !normalizedUserIds.includes(currentUserId)
+      ) {
+        setJoinedVoiceChannelId(null);
+      }
 
       if (typeof onVoiceUpdateNotification === "function") {
         onVoiceUpdateNotification({
@@ -502,6 +539,8 @@ export function useWorkspaceCoreEffects({
     };
 
     const onConnect = () => {
+      syncVoiceSessionsNow();
+
       if (activeSelectionRef.current?.channelId) {
         socket.emit("room:join", {
           channelId: activeSelectionRef.current.channelId
@@ -663,8 +702,7 @@ export function useWorkspaceCoreEffects({
         if (areVoiceSessionsEqual(voiceSessionsRef.current, nextSessions)) {
           return;
         }
-        voiceSessionsRef.current = nextSessions;
-        setVoiceSessions(nextSessions);
+        applyVoiceSessions(nextSessions);
       } catch {
         // Voice fallback stays silent while the primary socket path is healthy.
       } finally {

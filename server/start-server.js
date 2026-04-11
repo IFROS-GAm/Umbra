@@ -27,6 +27,14 @@ function createHttpError(message, statusCode = 400) {
 }
 
 function parseAllowedOrigins(extraOrigins = []) {
+  const defaultDevOrigins = [
+    "http://localhost:3030",
+    "http://127.0.0.1:3030",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5174"
+  ];
   const derivedOrigins = [
     process.env.PUBLIC_APP_URL,
     process.env.RENDER_EXTERNAL_URL
@@ -39,21 +47,16 @@ function parseAllowedOrigins(extraOrigins = []) {
     .filter(Boolean);
 
   if (configuredOrigins.length) {
-    return new Set([...configuredOrigins, ...derivedOrigins, ...extraOrigins]);
-  }
-
-  if (derivedOrigins.length) {
-    return new Set([...derivedOrigins, ...extraOrigins]);
+    return new Set([
+      ...defaultDevOrigins,
+      ...configuredOrigins,
+      ...derivedOrigins,
+      ...extraOrigins
+    ]);
   }
 
   return new Set(
-    [
-      "http://localhost:3030",
-      "http://127.0.0.1:3030",
-      "http://localhost:5173",
-      "http://127.0.0.1:5173",
-      ...extraOrigins
-    ].filter(Boolean)
+    [...defaultDevOrigins, ...derivedOrigins, ...extraOrigins].filter(Boolean)
   );
 }
 

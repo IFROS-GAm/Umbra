@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { translate } from "../../i18n.js";
 import { getSocket } from "../../socket.js";
@@ -89,6 +89,7 @@ export function useWorkspaceDesktopNotifications({
   const dismissedIncomingCallsRef = useRef(new Set());
   const activeIncomingCallRef = useRef(null);
   const previousVoiceSessionsRef = useRef({});
+  const [incomingCall, setIncomingCall] = useState(null);
 
   useEffect(() => {
     stateRef.current = {
@@ -110,14 +111,58 @@ export function useWorkspaceDesktopNotifications({
     workspace
   ]);
 
-  const hideIncomingCallPopup = useCallback((channelId = null) => {
-    if (channelId) {
+  const hideIncomingCallPopup = useCallback((channelId = null, { clearDismissed = false } = {}) => {
+    if (channelId && clearDismissed) {
       dismissedIncomingCallsRef.current.delete(channelId);
     }
 
+    setIncomingCall((previous) => {
+      if (!previous) {
+        return null;
+      }
+
+      if (!channelId || previous.channelId === channelId) {
+        return null;
+      }
+
+      return previous;
+    });
     activeIncomingCallRef.current = null;
     desktopBridge?.hideIncomingCallPopup?.().catch?.(() => {});
   }, [desktopBridge]);
+
+  const acceptIncomingCall = useCallback((channelId = null) => {
+    const resolvedChannelId = String(
+      channelId || activeIncomingCallRef.current?.channelId || incomingCall?.channelId || ""
+    ).trim();
+
+    if (!resolvedChannelId) {
+      return false;
+    }
+
+    dismissedIncomingCallsRef.current.delete(resolvedChannelId);
+    const joined = joinVoiceChannelById(resolvedChannelId);
+    if (!joined) {
+      showUiNotice?.("No se pudo abrir la llamada entrante.");
+    }
+
+    hideIncomingCallPopup(resolvedChannelId, { clearDismissed: true });
+    return joined;
+  }, [hideIncomingCallPopup, incomingCall?.channelId, joinVoiceChannelById, showUiNotice]);
+
+  const rejectIncomingCall = useCallback((channelId = null) => {
+    const resolvedChannelId = String(
+      channelId || activeIncomingCallRef.current?.channelId || incomingCall?.channelId || ""
+    ).trim();
+
+    if (!resolvedChannelId) {
+      return false;
+    }
+
+    dismissedIncomingCallsRef.current.add(resolvedChannelId);
+    hideIncomingCallPopup();
+    return true;
+  }, [hideIncomingCallPopup, incomingCall?.channelId]);
 
   useEffect(() => {
     if (!desktopBridge?.onIncomingCallAction) {
@@ -133,18 +178,25 @@ export function useWorkspaceDesktopNotifications({
       }
 
       if (action === "accept") {
-        dismissedIncomingCallsRef.current.delete(channelId);
-        const joined = joinVoiceChannelById(channelId);
-        if (!joined) {
-          showUiNotice?.("No se pudo abrir la llamada entrante.");
-        }
+        acceptIncomingCall(channelId);
       } else {
-        dismissedIncomingCallsRef.current.add(channelId);
+        rejectIncomingCall(channelId);
       }
-
-      hideIncomingCallPopup();
     });
-  }, [desktopBridge, hideIncomingCallPopup, joinVoiceChannelById, showUiNotice]);
+  }, [acceptIncomingCall, desktopBridge, rejectIncomingCall]);
+
+  useEffect(() => {
+    dismissedIncomingCallsRef.current.forEach((channelId) => {
+      const currentUserIds = Array.isArray(voiceSessions?.[channelId])
+        ? voiceSessions[channelId]
+        : [];
+      const otherParticipants = currentUserIds.filter((userId) => userId !== currentUserId);
+
+      if (otherParticipants.length === 0) {
+        dismissedIncomingCallsRef.current.delete(channelId);
+      }
+    });
+  }, [currentUserId, voiceSessions]);
 
   useEffect(() => {
     const currentCall = activeIncomingCallRef.current;
@@ -158,7 +210,7 @@ export function useWorkspaceDesktopNotifications({
     const otherParticipants = currentUserIds.filter((userId) => userId !== currentUserId);
 
     if (joinedVoiceChannelId === currentCall.channelId || otherParticipants.length === 0) {
-      hideIncomingCallPopup(currentCall.channelId);
+      hideIncomingCallPopup(currentCall.channelId, { clearDismissed: true });
     }
   }, [currentUserId, hideIncomingCallPopup, joinedVoiceChannelId, voiceSessions]);
 
@@ -221,7 +273,7 @@ export function useWorkspaceDesktopNotifications({
         body: `${senderName}: ${bodyPreview}`,
         kind: "message",
         title: t("notifications.messageTitle", title)
-      });
+      })?.catch?.(() => {});
     },
     [desktopBridge]
   );
@@ -266,7 +318,7 @@ export function useWorkspaceDesktopNotifications({
           iconDataUrl: requester?.avatar_url || "",
           kind: "friend-request",
           title
-        });
+        })?.catch?.(() => {});
         return;
       }
 
@@ -306,6 +358,10 @@ export function useWorkspaceDesktopNotifications({
       }
 
       const activeOtherParticipants = userIds.filter((userId) => userId && userId !== nextCurrentUserId);
+
+      if (activeOtherParticipants.length === 0) {
+        dismissedIncomingCallsRef.current.delete(channel.id);
+      }
 
       if (
         nextJoinedVoiceChannelId === channel.id ||
@@ -349,14 +405,15 @@ export function useWorkspaceDesktopNotifications({
       };
 
       activeIncomingCallRef.current = popupPayload;
+      setIncomingCall(popupPayload);
 
       desktopBridge?.showNativeNotification?.({
         body,
         kind: "call",
         playSound: false,
         title: t("notifications.incomingCall", "Llamada entrante")
-      });
-      desktopBridge?.showIncomingCallPopup?.(popupPayload);
+      })?.catch?.(() => {});
+      desktopBridge?.showIncomingCallPopup?.(popupPayload)?.catch?.(() => {});
     },
     [desktopBridge, hideIncomingCallPopup]
   );
@@ -413,4 +470,10 @@ export function useWorkspaceDesktopNotifications({
       socket.off("voice:update", onVoiceUpdate);
     };
   }, [accessToken, handleIncomingFriendRequest, handleIncomingMessage, handleVoiceUpdateNotification]);
+
+  return {
+    acceptIncomingCall,
+    incomingCall,
+    rejectIncomingCall
+  };
 }

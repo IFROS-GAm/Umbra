@@ -169,7 +169,11 @@ export function UmbraWorkspace({
     guilds: workspace?.guilds
   });
 
-  useWorkspaceDesktopNotifications({
+  const {
+    acceptIncomingCall,
+    incomingCall,
+    rejectIncomingCall
+  } = useWorkspaceDesktopNotifications({
     accessToken,
     dmMenuPrefs,
     guildMenuPrefs,
@@ -2217,6 +2221,34 @@ export function UmbraWorkspace({
             onSignOut={handleCurrentUserExit}
             user={currentUser}
           />
+        ) : null}
+
+        {incomingCall ? (
+          <div
+            aria-live="assertive"
+            className="incoming-call-inline-card floating-surface"
+            role="dialog"
+          >
+            <small className="incoming-call-inline-eyebrow">Llamada entrante</small>
+            <strong>{incomingCall.callerName || incomingCall.channelName || "Umbra"}</strong>
+            <p>{incomingCall.body || "Hay una llamada esperandote."}</p>
+            <div className="incoming-call-inline-actions">
+              <button
+                className="ghost-button danger"
+                onClick={() => rejectIncomingCall(incomingCall.channelId)}
+                type="button"
+              >
+                Rechazar
+              </button>
+              <button
+                className="primary-button"
+                onClick={() => acceptIncomingCall(incomingCall.channelId)}
+                type="button"
+              >
+                Aceptar
+              </button>
+            </div>
+          </div>
         ) : null}
 
         {profileCard ? (
