@@ -54,6 +54,10 @@ function MessageDateDivider({ label }) {
   );
 }
 
+function MessageFeedFooterSpacer() {
+  return <div aria-hidden="true" className="message-feed-tail" />;
+}
+
 export const VirtualMessageFeed = memo(function VirtualMessageFeed({
   availableUsersById,
   channelId = null,
@@ -184,6 +188,7 @@ export const VirtualMessageFeed = memo(function VirtualMessageFeed({
         key={channelId || "message-feed"}
         className="message-feed-virtuoso"
         components={{
+          Footer: MessageFeedFooterSpacer,
           Header: headerContent ? () => <div className="message-feed-header">{headerContent}</div> : undefined,
           Scroller: MessageFeedScroller
         }}

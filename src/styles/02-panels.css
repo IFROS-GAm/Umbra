@@ -572,14 +572,20 @@
   min-width: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 14px 18px 56px;
-  scroll-padding-bottom: 56px;
+  padding: 14px 18px 18px;
+  scroll-padding-bottom: 92px;
 }
 
 .message-feed-header {
   max-width: 100%;
   min-width: 0;
   padding: 0 0 8px;
+}
+
+.message-feed-tail {
+  flex: 0 0 auto;
+  height: 78px;
+  pointer-events: none;
 }
 
 .message-card {
