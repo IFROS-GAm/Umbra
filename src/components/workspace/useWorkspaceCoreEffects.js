@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 
 import { api } from "../../api.js";
 import { getSocket } from "../../socket.js";
@@ -223,10 +223,8 @@ export function useWorkspaceCoreEffects({
     if (activeSelection.channelId && !activeChannel?.is_voice) {
       const cachedEntry = readChannelCache(activeSelection.channelId);
       if (cachedEntry) {
-        startTransition(() => {
-          setMessages(cachedEntry.messages || []);
-          setHasMore(cachedEntry.hasMore ?? true);
-        });
+        setMessages(cachedEntry.messages || []);
+        setHasMore(cachedEntry.hasMore ?? true);
         setLoadingMessages(false);
 
         const latestCached = cachedEntry.messages?.[cachedEntry.messages.length - 1];
@@ -306,18 +304,6 @@ export function useWorkspaceCoreEffects({
       }
 
       if (message?.channel_id === activeSelectionRef.current.channelId) {
-        requestAnimationFrame(() => {
-          const element = listRef.current;
-          if (!element) {
-            return;
-          }
-          const nearBottom =
-            element.scrollHeight - element.scrollTop - element.clientHeight < 160;
-          if (nearBottom || message.author?.id === workspace?.current_user?.id) {
-            element.scrollTop = element.scrollHeight;
-          }
-        });
-
         if (message.id && message.author?.id !== workspace?.current_user?.id) {
           queueMarkRead({
             channelId: activeSelectionRef.current.channelId,

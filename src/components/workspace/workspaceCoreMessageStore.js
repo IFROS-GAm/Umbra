@@ -1,5 +1,3 @@
-import { startTransition } from "react";
-
 import { api, configureApiAuth } from "../../api.js";
 import { findChannelInSession, resolveSelection } from "../../utils.js";
 import {
@@ -134,10 +132,8 @@ export function createWorkspaceMessageStore({
     messageCacheRef.current.set(channelId, nextEntry);
 
     if (activeSelectionRef.current.channelId === channelId) {
-      startTransition(() => {
-        setMessages(nextMessages);
-        setHasMore(resolvedHasMore);
-      });
+      setMessages(nextMessages);
+      setHasMore(resolvedHasMore);
     }
   }
 
@@ -332,14 +328,6 @@ export function createWorkspaceMessageStore({
           }
         } else {
           commitChannelMessages(channelId, payload.messages, payload.has_more);
-          if (activeSelectionRef.current.channelId === channelId) {
-            requestAnimationFrame(() => {
-              const element = refs.listRef.current;
-              if (element) {
-                element.scrollTop = element.scrollHeight;
-              }
-            });
-          }
         }
 
         const latest = payload.messages[payload.messages.length - 1];

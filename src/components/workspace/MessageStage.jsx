@@ -147,6 +147,7 @@ export function MessageStage(props) {
     <>
       <VirtualMessageFeed
         availableUsersById={availableUsersById}
+        channelId={activeChannel?.id || activeChannel?.dm_id || activeChannel?.direct_message_id || null}
         headerContent={headerContent}
         handleReaction={handleReaction}
         handleScroll={handleScroll}

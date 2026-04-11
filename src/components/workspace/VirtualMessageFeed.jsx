@@ -1,8 +1,10 @@
-import React, { memo, useMemo, useRef } from "react";
+import React, { memo, useLayoutEffect, useMemo, useRef } from "react";
 import { Virtuoso } from "react-virtuoso";
 
 import { MessageFeedItem } from "./MessageFeedItem.jsx";
 import { buildMessageStageRows } from "./messageStageHelpers.js";
+
+const NEAR_BOTTOM_THRESHOLD = 96;
 
 const MessageFeedScroller = React.forwardRef(function MessageFeedScroller(
   { children, context, onScroll, ...props },
@@ -13,6 +15,13 @@ const MessageFeedScroller = React.forwardRef(function MessageFeedScroller(
       {...props}
       className="message-feed"
       onScroll={(event) => {
+        const element = event.currentTarget;
+        if (context?.atBottomRef) {
+          context.atBottomRef.current =
+            element.scrollHeight - element.scrollTop - element.clientHeight <
+            NEAR_BOTTOM_THRESHOLD;
+        }
+
         onScroll?.(event);
         context?.handleScroll?.();
       }}
@@ -25,6 +34,10 @@ const MessageFeedScroller = React.forwardRef(function MessageFeedScroller(
 
         if (context?.listRef) {
           context.listRef.current = node;
+        }
+
+        if (node && context?.atBottomRef) {
+          context.atBottomRef.current = true;
         }
       }}
     >
@@ -43,6 +56,7 @@ function MessageDateDivider({ label }) {
 
 export const VirtualMessageFeed = memo(function VirtualMessageFeed({
   availableUsersById,
+  channelId = null,
   headerContent,
   handleReaction,
   handleScroll,
@@ -59,6 +73,10 @@ export const VirtualMessageFeed = memo(function VirtualMessageFeed({
   reactionPickerFor
 }) {
   const virtuosoRef = useRef(null);
+  const atBottomRef = useRef(true);
+  const previousChannelRef = useRef(channelId);
+  const previousLastRowKeyRef = useRef(null);
+
   const rows = useMemo(() => buildMessageStageRows(messages), [messages]);
   const rowIndexesByMessageId = useMemo(
     () =>
@@ -69,6 +87,20 @@ export const VirtualMessageFeed = memo(function VirtualMessageFeed({
       ),
     [rows]
   );
+  const lastRow = rows[rows.length - 1] || null;
+  const lastRowKey = lastRow?.key || null;
+
+  function scrollToBottom() {
+    if (!rows.length) {
+      return;
+    }
+
+    virtuosoRef.current?.scrollToIndex({
+      align: "end",
+      behavior: "auto",
+      index: rows.length - 1
+    });
+  }
 
   function scrollToMessage(messageId) {
     const rowIndex = rowIndexesByMessageId[messageId];
@@ -89,6 +121,36 @@ export const VirtualMessageFeed = memo(function VirtualMessageFeed({
       });
     });
   }
+
+  useLayoutEffect(() => {
+    const previousChannel = previousChannelRef.current;
+    const previousLastRowKey = previousLastRowKeyRef.current;
+    const channelChanged = previousChannel !== channelId;
+    const lastRowChanged = previousLastRowKey !== lastRowKey;
+
+    previousChannelRef.current = channelId;
+    previousLastRowKeyRef.current = lastRowKey;
+
+    if (channelChanged) {
+      atBottomRef.current = true;
+      if (rows.length) {
+        scrollToBottom();
+      }
+      return;
+    }
+
+    if (!rows.length) {
+      return;
+    }
+
+    if (!lastRowChanged) {
+      return;
+    }
+
+    if (atBottomRef.current) {
+      scrollToBottom();
+    }
+  }, [channelId, lastRowKey, rows.length]);
 
   if (!rows.length && loadingMessages) {
     return (
@@ -119,15 +181,15 @@ export const VirtualMessageFeed = memo(function VirtualMessageFeed({
   return (
     <div className="message-feed-host">
       <Virtuoso
+        key={channelId || "message-feed"}
         className="message-feed-virtuoso"
         components={{
           Header: headerContent ? () => <div className="message-feed-header">{headerContent}</div> : undefined,
           Scroller: MessageFeedScroller
         }}
         computeItemKey={(index, row) => row.key || `${row.type}-${index}`}
-        context={{ handleScroll, listRef }}
+        context={{ atBottomRef, handleScroll, listRef }}
         data={rows}
-        followOutput={(isAtBottom) => (isAtBottom ? "auto" : false)}
         increaseViewportBy={{ bottom: 720, top: 480 }}
         initialTopMostItemIndex={rows.length ? rows.length - 1 : 0}
         itemContent={(index, row) =>
