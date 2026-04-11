@@ -47,6 +47,7 @@ export function useUmbraWorkspaceCore({
   const [hoveredVoiceChannelId, setHoveredVoiceChannelId] = useState(null);
   const [voiceInputLevel, setVoiceInputLevel] = useState(0);
   const [voiceInputSpeaking, setVoiceInputSpeaking] = useState(false);
+  const [voiceInputStream, setVoiceInputStream] = useState(null);
   const [voiceInputStatus, setVoiceInputStatus] = useState({
     engine: "off",
     error: "",
@@ -258,6 +259,7 @@ export function useUmbraWorkspaceCore({
     setVoiceDevices,
     setVoiceInputLevel,
     setVoiceInputSpeaking,
+    setVoiceInputStream,
     setVoiceInputStatus,
     setVoiceMenu,
     setVoiceSessions,
@@ -267,6 +269,7 @@ export function useUmbraWorkspaceCore({
     topbarActionsRef,
     uiNotice,
     voiceInputSessionRef,
+    voiceInputStream,
     voiceMenu,
     voiceState,
     workspaceRef,

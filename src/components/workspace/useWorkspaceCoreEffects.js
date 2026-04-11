@@ -12,6 +12,7 @@ import {
 import { BACKGROUND_PREFETCH_COOLDOWN_MS } from "./workspaceCoreMessageStore.js";
 import { createVoiceCameraSession } from "./voiceCameraSession.js";
 import { createVoiceInputProcessingSession } from "./voiceInputProcessing.js";
+import { createVoiceRtcSession } from "./voiceRtcSession.js";
 
 function areVoiceSessionsEqual(previous = {}, next = {}) {
   const previousKeys = Object.keys(previous);
@@ -174,6 +175,7 @@ export function useWorkspaceCoreEffects({
   setVoiceDevices,
   setVoiceInputLevel,
   setVoiceInputSpeaking,
+  setVoiceInputStream,
   setVoiceInputStatus,
   setVoiceMenu,
   setVoiceSessions,
@@ -183,6 +185,7 @@ export function useWorkspaceCoreEffects({
   topbarActionsRef,
   uiNotice,
   voiceInputSessionRef,
+  voiceInputStream,
   voiceMenu,
   voiceState,
   workspaceRef,
@@ -194,6 +197,7 @@ export function useWorkspaceCoreEffects({
   const channelFallbackSyncRef = useRef(false);
   const bootstrapFallbackSyncRef = useRef(false);
   const voiceFallbackSyncRef = useRef(false);
+  const voiceRtcSessionRef = useRef(null);
 
   useEffect(() => {
     if (!accessToken) {
@@ -869,6 +873,7 @@ export function useWorkspaceCoreEffects({
     if (!shouldProcessInput) {
       setVoiceInputLevel(0);
       setVoiceInputSpeaking(false);
+      setVoiceInputStream(null);
       setVoiceInputStatus({
         engine: voiceState.noiseSuppression ? "native" : "off",
         error: "",
@@ -916,6 +921,8 @@ export function useWorkspaceCoreEffects({
         }
 
         voiceInputSessionRef.current = session;
+        session.setTrackEnabled(!voiceState.micMuted);
+        setVoiceInputStream(session.stream);
         setVoiceInputStatus({
           engine: session.engine,
           error: "",
@@ -928,6 +935,7 @@ export function useWorkspaceCoreEffects({
 
         setVoiceInputLevel(0);
         setVoiceInputSpeaking(false);
+        setVoiceInputStream(null);
         setVoiceInputStatus({
           engine: "off",
           error: error.message || "No se pudo abrir el microfono.",
@@ -944,6 +952,7 @@ export function useWorkspaceCoreEffects({
         voiceInputSessionRef.current.destroy().catch(() => {});
         voiceInputSessionRef.current = null;
       }
+      setVoiceInputStream(null);
     };
   }, [
     joinedVoiceChannelId,
@@ -958,11 +967,85 @@ export function useWorkspaceCoreEffects({
     voiceInputSessionRef.current?.setInputVolume(
       voiceState.micMuted ? 0 : voiceState.inputVolume
     );
+    voiceInputSessionRef.current?.setTrackEnabled(!voiceState.micMuted);
   }, [voiceState.inputVolume, voiceState.micMuted]);
 
   useEffect(() => {
     voiceInputSessionRef.current?.setMonitoringEnabled(Boolean(voiceState.inputMonitoring));
   }, [voiceState.inputMonitoring]);
+
+  useEffect(() => {
+    if (!accessToken || !joinedVoiceChannelId || !workspaceRef.current?.current_user?.id) {
+      if (voiceRtcSessionRef.current) {
+        voiceRtcSessionRef.current.destroy().catch(() => {});
+        voiceRtcSessionRef.current = null;
+      }
+
+      return undefined;
+    }
+
+    const socket = getSocket(accessToken);
+    if (!socket.connected) {
+      socket.connect();
+    }
+
+    try {
+      const session = createVoiceRtcSession({
+        channelId: joinedVoiceChannelId,
+        currentUserId: workspaceRef.current.current_user.id,
+        deafened: Boolean(voiceState.deafen),
+        onError: (error) => {
+          if (error?.message) {
+            setUiNotice(error.message);
+          }
+        },
+        outputDeviceId: selectedVoiceDevices.audiooutput,
+        outputVolume: (Number(voiceState.outputVolume) || 0) / 100,
+        socket
+      });
+
+      voiceRtcSessionRef.current = session;
+      session.updateLocalAudioStream(voiceInputStream).catch(() => {});
+      session.setLocalTrackEnabled(!voiceState.micMuted);
+
+      return () => {
+        if (voiceRtcSessionRef.current === session) {
+          voiceRtcSessionRef.current = null;
+        }
+
+        session.destroy().catch(() => {});
+      };
+    } catch (error) {
+      setUiNotice(error.message || "No se pudo iniciar la sesion de voz.");
+      return undefined;
+    }
+  }, [
+    accessToken,
+    joinedVoiceChannelId,
+    setUiNotice,
+    workspace?.current_user?.id
+  ]);
+
+  useEffect(() => {
+    const session = voiceRtcSessionRef.current;
+    if (!session) {
+      return;
+    }
+
+    session.updateLocalAudioStream(voiceInputStream).catch(() => {});
+  }, [voiceInputStream]);
+
+  useEffect(() => {
+    voiceRtcSessionRef.current?.setLocalTrackEnabled(!voiceState.micMuted);
+  }, [voiceState.micMuted]);
+
+  useEffect(() => {
+    voiceRtcSessionRef.current?.updatePlayback({
+      deafened: Boolean(voiceState.deafen),
+      outputDeviceId: selectedVoiceDevices.audiooutput,
+      outputVolume: (Number(voiceState.outputVolume) || 0) / 100
+    });
+  }, [selectedVoiceDevices.audiooutput, voiceState.deafen, voiceState.outputVolume]);
 
   useEffect(() => {
     const shouldProcessCamera = Boolean(

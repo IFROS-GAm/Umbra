@@ -342,6 +342,32 @@ export async function startServer(options = {}) {
     };
   }
 
+  function listVoicePeers(channelId, excludedSocketId = null) {
+    if (!channelId) {
+      return [];
+    }
+
+    const room = io.sockets.adapter.rooms.get(`voice:${channelId}`);
+    if (!room?.size) {
+      return [];
+    }
+
+    return [...room]
+      .filter((socketId) => socketId && socketId !== excludedSocketId)
+      .map((socketId) => {
+        const peerSocket = io.sockets.sockets.get(socketId);
+        if (!peerSocket?.data?.user?.id) {
+          return null;
+        }
+
+        return {
+          peerId: socketId,
+          userId: peerSocket.data.user.id
+        };
+      })
+      .filter(Boolean);
+  }
+
   function emitVoiceUpdate(channelId) {
     io.emit("voice:update", buildVoicePayload(channelId));
   }
@@ -360,6 +386,12 @@ export async function startServer(options = {}) {
     if (!previousChannelId) {
       return;
     }
+
+    socket.to(`voice:${previousChannelId}`).emit("voice:peer-left", {
+      channelId: previousChannelId,
+      peerId: socket.id,
+      userId
+    });
 
     const channelUsers = voiceSessions.get(previousChannelId);
     if (channelUsers) {
@@ -1226,6 +1258,10 @@ export async function startServer(options = {}) {
 
         if (socket.data.voiceChannelId === channelId) {
           socket.emit("voice:update", buildVoicePayload(channelId));
+          socket.emit("voice:peers", {
+            channelId,
+            peers: listVoicePeers(channelId, socket.id)
+          });
           return;
         }
 
@@ -1238,12 +1274,51 @@ export async function startServer(options = {}) {
         socket.data.voiceChannelId = channelId;
         socket.join(`voice:${channelId}`);
         emitVoiceUpdate(channelId);
+        socket.emit("voice:peers", {
+          channelId,
+          peers: listVoicePeers(channelId, socket.id)
+        });
       } catch (error) {
         socket.emit("room:error", {
           channelId,
           error: error.message || "No se pudo entrar al canal de voz."
         });
       }
+    });
+
+    socket.on("voice:sync-peers", () => {
+      const channelId = socket.data.voiceChannelId;
+      if (!channelId) {
+        socket.emit("voice:peers", {
+          channelId: null,
+          peers: []
+        });
+        return;
+      }
+
+      socket.emit("voice:peers", {
+        channelId,
+        peers: listVoicePeers(channelId, socket.id)
+      });
+    });
+
+    socket.on("voice:signal", ({ signal, targetPeerId }) => {
+      const channelId = socket.data.voiceChannelId;
+      if (!channelId || !targetPeerId || targetPeerId === socket.id || !signal) {
+        return;
+      }
+
+      const targetSocket = io.sockets.sockets.get(targetPeerId);
+      if (!targetSocket || targetSocket.data.voiceChannelId !== channelId) {
+        return;
+      }
+
+      targetSocket.emit("voice:signal", {
+        channelId,
+        fromPeerId: socket.id,
+        signal,
+        userId: viewer.id
+      });
     });
 
     socket.on("voice:leave", () => {

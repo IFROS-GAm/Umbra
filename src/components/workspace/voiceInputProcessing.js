@@ -90,6 +90,7 @@ export async function createVoiceInputProcessingSession({
   const analyser = context.createAnalyser();
   analyser.fftSize = 1024;
   analyser.smoothingTimeConstant = 0.55;
+  const outboundDestination = context.createMediaStreamDestination();
 
   const monitorGain = context.createGain();
   monitorGain.gain.value = monitorEnabled ? 0.92 : 0;
@@ -134,6 +135,7 @@ export async function createVoiceInputProcessingSession({
   }
 
   processedOutput.connect(analyser);
+  processedOutput.connect(outboundDestination);
   processedOutput.connect(monitorGain);
   monitorGain.connect(context.destination);
 
@@ -207,8 +209,14 @@ export async function createVoiceInputProcessingSession({
 
   return {
     engine,
+    stream: outboundDestination.stream,
     setInputVolume(value) {
       inputGain.gain.value = Math.max(0, Math.min(1, Number(value || 0) / 100));
+    },
+    setTrackEnabled(nextEnabled) {
+      outboundDestination.stream.getAudioTracks().forEach((track) => {
+        track.enabled = Boolean(nextEnabled);
+      });
     },
     setMonitoringEnabled(nextEnabled) {
       monitorGain.gain.cancelScheduledValues(context.currentTime);
@@ -234,6 +242,7 @@ export async function createVoiceInputProcessingSession({
 
       try {
         monitorGain.disconnect();
+        outboundDestination.disconnect();
         analyser.disconnect();
         inputGain.disconnect();
         source.disconnect();
