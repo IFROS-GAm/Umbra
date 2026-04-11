@@ -11,6 +11,33 @@
   white-space: nowrap;
 }
 
+.channel-list {
+  overflow-x: hidden;
+}
+
+.channel-row {
+  min-width: 0;
+  width: 100%;
+}
+
+.channel-row .channel-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.channel-row .channel-label > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.channel-row > b,
+.channel-row > .voice-channel-meta {
+  flex: 0 0 auto;
+}
+
 .voice-channel-block {
   position: relative;
 }
