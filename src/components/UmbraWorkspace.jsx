@@ -83,6 +83,7 @@ export function UmbraWorkspace({
   const t = (key, fallback = "") => translate(language, key, fallback);
   const {
     activeChannel, activeGuild, activeGuildTextChannels, activeGuildVoiceChannels, activeSelection,
+    activeSelectionRef,
     appError, attachmentInputRef, booting, cameraStatus, cameraStream, composer, composerAttachments, composerMenuOpen,
     composerPicker, composerRef, currentUserLabel, dialog, directUnreadCount, editingMessage,
     handleAttachmentSelection, handleComposerChange, handleComposerShortcut, handleDeleteMessage,
@@ -1541,7 +1542,7 @@ export function UmbraWorkspace({
         iconUrl
       });
 
-      await loadBootstrap(activeSelection);
+      await loadBootstrap(activeSelectionRef.current);
       setAppError("");
       showUiNotice("Servidor actualizado.");
     } catch (error) {
@@ -1569,7 +1570,7 @@ export function UmbraWorkspace({
         placement,
         relativeToChannelId
       });
-      await loadBootstrap(activeSelection);
+      await loadBootstrap(activeSelectionRef.current);
       setAppError("");
     } catch (error) {
       setAppError(error.message);
@@ -1626,7 +1627,7 @@ export function UmbraWorkspace({
     } catch (error) {
       setWorkspace(previousWorkspace);
       setServerFolders(previousFolders);
-      await loadBootstrap(activeSelection);
+      await loadBootstrap(activeSelectionRef.current);
       setAppError(error.message);
       showUiNotice(error.message);
     }
@@ -1689,7 +1690,7 @@ export function UmbraWorkspace({
         channelId: dm.id,
         lastReadMessageId: dm.last_message_id || null
       });
-      await loadBootstrap(activeSelection);
+      await loadBootstrap(activeSelectionRef.current);
       showUiNotice(`Todo al dia en ${dm.display_name || "la conversacion"}.`);
     } catch (error) {
       setAppError(error.message);
@@ -1715,10 +1716,11 @@ export function UmbraWorkspace({
       return;
     }
 
+    const previousSelection = activeSelectionRef.current;
     const nextVisibleDms = (workspace?.dms || []).filter((item) => item.id !== dm.id);
     const fallbackDm = nextVisibleDms[0] || null;
     const nextSelection =
-      activeSelection.kind === "dm" && activeSelection.channelId === dm.id
+      previousSelection.kind === "dm" && previousSelection.channelId === dm.id
         ? fallbackDm
           ? {
               channelId: fallbackDm.id,
@@ -1730,7 +1732,7 @@ export function UmbraWorkspace({
               guildId: null,
               kind: "home"
             }
-        : activeSelection;
+        : previousSelection;
 
     setWorkspace((previous) =>
       previous
@@ -1741,7 +1743,7 @@ export function UmbraWorkspace({
         : previous
     );
 
-    if (nextSelection !== activeSelection) {
+    if (nextSelection !== previousSelection) {
       setActiveSelection(nextSelection);
     }
 
@@ -1750,10 +1752,14 @@ export function UmbraWorkspace({
         channelId: dm.id,
         hidden: true
       });
-      await loadBootstrap(nextSelection);
+      await loadBootstrap(nextSelection, {
+        selectionMode: "target"
+      });
       showUiNotice(`Se oculto ${dm.display_name || "el DM"} del lateral.`);
     } catch (error) {
-      await loadBootstrap(activeSelection);
+      await loadBootstrap(previousSelection, {
+        selectionMode: "target"
+      });
       setAppError(error.message);
     }
   }
@@ -1833,7 +1839,9 @@ export function UmbraWorkspace({
           : previous
       );
       setLeaveGuildTarget(null);
-      await loadBootstrap(fallbackSelection);
+      await loadBootstrap(fallbackSelection, {
+        selectionMode: "target"
+      });
       showUiNotice(`Saliste de ${leaveGuildTarget.name}.`);
     } catch (error) {
       setAppError(error.message);

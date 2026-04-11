@@ -188,6 +188,14 @@ export function findChannelInSession(session, channelId) {
 }
 
 export function resolveSelection(session, previousSelection) {
+  if (previousSelection?.kind === "home" || previousSelection?.kind === "requests") {
+    return {
+      channelId: null,
+      guildId: null,
+      kind: previousSelection.kind
+    };
+  }
+
   if (previousSelection?.channelId) {
     const previous = findChannelInSession(session, previousSelection.channelId);
     if (previous && !previous.channel?.is_category) {
@@ -195,6 +203,19 @@ export function resolveSelection(session, previousSelection) {
         channelId: previous.channel.id,
         guildId: previous.guild?.id ?? null,
         kind: previous.kind
+      };
+    }
+  }
+
+  if (previousSelection?.guildId) {
+    const previousGuild = session.guilds.find((guild) => guild.id === previousSelection.guildId);
+    const previousGuildChannel = previousGuild?.channels.find((channel) => !channel.is_category);
+
+    if (previousGuild && previousGuildChannel) {
+      return {
+        channelId: previousGuildChannel.id,
+        guildId: previousGuild.id,
+        kind: "guild"
       };
     }
   }

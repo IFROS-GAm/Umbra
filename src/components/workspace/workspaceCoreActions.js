@@ -504,7 +504,7 @@ export function createWorkspaceCoreActions(context) {
             }
           : previous
       );
-      await loadBootstrap(activeSelection);
+      await loadBootstrap(activeSelectionRef.current);
     } catch (error) {
       setAppError(error.message);
     }
@@ -579,11 +579,16 @@ export function createWorkspaceCoreActions(context) {
           name: values.name,
           templateId: values.templateId
         });
-        await loadBootstrap({
-          channelId: payload.channel_id,
-          guildId: payload.guild_id,
-          kind: "guild"
-        });
+        await loadBootstrap(
+          {
+            channelId: payload.channel_id,
+            guildId: payload.guild_id,
+            kind: "guild"
+          },
+          {
+            selectionMode: "target"
+          }
+        );
       }
 
       if (dialog.type === "channel") {
@@ -598,11 +603,16 @@ export function createWorkspaceCoreActions(context) {
           parentId: values.parentId,
           topic: values.topic
         });
-        await loadBootstrap({
-          channelId: payload.channel.id,
-          guildId: activeGuild.id,
-          kind: "guild"
-        });
+        await loadBootstrap(
+          {
+            channelId: payload.channel.id,
+            guildId: activeGuild.id,
+            kind: "guild"
+          },
+          {
+            selectionMode: "target"
+          }
+        );
       }
 
       if (dialog.type === "category") {
@@ -614,11 +624,16 @@ export function createWorkspaceCoreActions(context) {
           guildId: activeGuild.id,
           name: values.name
         });
-        await loadBootstrap({
-          channelId: activeSelectionRef.current.channelId,
-          guildId: activeGuild.id,
-          kind: "guild"
-        });
+        await loadBootstrap(
+          {
+            channelId: activeSelectionRef.current.channelId,
+            guildId: activeGuild.id,
+            kind: "guild"
+          },
+          {
+            selectionMode: "target"
+          }
+        );
       }
 
       if (dialog.type === "dm") {
@@ -630,11 +645,16 @@ export function createWorkspaceCoreActions(context) {
         );
 
         if (existingDm) {
-          await loadBootstrap({
-            channelId: existingDm.id,
-            guildId: null,
-            kind: "dm"
-          });
+          await loadBootstrap(
+            {
+              channelId: existingDm.id,
+              guildId: null,
+              kind: "dm"
+            },
+            {
+              selectionMode: "target"
+            }
+          );
         } else {
           if (pendingDirectDmRef.current.has(recipientId)) {
             return;
@@ -646,11 +666,16 @@ export function createWorkspaceCoreActions(context) {
             const payload = await api.createDm({
               recipientId
             });
-            await loadBootstrap({
-              channelId: payload.channel.id,
-              guildId: null,
-              kind: "dm"
-            });
+            await loadBootstrap(
+              {
+                channelId: payload.channel.id,
+                guildId: null,
+                kind: "dm"
+              },
+              {
+                selectionMode: "target"
+              }
+            );
           } finally {
             pendingDirectDmRef.current.delete(recipientId);
           }
@@ -662,11 +687,16 @@ export function createWorkspaceCoreActions(context) {
           name: values.name,
           recipientIds: values.recipientIds
         });
-        await loadBootstrap({
-          channelId: payload.channel.id,
-          guildId: null,
-          kind: "dm"
-        });
+        await loadBootstrap(
+          {
+            channelId: payload.channel.id,
+            guildId: null,
+            kind: "dm"
+          },
+          {
+            selectionMode: "target"
+          }
+        );
       }
 
       setDialog(null);

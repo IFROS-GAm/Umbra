@@ -16,7 +16,7 @@ export function useUmbraWorkspaceCore({
   onSignOut
 }) {
   const [workspace, setWorkspace] = useState(null);
-  const [activeSelection, setActiveSelection] = useState({
+  const [activeSelection, setActiveSelectionState] = useState({
     channelId: initialSelection?.channelId || null,
     guildId: initialSelection?.guildId || null,
     kind: initialSelection?.kind || "guild"
@@ -84,7 +84,7 @@ export function useUmbraWorkspaceCore({
     audiooutput: "default",
     videoinput: "default"
   });
-  const [joinedVoiceChannelId, setJoinedVoiceChannelId] = useState(null);
+  const [joinedVoiceChannelId, setJoinedVoiceChannelIdState] = useState(null);
   const [uploadingAttachments, setUploadingAttachments] = useState(false);
   const [booting, setBooting] = useState(true);
 
@@ -106,11 +106,48 @@ export function useUmbraWorkspaceCore({
   const cameraSessionRef = useRef(null);
   const messageCacheRef = useRef(new Map());
   const messageRequestIdRef = useRef(0);
+  const bootstrapRequestIdRef = useRef(0);
   const messageAbortRef = useRef(null);
   const inFlightMessageLoadsRef = useRef(new Map());
   const backgroundPrefetchRef = useRef(new Map());
   const localReadStateRef = useRef(new Map());
   const pendingDirectDmRef = useRef(new Set());
+  const selectionVersionRef = useRef(0);
+
+  function areSelectionsEqual(left, right) {
+    return (
+      (left?.channelId ?? null) === (right?.channelId ?? null) &&
+      (left?.guildId ?? null) === (right?.guildId ?? null) &&
+      (left?.kind || "guild") === (right?.kind || "guild")
+    );
+  }
+
+  function setActiveSelection(nextSelectionOrUpdater) {
+    setActiveSelectionState((previous) => {
+      const nextSelection =
+        typeof nextSelectionOrUpdater === "function"
+          ? nextSelectionOrUpdater(previous)
+          : nextSelectionOrUpdater;
+
+      if (!areSelectionsEqual(previous, nextSelection)) {
+        selectionVersionRef.current += 1;
+      }
+
+      activeSelectionRef.current = nextSelection;
+      return nextSelection;
+    });
+  }
+
+  function setJoinedVoiceChannelId(nextChannelIdOrUpdater) {
+    setJoinedVoiceChannelIdState((previous) => {
+      const nextChannelId =
+        typeof nextChannelIdOrUpdater === "function"
+          ? nextChannelIdOrUpdater(previous)
+          : nextChannelIdOrUpdater;
+      joinedVoiceChannelIdRef.current = nextChannelId;
+      return nextChannelId;
+    });
+  }
 
   activeSelectionRef.current = activeSelection;
   accessTokenRef.current = accessToken;
@@ -147,6 +184,7 @@ export function useUmbraWorkspaceCore({
     activeSelection,
     activeSelectionRef,
     backgroundPrefetchRef,
+    bootstrapRequestIdRef,
     inFlightMessageLoadsRef,
     listRef,
     localReadStateRef,
@@ -157,6 +195,7 @@ export function useUmbraWorkspaceCore({
     pendingReadRef,
     readReceiptTimeoutRef,
     refs: { listRef },
+    selectionVersionRef,
     setActiveSelection,
     setAppError,
     setBooting,

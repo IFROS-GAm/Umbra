@@ -200,7 +200,9 @@ export function useWorkspaceCoreEffects({
       return;
     }
 
-    loadBootstrapRef.current?.(initialSelection || activeSelectionRef.current);
+    loadBootstrapRef.current?.(initialSelection || activeSelectionRef.current, {
+      selectionMode: initialSelection ? "target" : "preserve-current"
+    });
   }, [accessToken, initialSelection]);
 
   useEffect(() => {

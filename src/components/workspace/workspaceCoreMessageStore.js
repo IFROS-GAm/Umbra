@@ -9,6 +9,14 @@ import {
 
 export const BACKGROUND_PREFETCH_COOLDOWN_MS = 90_000;
 
+function cloneSelection(selection) {
+  return {
+    channelId: selection?.channelId ?? null,
+    guildId: selection?.guildId ?? null,
+    kind: selection?.kind || "guild"
+  };
+}
+
 function messageSignature(message) {
   if (!message) {
     return "";
@@ -47,6 +55,7 @@ export function createWorkspaceMessageStore({
   activeSelection,
   activeSelectionRef,
   backgroundPrefetchRef,
+  bootstrapRequestIdRef,
   inFlightMessageLoadsRef,
   listRef,
   localReadStateRef,
@@ -57,6 +66,7 @@ export function createWorkspaceMessageStore({
   pendingReadRef,
   readReceiptTimeoutRef,
   refs,
+  selectionVersionRef,
   setActiveSelection,
   setAppError,
   setBooting,
@@ -171,13 +181,34 @@ export function createWorkspaceMessageStore({
     });
   }
 
-  async function loadBootstrap(preferredSelection = activeSelectionRef.current) {
+  async function loadBootstrap(
+    preferredSelection = activeSelectionRef.current,
+    options = {}
+  ) {
+    const { selectionMode = "preserve-current" } = options;
+    const requestId = bootstrapRequestIdRef.current + 1;
+    const preferredSelectionSnapshot = cloneSelection(preferredSelection);
+    const selectionVersionAtStart = selectionVersionRef.current;
+
+    bootstrapRequestIdRef.current = requestId;
     configureApiAuth(() => accessTokenRef.current);
 
     try {
       const payload = await api.bootstrap();
+      if (requestId !== bootstrapRequestIdRef.current) {
+        return payload;
+      }
+
       pruneChannelCache(payload);
-      const resolvedSelection = resolveSelection(payload, preferredSelection);
+      const shouldPreserveCurrentSelection =
+        selectionMode !== "target" ||
+        selectionVersionRef.current !== selectionVersionAtStart;
+      const resolvedSelection = resolveSelection(
+        payload,
+        shouldPreserveCurrentSelection
+          ? activeSelectionRef.current
+          : preferredSelectionSnapshot
+      );
       const normalizedWorkspace = mergeLocalReadStateIntoWorkspace(
         payload,
         localReadStateRef.current,
@@ -186,14 +217,21 @@ export function createWorkspaceMessageStore({
       setWorkspace(normalizedWorkspace);
       setActiveSelection(resolvedSelection);
       setAppError("");
+      return normalizedWorkspace;
     } catch (error) {
+      if (requestId !== bootstrapRequestIdRef.current) {
+        return null;
+      }
+
       if (String(error.message || "").toLowerCase().includes("unauthorized")) {
         onSignOut();
         return;
       }
       setAppError(error.message);
     } finally {
-      setBooting(false);
+      if (requestId === bootstrapRequestIdRef.current) {
+        setBooting(false);
+      }
     }
   }
 

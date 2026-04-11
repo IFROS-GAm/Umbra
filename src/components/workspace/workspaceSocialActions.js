@@ -36,11 +36,16 @@ export function createWorkspaceSocialActions({
           guildId: null,
           kind: "dm"
         });
-        await loadBootstrap({
-          channelId: existingDm.id,
-          guildId: null,
-          kind: "dm"
-        });
+        await loadBootstrap(
+          {
+            channelId: existingDm.id,
+            guildId: null,
+            kind: "dm"
+          },
+          {
+            selectionMode: "target"
+          }
+        );
       }
       return existingDm;
     }
@@ -69,11 +74,16 @@ export function createWorkspaceSocialActions({
         guildId: null,
         kind: "dm"
       });
-      await loadBootstrap({
-        channelId: channel.id,
-        guildId: null,
-        kind: "dm"
-      });
+      await loadBootstrap(
+        {
+          channelId: channel.id,
+          guildId: null,
+          kind: "dm"
+        },
+        {
+          selectionMode: "target"
+        }
+      );
     }
 
     return channel;
@@ -118,11 +128,16 @@ export function createWorkspaceSocialActions({
         guildId: null,
         kind: "dm"
       });
-      await loadBootstrap({
-        channelId: channel.id,
-        guildId: null,
-        kind: "dm"
-      });
+      await loadBootstrap(
+        {
+          channelId: channel.id,
+          guildId: null,
+          kind: "dm"
+        },
+        {
+          selectionMode: "target"
+        }
+      );
     } catch (error) {
       setAppError(error.message);
     }
