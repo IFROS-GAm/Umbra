@@ -1,3 +1,5 @@
+import { startTransition } from "react";
+import { flushSync } from "react-dom";
 import { api, configureApiAuth } from "../../api.js";
 import { findChannelInSession, resolveSelection } from "../../utils.js";
 import {
@@ -17,6 +19,43 @@ function cloneSelection(selection) {
   };
 }
 
+function buildMessageLoadError(error, fallbackMessage) {
+  const status = Number(error?.status || 0);
+  const normalizedMessage = String(error?.message || "").trim();
+
+  if (status === 404) {
+    return {
+      kind: "missing-channel",
+      message: "Este canal ya no existe o el ID ya no es valido."
+    };
+  }
+
+  if (status === 403) {
+    return {
+      kind: "forbidden",
+      message: "Ya no tienes acceso a este canal."
+    };
+  }
+
+  if (status === 401) {
+    return {
+      kind: "unauthorized",
+      message: "Tu sesion ya no puede leer este canal."
+    };
+  }
+
+  if (normalizedMessage.toLowerCase().includes("no se pudo conectar")) {
+    return {
+      kind: "network",
+      message: "No se pudo conectar con el backend. Reintenta cuando vuelva a responder."
+    };
+  }
+
+  return {
+    kind: "unknown",
+    message: normalizedMessage || fallbackMessage || "No se pudieron cargar los mensajes."
+  };
+}
 function messageSignature(message) {
   if (!message) {
     return "";
@@ -50,12 +89,148 @@ function areMessageListsEquivalent(previousMessages = [], nextMessages = []) {
   return true;
 }
 
+function captureViewportSnapshot(element) {
+  if (!element) {
+    return null;
+  }
+
+  return {
+    scrollHeight: element.scrollHeight,
+    scrollTop: element.scrollTop
+  };
+}
+
+function restoreViewportSnapshot(element, snapshot) {
+  if (!element || !snapshot) {
+    return snapshot || null;
+  }
+
+  const nextScrollTop = Math.max(
+    0,
+    Number(snapshot.scrollTop || 0) +
+      (Number(element.scrollHeight || 0) - Number(snapshot.scrollHeight || 0))
+  );
+
+  element.scrollTop = nextScrollTop;
+
+  return {
+    scrollHeight: element.scrollHeight,
+    scrollTop: element.scrollTop
+  };
+}
+
+function createViewportSnapshotTracker(element) {
+  if (!element) {
+    return {
+      read() {
+        return null;
+      },
+      write() {},
+      stop() {}
+    };
+  }
+
+  let currentSnapshot = captureViewportSnapshot(element);
+  let frameId = null;
+
+  function refreshSnapshot() {
+    frameId = null;
+    currentSnapshot = captureViewportSnapshot(element);
+  }
+
+  function scheduleSnapshotRefresh() {
+    if (frameId !== null) {
+      return;
+    }
+
+    frameId = window.requestAnimationFrame(refreshSnapshot);
+  }
+
+  element.addEventListener("scroll", scheduleSnapshotRefresh, { passive: true });
+
+  return {
+    read() {
+      return currentSnapshot || captureViewportSnapshot(element);
+    },
+    write(nextSnapshot) {
+      currentSnapshot = nextSnapshot || captureViewportSnapshot(element);
+    },
+    stop() {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      element.removeEventListener("scroll", scheduleSnapshotRefresh);
+    }
+  };
+}
+
+function stabilizeViewportSnapshot(element, tracker, onSettle) {
+  if (!element || !tracker) {
+    onSettle?.();
+    return () => {};
+  }
+
+  let settled = false;
+  let settleTimer = null;
+  let maxTimer = null;
+  let resizeObserver = null;
+
+  function finish() {
+    if (settled) {
+      return;
+    }
+
+    settled = true;
+    if (settleTimer) {
+      window.clearTimeout(settleTimer);
+    }
+    if (maxTimer) {
+      window.clearTimeout(maxTimer);
+    }
+    resizeObserver?.disconnect();
+    onSettle?.();
+  }
+
+  function refreshSnapshot() {
+    if (settled) {
+      return;
+    }
+
+    const nextSnapshot = restoreViewportSnapshot(element, tracker.read());
+    tracker.write(nextSnapshot);
+
+    if (settleTimer) {
+      window.clearTimeout(settleTimer);
+    }
+
+    settleTimer = window.setTimeout(finish, 140);
+  }
+
+  refreshSnapshot();
+  requestAnimationFrame(() => {
+    refreshSnapshot();
+    requestAnimationFrame(refreshSnapshot);
+  });
+
+  if (typeof ResizeObserver === "function") {
+    const observedNode = element.firstElementChild || element;
+    resizeObserver = new ResizeObserver(() => {
+      refreshSnapshot();
+    });
+    resizeObserver.observe(observedNode);
+  }
+
+  maxTimer = window.setTimeout(finish, 900);
+  return finish;
+}
+
 export function createWorkspaceMessageStore({
   accessTokenRef,
   activeSelection,
   activeSelectionRef,
   backgroundPrefetchRef,
   bootstrapRequestIdRef,
+  historyScrollStateRef,
   inFlightMessageLoadsRef,
   listRef,
   localReadStateRef,
@@ -71,11 +246,43 @@ export function createWorkspaceMessageStore({
   setAppError,
   setBooting,
   setHasMore,
+  setLoadingHistoryMessages,
   setLoadingMessages,
+  setMessageLoadError,
   setMessages,
   setWorkspace,
+  workspaceRef,
   workspace
 }) {
+  const MAX_CHANNEL_MESSAGES = 100;
+
+  function trimChannelMessages(channelId, messages, hasMore) {
+    if (!messages || messages.length <= MAX_CHANNEL_MESSAGES) {
+      return {
+        hasMore,
+        messages,
+        windowMode: "latest"
+      };
+    }
+
+    const isActive = activeSelectionRef.current.channelId === channelId;
+    const autoSyncToLatest = historyScrollStateRef?.current?.autoSyncToLatest !== false;
+
+    if (isActive && !autoSyncToLatest) {
+      return {
+        messages: messages.slice(0, MAX_CHANNEL_MESSAGES),
+        hasMore,
+        windowMode: "history"
+      };
+    }
+
+    return {
+      messages: messages.slice(-MAX_CHANNEL_MESSAGES),
+      hasMore: true,
+      windowMode: "latest"
+    };
+  }
+
   function readChannelCache(channelId) {
     return channelId ? messageCacheRef.current.get(channelId) || null : null;
   }
@@ -113,7 +320,13 @@ export function createWorkspaceMessageStore({
     });
   }
 
-  function commitChannelMessages(channelId, nextMessages, nextHasMore, fetchedAt = Date.now()) {
+  function commitChannelMessages(
+    channelId,
+    nextMessages,
+    nextHasMore,
+    fetchedAt = Date.now(),
+    { sync = false } = {}
+  ) {
     if (!channelId) {
       return;
     }
@@ -134,16 +347,26 @@ export function createWorkspaceMessageStore({
       return;
     }
 
+    const trimmed = trimChannelMessages(channelId, nextMessages, resolvedHasMore);
     const nextEntry = {
       fetchedAt,
-      hasMore: resolvedHasMore,
-      messages: nextMessages
+      hasMore: trimmed.hasMore,
+      messages: trimmed.messages,
+      windowMode: trimmed.windowMode
     };
     messageCacheRef.current.set(channelId, nextEntry);
 
     if (activeSelectionRef.current.channelId === channelId) {
-      setMessages(nextMessages);
-      setHasMore(resolvedHasMore);
+      const applyState = () => {
+        setMessages(trimmed.messages);
+        setHasMore(trimmed.hasMore);
+      };
+
+      if (sync) {
+        flushSync(applyState);
+      } else {
+        startTransition(applyState);
+      }
     }
   }
 
@@ -214,6 +437,9 @@ export function createWorkspaceMessageStore({
         localReadStateRef.current,
         resolvedSelection.channelId
       );
+      if (workspaceRef) {
+        workspaceRef.current = normalizedWorkspace;
+      }
       setWorkspace(normalizedWorkspace);
       setActiveSelection(resolvedSelection);
       setAppError("");
@@ -290,21 +516,41 @@ export function createWorkspaceMessageStore({
     force = false,
     limit,
     prepend = false,
+    resetWindow = false,
     silent = false
   } = {}) {
-    const targetChannel = findChannelInSession(workspace, channelId)?.channel;
+    const workspaceSnapshot = workspaceRef?.current || workspace;
+    const targetChannel = findChannelInSession(workspaceSnapshot, channelId)?.channel;
     if (!channelId || targetChannel?.is_voice) {
       setMessages([]);
       setHasMore(false);
+      setMessageLoadError(null);
       return;
+    }
+
+    if (!targetChannel) {
+      if (activeSelectionRef.current.channelId === channelId) {
+        setMessages([]);
+        setHasMore(false);
+        setLoadingHistoryMessages(false);
+        setLoadingMessages(false);
+        setMessageLoadError({
+          kind: "missing-channel",
+          message: "El canal seleccionado ya no esta disponible en tu espacio actual."
+        });
+      }
+      return null;
     }
 
     const isInitialPage = !before && !prepend;
     const resolvedLimit = limit || (prepend ? 28 : 24);
     const requestKey = `${channelId}::${before || "latest"}::${resolvedLimit}::${prepend ? "prepend" : "replace"}`;
-    const cachedEntry = isInitialPage ? readChannelCache(channelId) : null;
+    const cachedEntry = isInitialPage && !resetWindow ? readChannelCache(channelId) : null;
 
     if (cachedEntry && isInitialPage) {
+      if (activeSelectionRef.current.channelId === channelId) {
+        setMessageLoadError(null);
+      }
       commitChannelMessages(
         channelId,
         cachedEntry.messages || [],
@@ -322,8 +568,33 @@ export function createWorkspaceMessageStore({
       return inFlightRequest;
     }
 
+    const isActiveChannel = activeSelectionRef.current.channelId === channelId;
+
     if (!silent && !background && activeSelectionRef.current.channelId === channelId) {
-      setLoadingMessages(true);
+      setMessageLoadError(null);
+      if (prepend) {
+        historyScrollStateRef?.current?.cancelViewportStabilizer?.();
+        if (historyScrollStateRef?.current) {
+          historyScrollStateRef.current.cancelViewportStabilizer = null;
+          historyScrollStateRef.current.pendingViewportTracker?.stop?.();
+          historyScrollStateRef.current.pendingViewportTracker = createViewportSnapshotTracker(
+            refs.listRef.current
+          );
+        }
+        setLoadingHistoryMessages(true);
+        requestAnimationFrame(() => {
+          const element = refs.listRef.current;
+          const viewportTracker = historyScrollStateRef?.current?.pendingViewportTracker;
+          if (!element || !viewportTracker) {
+            return;
+          }
+
+          const nextSnapshot = restoreViewportSnapshot(element, viewportTracker.read());
+          viewportTracker.write(nextSnapshot);
+        });
+      } else {
+        setLoadingMessages(true);
+      }
     }
 
     if (isInitialPage && messageAbortRef.current) {
@@ -338,9 +609,9 @@ export function createWorkspaceMessageStore({
       messageAbortRef.current = controller;
     }
 
-    const previousHeight = refs.listRef.current?.scrollHeight || 0;
-
     const requestPromise = (async () => {
+      let deferredHistoryLoadingReset = false;
+
       try {
         const payload = await api.fetchMessages({
           before,
@@ -350,26 +621,85 @@ export function createWorkspaceMessageStore({
         });
 
         if (prepend) {
+          const viewportTracker =
+            historyScrollStateRef?.current?.pendingViewportTracker ||
+            createViewportSnapshotTracker(refs.listRef.current);
           const currentMessages = readChannelCache(channelId)?.messages || [];
           const nextMessages = mergeChannelMessages(currentMessages, payload.messages, {
             prepend: true
           });
-          commitChannelMessages(channelId, nextMessages, payload.has_more);
+          commitChannelMessages(channelId, nextMessages, payload.has_more, Date.now(), {
+            sync: isActiveChannel
+          });
 
-          if (activeSelectionRef.current.channelId === channelId) {
+          if (isActiveChannel) {
+            deferredHistoryLoadingReset = true;
+            const element = refs.listRef.current;
+            historyScrollStateRef?.current?.cancelViewportStabilizer?.();
+            const cancelViewportStabilizer = stabilizeViewportSnapshot(element, viewportTracker, () => {
+              const settledElement = refs.listRef.current;
+              if (settledElement && historyScrollStateRef?.current) {
+                historyScrollStateRef.current.lastScrollTop = settledElement.scrollTop;
+                historyScrollStateRef.current.loadArmed = true;
+                if (
+                  historyScrollStateRef.current.cancelViewportStabilizer === cancelViewportStabilizer
+                ) {
+                  historyScrollStateRef.current.cancelViewportStabilizer = null;
+                }
+                if (historyScrollStateRef.current.pendingViewportTracker === viewportTracker) {
+                  historyScrollStateRef.current.pendingViewportTracker = null;
+                }
+              }
+              viewportTracker.stop();
+            });
+
+            if (historyScrollStateRef?.current) {
+              historyScrollStateRef.current.cancelViewportStabilizer = cancelViewportStabilizer;
+            }
+
+            setLoadingHistoryMessages(false);
+          } else {
+            viewportTracker.stop();
+            if (
+              historyScrollStateRef?.current?.pendingViewportTracker === viewportTracker
+            ) {
+              historyScrollStateRef.current.pendingViewportTracker = null;
+            }
+          }
+        } else {
+          const cachedMessages =
+            isInitialPage && !resetWindow ? readChannelCache(channelId)?.messages || [] : [];
+          const nextMessages =
+            isInitialPage && cachedMessages.length
+              ? mergeChannelMessages(cachedMessages, payload.messages)
+              : payload.messages;
+          const nextHasMore =
+            isInitialPage && cachedMessages.length
+              ? readChannelCache(channelId)?.hasMore ?? payload.has_more
+              : payload.has_more;
+          commitChannelMessages(channelId, nextMessages, nextHasMore);
+
+          if (resetWindow && activeSelectionRef.current.channelId === channelId) {
             requestAnimationFrame(() => {
               const element = refs.listRef.current;
               if (element) {
-                element.scrollTop = element.scrollHeight - previousHeight;
+                element.scrollTop = element.scrollHeight;
+                if (historyScrollStateRef?.current) {
+                  historyScrollStateRef.current.lastScrollTop = element.scrollTop;
+                  historyScrollStateRef.current.loadArmed = true;
+                }
               }
             });
           }
-        } else {
-          commitChannelMessages(channelId, payload.messages, payload.has_more);
         }
 
         const latest = payload.messages[payload.messages.length - 1];
-        if (latest && activeSelectionRef.current.channelId === channelId) {
+        const shouldAcknowledgeLatest =
+          latest &&
+          !prepend &&
+          activeSelectionRef.current.channelId === channelId &&
+          historyScrollStateRef?.current?.autoSyncToLatest !== false;
+        if (shouldAcknowledgeLatest) {
           queueMarkRead({
             channelId,
             lastReadAt: latest.created_at,
@@ -381,22 +711,70 @@ export function createWorkspaceMessageStore({
           backgroundPrefetchRef.current.set(channelId, Date.now());
         }
 
+        if (activeSelectionRef.current.channelId === channelId) {
+          setMessageLoadError(null);
+        }
+
         return payload;
       } catch (error) {
-        if (error?.name !== "AbortError" && !background) {
-          setAppError(error.message);
+        if (
+          error?.name !== "AbortError" &&
+          !background &&
+          activeSelectionRef.current.channelId === channelId
+        ) {
+          setMessageLoadError(
+            buildMessageLoadError(error, "No se pudieron cargar los mensajes del canal.")
+          );
         }
 
         if (background) {
           backgroundPrefetchRef.current.set(channelId, Date.now());
         }
       } finally {
-        if (
-          activeSelectionRef.current.channelId === channelId &&
-          (!background || !silent) &&
-          (!isInitialPage || messageRequestIdRef.current === requestId)
-        ) {
-          setLoadingMessages(false);
+        if (!background || !silent) {
+          if (prepend) {
+            if (!deferredHistoryLoadingReset) {
+              const viewportTracker = historyScrollStateRef?.current?.pendingViewportTracker || null;
+              if (viewportTracker && isActiveChannel) {
+                historyScrollStateRef?.current?.cancelViewportStabilizer?.();
+                const cancelViewportStabilizer = stabilizeViewportSnapshot(
+                  refs.listRef.current,
+                  viewportTracker,
+                  () => {
+                    const settledElement = refs.listRef.current;
+                    if (settledElement && historyScrollStateRef?.current) {
+                      historyScrollStateRef.current.lastScrollTop = settledElement.scrollTop;
+                      historyScrollStateRef.current.loadArmed = true;
+                      if (
+                        historyScrollStateRef.current.cancelViewportStabilizer ===
+                        cancelViewportStabilizer
+                      ) {
+                        historyScrollStateRef.current.cancelViewportStabilizer = null;
+                      }
+                      if (historyScrollStateRef.current.pendingViewportTracker === viewportTracker) {
+                        historyScrollStateRef.current.pendingViewportTracker = null;
+                      }
+                    }
+                    viewportTracker.stop();
+                  }
+                );
+                if (historyScrollStateRef?.current) {
+                  historyScrollStateRef.current.cancelViewportStabilizer = cancelViewportStabilizer;
+                }
+              } else {
+                viewportTracker?.stop();
+                if (historyScrollStateRef?.current?.pendingViewportTracker === viewportTracker) {
+                  historyScrollStateRef.current.pendingViewportTracker = null;
+                }
+              }
+              setLoadingHistoryMessages(false);
+            }
+          } else if (
+            activeSelectionRef.current.channelId === channelId &&
+            (!isInitialPage || messageRequestIdRef.current === requestId)
+          ) {
+            setLoadingMessages(false);
+          }
         }
 
         if (messageAbortRef.current === controller) {

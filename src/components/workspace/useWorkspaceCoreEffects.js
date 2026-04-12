@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { startTransition, useEffect, useRef } from "react";
 
 import { api } from "../../api.js";
 import { getSocket } from "../../socket.js";
@@ -135,6 +135,7 @@ export function useWorkspaceCoreEffects({
   headerActionsRef,
   headerPanel,
   headerPanelRef,
+  historyScrollStateRef,
   initialSelection,
   joinedVoiceChannelId,
   joinedVoiceChannelIdRef,
@@ -161,7 +162,9 @@ export function useWorkspaceCoreEffects({
   setHasMore,
   setHeaderPanel,
   setJoinedVoiceChannelId,
+  setLoadingHistoryMessages,
   setLoadingMessages,
+  setMessageLoadError,
   setMessageMenuFor,
   setMessages,
   setProfileCard,
@@ -236,12 +239,29 @@ export function useWorkspaceCoreEffects({
     setHeaderPanel(null);
     setVoiceMenu(null);
     setTypingEvents([]);
+    setLoadingHistoryMessages(false);
+    setMessageLoadError(null);
 
     if (activeSelection.channelId && !activeChannel?.is_voice) {
+      if (!activeChannel) {
+        setMessages([]);
+        setHasMore(false);
+        setLoadingMessages(false);
+        setMessageLoadError({
+          kind: "missing-channel",
+          message: "El canal seleccionado ya no esta disponible. Reintenta para resincronizar."
+        });
+        return;
+      }
+
       const cachedEntry = readChannelCache(activeSelection.channelId);
-      if (cachedEntry) {
-        setMessages(cachedEntry.messages || []);
-        setHasMore(cachedEntry.hasMore ?? true);
+      const canRestoreLatestWindow = cachedEntry?.windowMode !== "history";
+
+      if (cachedEntry && canRestoreLatestWindow) {
+        startTransition(() => {
+          setMessages(cachedEntry.messages || []);
+          setHasMore(cachedEntry.hasMore ?? true);
+        });
         setLoadingMessages(false);
 
         const latestCached = cachedEntry.messages?.[cachedEntry.messages.length - 1];
@@ -255,16 +275,20 @@ export function useWorkspaceCoreEffects({
       } else {
         setMessages([]);
         setHasMore(true);
+        setLoadingMessages(true);
       }
 
       loadMessages({
         channelId: activeSelection.channelId,
-        force: !cachedEntry,
-        silent: Boolean(cachedEntry)
+        force: !canRestoreLatestWindow,
+        resetWindow: !canRestoreLatestWindow,
+        silent: Boolean(cachedEntry && canRestoreLatestWindow)
       });
     } else {
       setMessages([]);
       setHasMore(false);
+      setLoadingMessages(false);
+      setMessageLoadError(null);
     }
   }, [activeSelection.channelId, activeChannel?.is_voice]);
 
@@ -321,7 +345,30 @@ export function useWorkspaceCoreEffects({
       }
 
       if (message?.channel_id === activeSelectionRef.current.channelId) {
-        if (message.id && message.author?.id !== workspace?.current_user?.id) {
+        requestAnimationFrame(() => {
+          const element = listRef.current;
+          if (!element) {
+            return;
+          }
+          const autoSyncToLatest = historyScrollStateRef?.current?.autoSyncToLatest !== false;
+          const nearBottom =
+            element.scrollHeight - element.scrollTop - element.clientHeight < 160;
+          if (autoSyncToLatest || nearBottom || message.author?.id === workspace?.current_user?.id) {
+            element.scrollTop = element.scrollHeight;
+            requestAnimationFrame(() => {
+              const settledElement = listRef.current;
+              if (settledElement) {
+                settledElement.scrollTop = settledElement.scrollHeight;
+              }
+            });
+          }
+        });
+
+        if (
+          message.id &&
+          message.author?.id !== workspace?.current_user?.id &&
+          historyScrollStateRef?.current?.autoSyncToLatest !== false
+        ) {
           queueMarkRead({
             channelId: activeSelectionRef.current.channelId,
             lastReadAt: message.created_at,
@@ -519,7 +566,8 @@ export function useWorkspaceCoreEffects({
 
           if (
             activeSelectionRef.current.channelId === preview.id &&
-            latestCachedLastMessageId !== previewLastMessageId
+            latestCachedLastMessageId !== previewLastMessageId &&
+            historyScrollStateRef?.current?.autoSyncToLatest !== false
           ) {
             loadMessages({
               channelId: preview.id,
@@ -614,6 +662,10 @@ export function useWorkspaceCoreEffects({
 
     async function syncActiveChannelMessages() {
       if (cancelled || channelFallbackSyncRef.current) {
+        return;
+      }
+
+      if (historyScrollStateRef?.current?.autoSyncToLatest === false) {
         return;
       }
 

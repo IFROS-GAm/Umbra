@@ -748,10 +748,11 @@
     radial-gradient(circle at left center, rgba(107, 124, 255, 0.08), transparent 42%);
   border-top: 1px solid rgba(174, 194, 255, 0.08);
   margin-bottom: -12px;
-  margin-left: -70px;
+  margin-left: -12px;
   margin-right: -12px;
-  overflow: visible;
-  padding: 8px 8px 10px 66px;
+  overflow-x: hidden;
+  overflow-y: visible;
+  padding: 8px 8px 10px 12px;
   position: relative;
   z-index: 70;
 }

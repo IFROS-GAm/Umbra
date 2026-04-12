@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { findChannelInSession } from "../../utils.js";
 import {
@@ -23,7 +23,9 @@ export function useUmbraWorkspaceCore({
   });
   const [messages, setMessages] = useState([]);
   const [hasMore, setHasMore] = useState(true);
+  const [loadingHistoryMessages, setLoadingHistoryMessages] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [messageLoadError, setMessageLoadError] = useState(null);
   const [composer, setComposer] = useState("");
   const [composerAttachments, setComposerAttachments] = useState([]);
   const [replyTarget, setReplyTarget] = useState(null);
@@ -114,6 +116,17 @@ export function useUmbraWorkspaceCore({
   const localReadStateRef = useRef(new Map());
   const pendingDirectDmRef = useRef(new Set());
   const selectionVersionRef = useRef(0);
+  const historyScrollStateRef = useRef({
+    autoSyncToLatest: true,
+    cancelViewportStabilizer: null,
+    lastScrollTop: Number.POSITIVE_INFINITY,
+    loadArmed: true,
+    pendingViewportTracker: null
+  });
+  const bootstrapRetryRef = useRef({
+    attempt: 0,
+    timer: null
+  });
 
   function areSelectionsEqual(left, right) {
     return (
@@ -149,6 +162,56 @@ export function useUmbraWorkspaceCore({
       return nextChannelId;
     });
   }
+
+  function isBootstrapConnectionError(message = "") {
+    const normalized = String(message || "").toLowerCase();
+    return (
+      normalized.includes("failed to fetch") ||
+      normalized.includes("no se pudo conectar") ||
+      normalized.includes("networkerror") ||
+      normalized.includes("err_connection_refused")
+    );
+  }
+
+  useEffect(() => {
+    historyScrollStateRef.current?.cancelViewportStabilizer?.();
+    historyScrollStateRef.current?.pendingViewportTracker?.stop?.();
+    historyScrollStateRef.current = {
+      autoSyncToLatest: true,
+      cancelViewportStabilizer: null,
+      lastScrollTop: Number.POSITIVE_INFINITY,
+      loadArmed: true,
+      pendingViewportTracker: null
+    };
+  }, [activeSelection.channelId]);
+
+  useEffect(() => {
+    const retryState = bootstrapRetryRef.current;
+    if (retryState.timer) {
+      window.clearTimeout(retryState.timer);
+      retryState.timer = null;
+    }
+
+    if (!accessToken || workspace || !isBootstrapConnectionError(appError)) {
+      retryState.attempt = 0;
+      return;
+    }
+
+    const nextAttempt = Math.min(retryState.attempt + 1, 6);
+    retryState.attempt = nextAttempt;
+    const delay = Math.min(900 + nextAttempt * 700, 5200);
+
+    retryState.timer = window.setTimeout(() => {
+      loadBootstrapRef.current?.(initialSelection || activeSelectionRef.current);
+    }, delay);
+
+    return () => {
+      if (retryState.timer) {
+        window.clearTimeout(retryState.timer);
+        retryState.timer = null;
+      }
+    };
+  }, [accessToken, appError, initialSelection, workspace]);
 
   activeSelectionRef.current = activeSelection;
   accessTokenRef.current = accessToken;
@@ -186,6 +249,7 @@ export function useUmbraWorkspaceCore({
     activeSelectionRef,
     backgroundPrefetchRef,
     bootstrapRequestIdRef,
+    historyScrollStateRef,
     inFlightMessageLoadsRef,
     listRef,
     localReadStateRef,
@@ -201,9 +265,12 @@ export function useUmbraWorkspaceCore({
     setAppError,
     setBooting,
     setHasMore,
+    setLoadingHistoryMessages,
     setLoadingMessages,
+    setMessageLoadError,
     setMessages,
     setWorkspace,
+    workspaceRef,
     workspace
   });
 
@@ -219,6 +286,7 @@ export function useUmbraWorkspaceCore({
     headerActionsRef,
     headerPanel,
     headerPanelRef,
+    historyScrollStateRef,
     initialSelection,
     joinedVoiceChannelId,
     joinedVoiceChannelIdRef,
@@ -245,7 +313,9 @@ export function useUmbraWorkspaceCore({
     setHasMore,
     setHeaderPanel,
     setJoinedVoiceChannelId,
+    setLoadingHistoryMessages,
     setLoadingMessages,
+    setMessageLoadError,
     setMessageMenuFor,
     setMessages,
     setProfileCard,
@@ -289,7 +359,9 @@ export function useUmbraWorkspaceCore({
     handlePickerInsert,
     handleProfileUpdate,
     handleReaction,
+    handleRetryMessages,
     handleScroll,
+    handleJumpToLatest,
     joinVoiceChannelById,
     handleSelectGuildChannel,
     handleStatusChange,
@@ -321,8 +393,11 @@ export function useUmbraWorkspaceCore({
     lastTypingAtRef,
     listRef,
     loadBootstrap,
+    historyScrollStateRef,
     loadMessages,
+    loadingHistoryMessages,
     loadingMessages,
+    messageLoadError,
     localReadStateRef,
     messages,
     patchChannelMessages,
@@ -341,6 +416,7 @@ export function useUmbraWorkspaceCore({
     setEditingMessage,
     setHeaderPanel,
     setJoinedVoiceChannelId,
+    setMessageLoadError,
     setProfileCard,
     setReplyMentionEnabled,
     setReplyTarget,
@@ -361,12 +437,12 @@ export function useUmbraWorkspaceCore({
     cameraStatus, cameraStream,
     composerMenuOpen, composerPicker, composerRef, currentUserLabel, cycleVoiceDevice, dialog, directUnreadCount, editingMessage,
     handleAttachmentSelection, handleComposerChange, handleComposerShortcut, handleDeleteMessage, handleDialogSubmit,
-    handlePickerInsert, handleProfileUpdate, handleReaction, handleScroll, joinVoiceChannelById, handleSelectGuildChannel,
+    handlePickerInsert, handleProfileUpdate, handleReaction, handleRetryMessages, handleScroll, handleJumpToLatest, joinVoiceChannelById, handleSelectGuildChannel,
     handleStickerSelect,
     handleStatusChange, handleSubmitMessage, handleVoiceDeviceChange, handleVoiceLeave, handleJoinDirectCall, hasMore, headerActionsRef,
     getSelectedDeviceLabel, headerCopy, headerPanel, headerPanelRef, hoveredVoiceChannelId, inboxTab, isVoiceChannel, joinedVoiceChannelId,
     joinedVoiceChannelIdRef, lastTypingAtRef, listRef, loadBootstrap, loadBootstrapRef, loadMessages,
-    loadingMessages, messageMenuFor, messages, membersPanelVisible, profileCard,
+    loadingHistoryMessages, loadingMessages, messageLoadError, messageMenuFor, messages, membersPanelVisible, profileCard,
     reactionPickerFor, removeComposerAttachment, replyMentionEnabled, replyTarget, selectedVoiceDevices,
     setActiveSelection, setAppError, setBooting, setComposer, setComposerAttachments, setComposerMenuOpen,
     setComposerPicker, setDialog, setEditingMessage, setHeaderPanel, setHoveredVoiceChannelId, setInboxTab,

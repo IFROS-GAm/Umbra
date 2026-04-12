@@ -208,8 +208,13 @@ export function resolveSelection(session, previousSelection) {
   }
 
   if (previousSelection?.guildId) {
-    const previousGuild = session.guilds.find((guild) => guild.id === previousSelection.guildId);
-    const previousGuildChannel = previousGuild?.channels.find((channel) => !channel.is_category);
+    const previousGuild = session.guilds.find(
+      (guild) => guild.id === previousSelection.guildId
+    );
+    const previousGuildChannel =
+      previousGuild?.channels.find((channel) => !channel.is_category && !channel.is_voice) ||
+      previousGuild?.channels.find((channel) => !channel.is_category) ||
+      null;
 
     if (previousGuild && previousGuildChannel) {
       return {

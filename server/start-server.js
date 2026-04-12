@@ -46,17 +46,10 @@ function parseAllowedOrigins(extraOrigins = []) {
     .map((origin) => origin.trim())
     .filter(Boolean);
 
-  if (configuredOrigins.length) {
-    return new Set([
-      ...defaultDevOrigins,
-      ...configuredOrigins,
-      ...derivedOrigins,
-      ...extraOrigins
-    ]);
-  }
-
   return new Set(
-    [...defaultDevOrigins, ...derivedOrigins, ...extraOrigins].filter(Boolean)
+    [...defaultDevOrigins, ...configuredOrigins, ...derivedOrigins, ...extraOrigins].filter(
+      Boolean
+    )
   );
 }
 

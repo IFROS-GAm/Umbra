@@ -88,10 +88,22 @@ async function request(path, options = {}) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetch(buildUrl(path), {
-    ...options,
-    headers
-  });
+  const url = buildUrl(path);
+  let response;
+
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers
+    });
+  } catch (error) {
+    const fallbackMessage = url
+      ? `No se pudo conectar con el backend (${url}).`
+      : "No se pudo conectar con el backend.";
+    const networkError = new Error(fallbackMessage);
+    networkError.cause = error;
+    throw networkError;
+  }
 
   const contentType = response.headers.get("content-type") || "";
   const payload = contentType.includes("application/json")
@@ -99,7 +111,11 @@ async function request(path, options = {}) {
     : await response.text();
 
   if (!response.ok) {
-    throw new Error(payload?.error || "La solicitud fallo.");
+    const requestError = new Error(payload?.error || "La solicitud fallo.");
+    requestError.payload = payload;
+    requestError.status = response.status;
+    requestError.url = url;
+    throw requestError;
   }
 
   return payload;

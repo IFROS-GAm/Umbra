@@ -29,7 +29,9 @@ export function MessageStage(props) {
     guildStickers,
     language = "es",
     listRef,
+    loadingHistoryMessages,
     loadingMessages,
+    messageLoadError,
     messageMenuFor,
     messages,
     onAcceptFriendRequest,
@@ -45,6 +47,8 @@ export function MessageStage(props) {
     onSetMessageMenuFor,
     onSetReactionPickerFor,
     onStartReply,
+    onJumpToLatest,
+    onRetryMessages,
     onToggleReplyMention,
     onShowNotice,
     openProfileCard,
@@ -153,10 +157,14 @@ export function MessageStage(props) {
         handleScroll={handleScroll}
         language={language}
         listRef={listRef}
+        loadingHistoryMessages={loadingHistoryMessages}
         loadingMessages={loadingMessages}
+        messageLoadError={messageLoadError}
         messageMenuFor={messageMenuFor}
         messages={messages}
         onMenuAction={handleMessageMenuAction}
+        onJumpToLatest={onJumpToLatest}
+        onRetryMessages={onRetryMessages}
         onSetMessageMenuFor={onSetMessageMenuFor}
         onSetReactionPickerFor={onSetReactionPickerFor}
         onStartReply={onStartReply}

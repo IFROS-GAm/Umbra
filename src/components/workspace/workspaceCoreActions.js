@@ -107,14 +107,17 @@ export function createWorkspaceCoreActions(context) {
     dialog,
     editingMessage,
     hasMore,
+    historyScrollStateRef,
     isVoiceChannel,
     joinedVoiceChannelId,
     lastTypingAtRef,
     listRef,
     loadBootstrap,
     loadMessages,
+    loadingHistoryMessages,
     loadingMessages,
     localReadStateRef,
+    messageLoadError,
     messages,
     patchChannelMessages,
     pendingDirectDmRef,
@@ -132,6 +135,7 @@ export function createWorkspaceCoreActions(context) {
     setEditingMessage,
     setHeaderPanel,
     setJoinedVoiceChannelId,
+    setMessageLoadError,
     setProfileCard,
     setReplyMentionEnabled,
     setReplyTarget,
@@ -320,15 +324,150 @@ export function createWorkspaceCoreActions(context) {
 
   function handleScroll() {
     const element = listRef.current;
-    if (!element || loadingMessages || !hasMore || !messages.length) {
+    const scrollState = historyScrollStateRef?.current;
+    const scrollTop = element?.scrollTop ?? 0;
+    const previousScrollTop = scrollState?.lastScrollTop ?? scrollTop;
+    const distanceFromBottom = element
+      ? element.scrollHeight - element.scrollTop - element.clientHeight
+      : 0;
+    const scrollingDown = scrollTop > previousScrollTop + 1;
+
+    if (scrollState && (scrollingDown || distanceFromBottom <= 120)) {
+      scrollState.cancelViewportStabilizer?.();
+      scrollState.pendingViewportTracker?.stop?.();
+      scrollState.cancelViewportStabilizer = null;
+      scrollState.pendingViewportTracker = null;
+    }
+
+    if (scrollState) {
+      if (distanceFromBottom <= 20) {
+        scrollState.autoSyncToLatest = true;
+      } else if (distanceFromBottom > 72) {
+        scrollState.autoSyncToLatest = false;
+      }
+
+      if (scrollTop > 140) {
+        scrollState.loadArmed = true;
+      }
+    }
+
+    if (element && distanceFromBottom <= 4) {
+      element.scrollTop = element.scrollHeight;
+    }
+
+    const settledScrollTop = element?.scrollTop ?? scrollTop;
+
+    if (!element || loadingMessages || loadingHistoryMessages || !hasMore || !messages.length) {
+      if (scrollState) {
+        scrollState.lastScrollTop = settledScrollTop;
+      }
       return;
     }
-    if (element.scrollTop < 80) {
+
+    const shouldLoadHistory =
+      scrollTop < 120 && (!scrollState || scrollState.loadArmed);
+
+    if (shouldLoadHistory) {
+      if (scrollState) {
+        scrollState.loadArmed = false;
+      }
+
       loadMessages({
         before: messages[0].id,
         prepend: true
       });
     }
+
+    if (scrollState) {
+      scrollState.lastScrollTop = settledScrollTop;
+    }
+  }
+
+  async function handleJumpToLatest() {
+    if (!activeSelectionRef.current.channelId) {
+      return;
+    }
+
+    if (historyScrollStateRef?.current) {
+      historyScrollStateRef.current.cancelViewportStabilizer?.();
+      historyScrollStateRef.current.pendingViewportTracker?.stop?.();
+      historyScrollStateRef.current.cancelViewportStabilizer = null;
+      historyScrollStateRef.current.pendingViewportTracker = null;
+      historyScrollStateRef.current.autoSyncToLatest = true;
+      historyScrollStateRef.current.loadArmed = true;
+    }
+
+    try {
+      await loadMessages({
+        channelId: activeSelectionRef.current.channelId,
+        force: true,
+        limit: 24,
+        resetWindow: true
+      });
+
+      requestAnimationFrame(() => {
+        const element = listRef.current;
+        if (element) {
+          element.scrollTop = element.scrollHeight;
+        }
+      });
+    } catch {
+      // keep silent on jump-to-latest
+    }
+  }
+
+  async function handleRetryMessages() {
+    const currentSelection = {
+      channelId: activeSelectionRef.current?.channelId || null,
+      guildId: activeSelectionRef.current?.guildId || null,
+      kind: activeSelectionRef.current?.kind || "guild"
+    };
+    const currentChannelId = currentSelection.channelId;
+
+    if (!currentChannelId) {
+      return;
+    }
+
+    if (historyScrollStateRef?.current) {
+      historyScrollStateRef.current.cancelViewportStabilizer?.();
+      historyScrollStateRef.current.pendingViewportTracker?.stop?.();
+      historyScrollStateRef.current.cancelViewportStabilizer = null;
+      historyScrollStateRef.current.pendingViewportTracker = null;
+      historyScrollStateRef.current.loadArmed = true;
+    }
+
+    setAppError("");
+    setMessageLoadError?.(null);
+
+    const currentLookup = findChannelInSession(workspace, currentChannelId);
+    const shouldResyncWorkspace =
+      !currentLookup?.channel ||
+      messageLoadError?.kind === "missing-channel" ||
+      messageLoadError?.kind === "forbidden" ||
+      messageLoadError?.kind === "unauthorized";
+
+    if (shouldResyncWorkspace) {
+      await loadBootstrap(currentSelection);
+
+      const nextSelection = activeSelectionRef.current;
+      const selectionChanged =
+        nextSelection?.channelId !== currentSelection.channelId ||
+        nextSelection?.guildId !== currentSelection.guildId ||
+        (nextSelection?.kind || "guild") !== currentSelection.kind;
+
+      if (selectionChanged || !nextSelection?.channelId) {
+        return;
+      }
+    }
+
+    const retryChannelId = activeSelectionRef.current.channelId;
+    const cachedEntry = readChannelCache(retryChannelId);
+
+    await loadMessages({
+      channelId: retryChannelId,
+      force: true,
+      resetWindow: !(cachedEntry?.messages?.length > 0)
+    });
   }
 
   async function handleSubmitMessage(event) {
@@ -382,6 +521,14 @@ export function createWorkspaceCoreActions(context) {
           upsertChannelMessage(previous, optimisticMessage)
         );
         applyPreview(optimisticPreview);
+        if (historyScrollStateRef?.current) {
+          historyScrollStateRef.current.cancelViewportStabilizer?.();
+          historyScrollStateRef.current.pendingViewportTracker?.stop?.();
+          historyScrollStateRef.current.cancelViewportStabilizer = null;
+          historyScrollStateRef.current.pendingViewportTracker = null;
+          historyScrollStateRef.current.autoSyncToLatest = true;
+          historyScrollStateRef.current.loadArmed = true;
+        }
         scrollToBottom();
 
         setComposer("");
@@ -961,7 +1108,9 @@ export function createWorkspaceCoreActions(context) {
     handlePickerInsert,
     handleProfileUpdate,
     handleReaction,
+    handleRetryMessages,
     handleScroll,
+    handleJumpToLatest,
     joinVoiceChannelById,
     handleSelectGuildChannel,
     handleStatusChange,

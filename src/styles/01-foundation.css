@@ -856,7 +856,8 @@ button {
   gap: 6px;
   margin-top: 12px;
   min-height: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding-right: 4px;
 }
 

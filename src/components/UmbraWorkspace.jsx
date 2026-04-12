@@ -87,12 +87,12 @@ export function UmbraWorkspace({
     appError, attachmentInputRef, booting, cameraStatus, cameraStream, composer, composerAttachments, composerMenuOpen,
     composerPicker, composerRef, currentUserLabel, dialog, directUnreadCount, editingMessage,
     handleAttachmentSelection, handleComposerChange, handleComposerShortcut, handleDeleteMessage,
-    handleDialogSubmit, handlePickerInsert, handleProfileUpdate, handleReaction, handleScroll,
+    handleDialogSubmit, handlePickerInsert, handleProfileUpdate, handleReaction, handleRetryMessages, handleScroll, handleJumpToLatest,
     handleStickerSelect,
     handleJoinDirectCall, joinVoiceChannelById, handleSelectGuildChannel, handleStatusChange, handleSubmitMessage, handleVoiceDeviceChange, handleVoiceLeave,
     headerActionsRef, headerCopy, headerPanel, headerPanelRef, hoveredVoiceChannelId, inboxTab,
-    isVoiceChannel, joinedVoiceChannelId, listRef, loadBootstrap, loadingMessages, messageMenuFor, messages,
-    membersPanelVisible, profileCard, reactionPickerFor, removeComposerAttachment,
+    isVoiceChannel, joinedVoiceChannelId, listRef, loadBootstrap, loadingHistoryMessages, loadingMessages, messageMenuFor, messages,
+    membersPanelVisible, messageLoadError, profileCard, reactionPickerFor, removeComposerAttachment,
     replyMentionEnabled, replyTarget, setActiveSelection, setBooting, setComposer,
     setComposerAttachments, setComposerMenuOpen, setComposerPicker, setDialog, setEditingMessage,
     setHeaderPanel, setHoveredVoiceChannelId, setInboxTab, setMembersPanelVisible,
@@ -2104,7 +2104,9 @@ export function UmbraWorkspace({
                     guildStickers={activeGuild?.stickers || []}
                     language={language}
                     listRef={listRef}
+                    loadingHistoryMessages={loadingHistoryMessages}
                     loadingMessages={loadingMessages}
+                    messageLoadError={messageLoadError}
                     messageMenuFor={messageMenuFor}
                     messages={messages}
                     onAcceptFriendRequest={handleAcceptFriendRequest}
@@ -2121,6 +2123,8 @@ export function UmbraWorkspace({
                       setReplyMentionEnabled(true);
                     }}
                     onEditMessage={handleEditMessage}
+                    onJumpToLatest={handleJumpToLatest}
+                    onRetryMessages={handleRetryMessages}
                     onSetComposerMenuOpen={setComposerMenuOpen}
                     onSetComposerPicker={setComposerPicker}
                     onSetMessageMenuFor={setMessageMenuFor}
