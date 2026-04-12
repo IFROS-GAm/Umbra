@@ -90,8 +90,9 @@ export function UmbraWorkspace({
     handleDialogSubmit, handlePickerInsert, handleProfileUpdate, handleReaction, handleScroll,
     handleStickerSelect,
     handleJoinDirectCall, joinVoiceChannelById, handleSelectGuildChannel, handleStatusChange, handleSubmitMessage, handleVoiceDeviceChange, handleVoiceLeave,
+    handleJumpToLatest,
     headerActionsRef, headerCopy, headerPanel, headerPanelRef, hoveredVoiceChannelId, inboxTab,
-    isVoiceChannel, joinedVoiceChannelId, listRef, loadBootstrap, loadingMessages, messageMenuFor, messages,
+    isVoiceChannel, joinedVoiceChannelId, listRef, loadBootstrap, loadingHistoryMessages, loadingMessages, messageMenuFor, messages,
     membersPanelVisible, profileCard, reactionPickerFor, removeComposerAttachment,
     replyMentionEnabled, replyTarget, setActiveSelection, setBooting, setComposer,
     setComposerAttachments, setComposerMenuOpen, setComposerPicker, setDialog, setEditingMessage,
@@ -2101,9 +2102,11 @@ export function UmbraWorkspace({
                     handleReaction={handleReaction}
                     handleScroll={handleScroll}
                     handleSubmitMessage={handleSubmitMessage}
+                    handleJumpToLatest={handleJumpToLatest}
                     guildStickers={activeGuild?.stickers || []}
                     language={language}
                     listRef={listRef}
+                    loadingHistoryMessages={loadingHistoryMessages}
                     loadingMessages={loadingMessages}
                     messageMenuFor={messageMenuFor}
                     messages={messages}

@@ -25,10 +25,12 @@ export function MessageStage(props) {
     handleReaction,
     handleStickerSelect,
     handleScroll,
+    handleJumpToLatest,
     handleSubmitMessage,
     guildStickers,
     language = "es",
     listRef,
+    loadingHistoryMessages,
     loadingMessages,
     messageMenuFor,
     messages,
@@ -151,8 +153,10 @@ export function MessageStage(props) {
         headerContent={headerContent}
         handleReaction={handleReaction}
         handleScroll={handleScroll}
+        onJumpToLatest={handleJumpToLatest}
         language={language}
         listRef={listRef}
+        loadingHistoryMessages={loadingHistoryMessages}
         loadingMessages={loadingMessages}
         messageMenuFor={messageMenuFor}
         messages={messages}

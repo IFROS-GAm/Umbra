@@ -107,12 +107,14 @@ export function createWorkspaceCoreActions(context) {
     dialog,
     editingMessage,
     hasMore,
+    historyScrollStateRef,
     isVoiceChannel,
     joinedVoiceChannelId,
     lastTypingAtRef,
     listRef,
     loadBootstrap,
     loadMessages,
+    loadingHistoryMessages,
     loadingMessages,
     localReadStateRef,
     messages,
@@ -320,14 +322,68 @@ export function createWorkspaceCoreActions(context) {
 
   function handleScroll() {
     const element = listRef.current;
-    if (!element || loadingMessages || !hasMore || !messages.length) {
+    const scrollState = historyScrollStateRef?.current;
+    const scrollTop = element?.scrollTop ?? 0;
+    const distanceFromBottom = element
+      ? element.scrollHeight - element.scrollTop - element.clientHeight
+      : 0;
+
+    if (scrollState) {
+      if (distanceFromBottom <= 12) {
+        scrollState.autoSyncToLatest = true;
+      } else if (distanceFromBottom > 28) {
+        scrollState.autoSyncToLatest = false;
+      }
+
+      if (scrollTop > 140) {
+        scrollState.loadArmed = true;
+      }
+    }
+
+    if (!element || loadingMessages || loadingHistoryMessages || !hasMore || !messages.length) {
+      if (scrollState) {
+        scrollState.lastScrollTop = scrollTop;
+      }
       return;
     }
-    if (element.scrollTop < 80) {
+
+    const shouldLoadHistory = scrollTop < 120 && (!scrollState || scrollState.loadArmed);
+
+    if (shouldLoadHistory) {
+      if (scrollState) {
+        scrollState.loadArmed = false;
+      }
+
       loadMessages({
         before: messages[0].id,
         prepend: true
       });
+    }
+
+    if (scrollState) {
+      scrollState.lastScrollTop = scrollTop;
+    }
+  }
+
+  async function handleJumpToLatest() {
+    if (!activeSelectionRef.current.channelId) {
+      return;
+    }
+
+    if (historyScrollStateRef?.current) {
+      historyScrollStateRef.current.autoSyncToLatest = true;
+      historyScrollStateRef.current.loadArmed = true;
+    }
+
+    try {
+      await loadMessages({
+        channelId: activeSelectionRef.current.channelId,
+        force: true,
+        limit: 24,
+        silent: true
+      });
+    } catch {
+      // keep silent on jump-to-latest
     }
   }
 
@@ -382,6 +438,10 @@ export function createWorkspaceCoreActions(context) {
           upsertChannelMessage(previous, optimisticMessage)
         );
         applyPreview(optimisticPreview);
+        if (historyScrollStateRef?.current) {
+          historyScrollStateRef.current.autoSyncToLatest = true;
+          historyScrollStateRef.current.loadArmed = true;
+        }
         scrollToBottom();
 
         setComposer("");
@@ -962,6 +1022,7 @@ export function createWorkspaceCoreActions(context) {
     handleProfileUpdate,
     handleReaction,
     handleScroll,
+    handleJumpToLatest,
     joinVoiceChannelById,
     handleSelectGuildChannel,
     handleStatusChange,

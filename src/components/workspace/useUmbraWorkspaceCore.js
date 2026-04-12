@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { findChannelInSession } from "../../utils.js";
 import {
@@ -24,6 +24,7 @@ export function useUmbraWorkspaceCore({
   const [messages, setMessages] = useState([]);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [loadingHistoryMessages, setLoadingHistoryMessages] = useState(false);
   const [composer, setComposer] = useState("");
   const [composerAttachments, setComposerAttachments] = useState([]);
   const [replyTarget, setReplyTarget] = useState(null);
@@ -114,6 +115,11 @@ export function useUmbraWorkspaceCore({
   const localReadStateRef = useRef(new Map());
   const pendingDirectDmRef = useRef(new Set());
   const selectionVersionRef = useRef(0);
+  const historyScrollStateRef = useRef({
+    autoSyncToLatest: true,
+    lastScrollTop: Number.POSITIVE_INFINITY,
+    loadArmed: true
+  });
 
   function areSelectionsEqual(left, right) {
     return (
@@ -149,6 +155,14 @@ export function useUmbraWorkspaceCore({
       return nextChannelId;
     });
   }
+
+  useEffect(() => {
+    historyScrollStateRef.current = {
+      autoSyncToLatest: true,
+      lastScrollTop: Number.POSITIVE_INFINITY,
+      loadArmed: true
+    };
+  }, [activeSelection.channelId]);
 
   activeSelectionRef.current = activeSelection;
   accessTokenRef.current = accessToken;
@@ -186,6 +200,7 @@ export function useUmbraWorkspaceCore({
     activeSelectionRef,
     backgroundPrefetchRef,
     bootstrapRequestIdRef,
+    historyScrollStateRef,
     inFlightMessageLoadsRef,
     listRef,
     localReadStateRef,
@@ -201,6 +216,7 @@ export function useUmbraWorkspaceCore({
     setAppError,
     setBooting,
     setHasMore,
+    setLoadingHistoryMessages,
     setLoadingMessages,
     setMessages,
     setWorkspace,
@@ -220,6 +236,7 @@ export function useUmbraWorkspaceCore({
     headerPanel,
     headerPanelRef,
     initialSelection,
+    historyScrollStateRef,
     joinedVoiceChannelId,
     joinedVoiceChannelIdRef,
     listRef,
@@ -290,6 +307,7 @@ export function useUmbraWorkspaceCore({
     handleProfileUpdate,
     handleReaction,
     handleScroll,
+    handleJumpToLatest,
     joinVoiceChannelById,
     handleSelectGuildChannel,
     handleStatusChange,
@@ -322,6 +340,8 @@ export function useUmbraWorkspaceCore({
     listRef,
     loadBootstrap,
     loadMessages,
+    historyScrollStateRef,
+    loadingHistoryMessages,
     loadingMessages,
     localReadStateRef,
     messages,
@@ -361,12 +381,12 @@ export function useUmbraWorkspaceCore({
     cameraStatus, cameraStream,
     composerMenuOpen, composerPicker, composerRef, currentUserLabel, cycleVoiceDevice, dialog, directUnreadCount, editingMessage,
     handleAttachmentSelection, handleComposerChange, handleComposerShortcut, handleDeleteMessage, handleDialogSubmit,
-    handlePickerInsert, handleProfileUpdate, handleReaction, handleScroll, joinVoiceChannelById, handleSelectGuildChannel,
+    handlePickerInsert, handleProfileUpdate, handleReaction, handleScroll, handleJumpToLatest, joinVoiceChannelById, handleSelectGuildChannel,
     handleStickerSelect,
     handleStatusChange, handleSubmitMessage, handleVoiceDeviceChange, handleVoiceLeave, handleJoinDirectCall, hasMore, headerActionsRef,
     getSelectedDeviceLabel, headerCopy, headerPanel, headerPanelRef, hoveredVoiceChannelId, inboxTab, isVoiceChannel, joinedVoiceChannelId,
     joinedVoiceChannelIdRef, lastTypingAtRef, listRef, loadBootstrap, loadBootstrapRef, loadMessages,
-    loadingMessages, messageMenuFor, messages, membersPanelVisible, profileCard,
+    loadingHistoryMessages, loadingMessages, messageMenuFor, messages, membersPanelVisible, profileCard,
     reactionPickerFor, removeComposerAttachment, replyMentionEnabled, replyTarget, selectedVoiceDevices,
     setActiveSelection, setAppError, setBooting, setComposer, setComposerAttachments, setComposerMenuOpen,
     setComposerPicker, setDialog, setEditingMessage, setHeaderPanel, setHoveredVoiceChannelId, setInboxTab,

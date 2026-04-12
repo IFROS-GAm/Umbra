@@ -56,6 +56,7 @@ export function createWorkspaceMessageStore({
   activeSelectionRef,
   backgroundPrefetchRef,
   bootstrapRequestIdRef,
+  historyScrollStateRef,
   inFlightMessageLoadsRef,
   listRef,
   localReadStateRef,
@@ -71,11 +72,36 @@ export function createWorkspaceMessageStore({
   setAppError,
   setBooting,
   setHasMore,
+  setLoadingHistoryMessages,
   setLoadingMessages,
   setMessages,
   setWorkspace,
   workspace
 }) {
+  const MAX_CHANNEL_MESSAGES = 100;
+
+  function trimChannelMessages(channelId, messages, hasMore) {
+    if (!messages || messages.length <= MAX_CHANNEL_MESSAGES) {
+      return { messages, hasMore };
+    }
+
+    const isActive = activeSelectionRef.current.channelId === channelId;
+    const autoSync = historyScrollStateRef?.current?.autoSyncToLatest !== false;
+
+    if (isActive && !autoSync) {
+      // User is reading history: keep older messages, drop newest.
+      return {
+        messages: messages.slice(0, MAX_CHANNEL_MESSAGES),
+        hasMore
+      };
+    }
+
+    // Default: keep newest messages, drop older.
+    return {
+      messages: messages.slice(-MAX_CHANNEL_MESSAGES),
+      hasMore: true
+    };
+  }
   function readChannelCache(channelId) {
     return channelId ? messageCacheRef.current.get(channelId) || null : null;
   }
@@ -134,16 +160,17 @@ export function createWorkspaceMessageStore({
       return;
     }
 
+    const trimmed = trimChannelMessages(channelId, nextMessages, resolvedHasMore);
     const nextEntry = {
       fetchedAt,
-      hasMore: resolvedHasMore,
-      messages: nextMessages
+      hasMore: trimmed.hasMore,
+      messages: trimmed.messages
     };
     messageCacheRef.current.set(channelId, nextEntry);
 
     if (activeSelectionRef.current.channelId === channelId) {
-      setMessages(nextMessages);
-      setHasMore(resolvedHasMore);
+      setMessages(trimmed.messages);
+      setHasMore(trimmed.hasMore);
     }
   }
 
@@ -323,7 +350,11 @@ export function createWorkspaceMessageStore({
     }
 
     if (!silent && !background && activeSelectionRef.current.channelId === channelId) {
-      setLoadingMessages(true);
+      if (prepend) {
+        setLoadingHistoryMessages(true);
+      } else {
+        setLoadingMessages(true);
+      }
     }
 
     if (isInitialPage && messageAbortRef.current) {
@@ -338,9 +369,9 @@ export function createWorkspaceMessageStore({
       messageAbortRef.current = controller;
     }
 
-    const previousHeight = refs.listRef.current?.scrollHeight || 0;
-
     const requestPromise = (async () => {
+      let deferredHistoryLoadingReset = false;
+
       try {
         const payload = await api.fetchMessages({
           before,
@@ -350,6 +381,8 @@ export function createWorkspaceMessageStore({
         });
 
         if (prepend) {
+          const preCommitHeight = refs.listRef.current?.scrollHeight || 0;
+          const preCommitScrollTop = refs.listRef.current?.scrollTop || 0;
           const currentMessages = readChannelCache(channelId)?.messages || [];
           const nextMessages = mergeChannelMessages(currentMessages, payload.messages, {
             prepend: true
@@ -357,15 +390,34 @@ export function createWorkspaceMessageStore({
           commitChannelMessages(channelId, nextMessages, payload.has_more);
 
           if (activeSelectionRef.current.channelId === channelId) {
+            deferredHistoryLoadingReset = true;
             requestAnimationFrame(() => {
               const element = refs.listRef.current;
               if (element) {
-                element.scrollTop = element.scrollHeight - previousHeight;
+                element.scrollTop = Math.max(
+                  0,
+                  preCommitScrollTop + (element.scrollHeight - preCommitHeight)
+                );
+                if (historyScrollStateRef?.current) {
+                  historyScrollStateRef.current.lastScrollTop = element.scrollTop;
+                  historyScrollStateRef.current.loadArmed = true;
+                }
               }
+
+              setLoadingHistoryMessages(false);
             });
           }
         } else {
-          commitChannelMessages(channelId, payload.messages, payload.has_more);
+          const cachedMessages = isInitialPage ? readChannelCache(channelId)?.messages || [] : [];
+          const nextMessages =
+            isInitialPage && cachedMessages.length
+              ? mergeChannelMessages(cachedMessages, payload.messages)
+              : payload.messages;
+          const nextHasMore =
+            isInitialPage && cachedMessages.length
+              ? readChannelCache(channelId)?.hasMore ?? payload.has_more
+              : payload.has_more;
+          commitChannelMessages(channelId, nextMessages, nextHasMore);
         }
 
         const latest = payload.messages[payload.messages.length - 1];
@@ -391,12 +443,17 @@ export function createWorkspaceMessageStore({
           backgroundPrefetchRef.current.set(channelId, Date.now());
         }
       } finally {
-        if (
-          activeSelectionRef.current.channelId === channelId &&
-          (!background || !silent) &&
-          (!isInitialPage || messageRequestIdRef.current === requestId)
-        ) {
-          setLoadingMessages(false);
+        if (!background || !silent) {
+          if (prepend) {
+            if (!deferredHistoryLoadingReset) {
+              setLoadingHistoryMessages(false);
+            }
+          } else if (
+            activeSelectionRef.current.channelId === channelId &&
+            (!isInitialPage || messageRequestIdRef.current === requestId)
+          ) {
+            setLoadingMessages(false);
+          }
         }
 
         if (messageAbortRef.current === controller) {

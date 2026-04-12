@@ -95,6 +95,43 @@ function trimTrailingSlash(value) {
   return String(value || "").replace(/\/$/, "");
 }
 
+function getConfiguredDesktopRemoteConfig() {
+  const apiBaseUrl = trimTrailingSlash(
+    process.env.ELECTRON_API_URL ||
+      process.env.PUBLIC_APP_URL ||
+      process.env.RENDER_EXTERNAL_URL ||
+      process.env.VITE_PUBLIC_APP_URL ||
+      process.env.VITE_API_URL ||
+      ""
+  );
+
+  if (!apiBaseUrl) {
+    return null;
+  }
+
+  const socketBaseUrl = trimTrailingSlash(
+    process.env.ELECTRON_SOCKET_URL ||
+      process.env.PUBLIC_APP_URL ||
+      process.env.RENDER_EXTERNAL_URL ||
+      process.env.VITE_PUBLIC_APP_URL ||
+      process.env.VITE_SOCKET_URL ||
+      apiBaseUrl
+  );
+  const publicAppUrl = trimTrailingSlash(
+    process.env.ELECTRON_PUBLIC_APP_URL ||
+      process.env.PUBLIC_APP_URL ||
+      process.env.VITE_PUBLIC_APP_URL ||
+      process.env.RENDER_EXTERNAL_URL ||
+      apiBaseUrl
+  );
+
+  return {
+    apiBaseUrl,
+    publicAppUrl: publicAppUrl || apiBaseUrl,
+    socketBaseUrl: socketBaseUrl || apiBaseUrl
+  };
+}
+
 function getDesktopRuntimeConfig() {
   if (isDev) {
     const apiBaseUrl = trimTrailingSlash(
@@ -120,6 +157,15 @@ function getDesktopRuntimeConfig() {
       publicAppUrl,
       redirectUri: "umbra://auth/callback",
       socketBaseUrl
+    };
+  }
+
+  const remoteConfig = getConfiguredDesktopRemoteConfig();
+  if (remoteConfig) {
+    return {
+      ...remoteConfig,
+      isDesktop: true,
+      redirectUri: "umbra://auth/callback"
     };
   }
 
@@ -258,6 +304,7 @@ async function startEmbeddedServer() {
 async function createWindow() {
   const preloadPath = path.join(__dirname, "preload.cjs");
   const iconPath = resolveDesktopIconPath();
+  const desktopRuntimeConfig = getDesktopRuntimeConfig();
 
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -309,8 +356,17 @@ async function createWindow() {
       throw lastError;
     }
   } else {
-    const serverHandle = await startEmbeddedServer();
-    await mainWindow.loadURL(serverHandle.url);
+    if (getConfiguredDesktopRemoteConfig()) {
+      await mainWindow.loadURL(
+        desktopRuntimeConfig.publicAppUrl || desktopRuntimeConfig.apiBaseUrl
+      );
+      writeDesktopLog(
+        `Main window loaded from shared desktop runtime ${desktopRuntimeConfig.publicAppUrl || desktopRuntimeConfig.apiBaseUrl}.`
+      );
+    } else {
+      const serverHandle = await startEmbeddedServer();
+      await mainWindow.loadURL(serverHandle.url);
+    }
   }
 
   writeDesktopLog("Main window loaded.");

@@ -14,6 +14,8 @@ import { createVoiceCameraSession } from "./voiceCameraSession.js";
 import { createVoiceInputProcessingSession } from "./voiceInputProcessing.js";
 import { createVoiceRtcSession } from "./voiceRtcSession.js";
 
+const ACTIVE_CHANNEL_REFRESH_BOTTOM_THRESHOLD = 160;
+
 function areVoiceSessionsEqual(previous = {}, next = {}) {
   const previousKeys = Object.keys(previous);
   const nextKeys = Object.keys(next);
@@ -43,6 +45,14 @@ function normalizeVoiceSessions(sessions = {}) {
       ])
       .filter(([channelId, userIds]) => channelId && userIds.length)
   );
+}
+
+function isElementNearBottom(element, threshold = ACTIVE_CHANNEL_REFRESH_BOTTOM_THRESHOLD) {
+  if (!element) {
+    return true;
+  }
+
+  return element.scrollHeight - element.scrollTop - element.clientHeight < threshold;
 }
 
 function patchProfileEntry(entry, userPatch) {
@@ -135,6 +145,7 @@ export function useWorkspaceCoreEffects({
   headerActionsRef,
   headerPanel,
   headerPanelRef,
+  historyScrollStateRef,
   initialSelection,
   joinedVoiceChannelId,
   joinedVoiceChannelIdRef,
@@ -198,6 +209,23 @@ export function useWorkspaceCoreEffects({
   const bootstrapFallbackSyncRef = useRef(false);
   const voiceFallbackSyncRef = useRef(false);
   const voiceRtcSessionRef = useRef(null);
+
+  function shouldRefreshLatestMessages(channelId) {
+    if (!channelId || activeSelectionRef.current.channelId !== channelId) {
+      return true;
+    }
+
+    if (historyScrollStateRef?.current?.autoSyncToLatest === false) {
+      return false;
+    }
+
+    const cachedEntry = readChannelCache(channelId);
+    if (!cachedEntry?.messages?.length) {
+      return true;
+    }
+
+    return isElementNearBottom(listRef.current);
+  }
 
   useEffect(() => {
     if (!accessToken) {
@@ -519,7 +547,8 @@ export function useWorkspaceCoreEffects({
 
           if (
             activeSelectionRef.current.channelId === preview.id &&
-            latestCachedLastMessageId !== previewLastMessageId
+            latestCachedLastMessageId !== previewLastMessageId &&
+            shouldRefreshLatestMessages(preview.id)
           ) {
             loadMessages({
               channelId: preview.id,
@@ -614,6 +643,10 @@ export function useWorkspaceCoreEffects({
 
     async function syncActiveChannelMessages() {
       if (cancelled || channelFallbackSyncRef.current) {
+        return;
+      }
+
+      if (!shouldRefreshLatestMessages(activeSelection.channelId)) {
         return;
       }
 
