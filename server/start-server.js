@@ -371,6 +371,7 @@ export async function startServer(options = {}) {
       return;
     }
 
+    console.info("[voice] peers snapshot", { channelId, count: room.size });
     for (const socketId of room) {
       const targetSocket = io.sockets.sockets.get(socketId);
       if (!targetSocket) {
@@ -1364,6 +1365,7 @@ export async function startServer(options = {}) {
         }
 
         if (socket.data.voiceChannelId === channelId) {
+          console.info("[voice] join:already", { channelId, userId: viewer.id, socketId: socket.id });
           socket.emit("voice:update", buildVoicePayload(channelId));
           socket.emit("voice:peers", {
             channelId,
@@ -1380,8 +1382,14 @@ export async function startServer(options = {}) {
 
         socket.data.voiceChannelId = channelId;
         await socket.join(`voice:${channelId}`);
+        console.info("[voice] join", { channelId, userId: viewer.id, socketId: socket.id });
         emitVoiceUpdate(channelId);
         emitVoicePeerSnapshots(channelId);
+        socket.emit("voice:joined", {
+          channelId,
+          peerId: socket.id,
+          peers: listVoicePeers(channelId, socket.id)
+        });
       } catch (error) {
         socket.emit("room:error", {
           channelId,
@@ -1400,6 +1408,7 @@ export async function startServer(options = {}) {
         return;
       }
 
+      console.info("[voice] sync-peers", { channelId, userId: viewer.id, socketId: socket.id });
       socket.emit("voice:peers", {
         channelId,
         peers: listVoicePeers(channelId, socket.id)
@@ -1417,6 +1426,13 @@ export async function startServer(options = {}) {
         return;
       }
 
+      console.info("[voice] signal", {
+        channelId,
+        fromPeerId: socket.id,
+        targetPeerId,
+        hasDescription: Boolean(signal.description),
+        hasCandidate: Boolean(signal.candidate)
+      });
       targetSocket.emit("voice:signal", {
         channelId,
         fromPeerId: socket.id,

@@ -139,6 +139,8 @@ export function useWorkspaceCoreEffects({
   initialSelection,
   joinedVoiceChannelId,
   joinedVoiceChannelIdRef,
+  voiceJoinReadyChannelId,
+  voiceJoinReadyChannelIdRef,
   listRef,
   loadBootstrapRef,
   loadMessages,
@@ -181,6 +183,7 @@ export function useWorkspaceCoreEffects({
   setVoiceInputSpeaking,
   setVoiceInputStream,
   setVoiceInputStatus,
+  setVoiceJoinReadyChannelId,
   setVoiceMenu,
   setVoiceSessions,
   setVoiceState,
@@ -486,6 +489,7 @@ export function useWorkspaceCoreEffects({
     };
 
     const onVoiceState = (payload) => {
+      console.debug("[voice] state", payload);
       applyVoiceSessions(payload || {});
     };
 
@@ -495,6 +499,7 @@ export function useWorkspaceCoreEffects({
         return;
       }
 
+      console.debug("[voice] update", { channelId, userIds });
       const normalizedUserIds = [...new Set((userIds || []).filter(Boolean))];
       const currentUserId = workspaceRef.current?.current_user?.id || "";
 
@@ -533,6 +538,13 @@ export function useWorkspaceCoreEffects({
           userIds: normalizedUserIds,
           workspace: workspaceRef.current
         });
+      }
+    };
+
+    const onVoiceJoined = ({ channelId, peers, peerId }) => {
+      console.debug("[voice] joined", { channelId, peerId, peers });
+      if (channelId && joinedVoiceChannelIdRef.current === channelId) {
+        setVoiceJoinReadyChannelId(channelId);
       }
     };
 
@@ -600,11 +612,13 @@ export function useWorkspaceCoreEffects({
       setAppError(payload.error);
       if (payload.channelId && joinedVoiceChannelIdRef.current === payload.channelId) {
         setJoinedVoiceChannelId(null);
+        setVoiceJoinReadyChannelId(null);
       }
     };
 
     const onConnect = () => {
       syncVoiceSessionsNow();
+      console.debug("[socket] connect");
 
       if (activeSelectionRef.current?.channelId) {
         socket.emit("room:join", {
@@ -613,6 +627,7 @@ export function useWorkspaceCoreEffects({
       }
 
       if (joinedVoiceChannelIdRef.current) {
+        setVoiceJoinReadyChannelId(null);
         socket.emit("voice:join", {
           channelId: joinedVoiceChannelIdRef.current
         });
@@ -630,6 +645,7 @@ export function useWorkspaceCoreEffects({
     socket.on("typing:update", onTypingUpdate);
     socket.on("voice:state", onVoiceState);
     socket.on("voice:update", onVoiceUpdate);
+    socket.on("voice:joined", onVoiceJoined);
     socket.on("channel:preview", onChannelPreview);
     socket.on("room:error", onRoomError);
 
@@ -648,6 +664,7 @@ export function useWorkspaceCoreEffects({
       socket.off("connect", onConnect);
       socket.off("voice:state", onVoiceState);
       socket.off("voice:update", onVoiceUpdate);
+      socket.off("voice:joined", onVoiceJoined);
       socket.off("channel:preview", onChannelPreview);
       socket.off("room:error", onRoomError);
       socket.disconnect();
@@ -1040,7 +1057,13 @@ export function useWorkspaceCoreEffects({
   }, [voiceState.inputMonitoring]);
 
   useEffect(() => {
-    if (!accessToken || !joinedVoiceChannelId || !workspaceRef.current?.current_user?.id) {
+    const readyChannelId = voiceJoinReadyChannelIdRef?.current || null;
+    if (
+      !accessToken ||
+      !joinedVoiceChannelId ||
+      !workspaceRef.current?.current_user?.id ||
+      joinedVoiceChannelId !== readyChannelId
+    ) {
       if (voiceRtcSessionRef.current) {
         voiceRtcSessionRef.current.destroy().catch(() => {});
         voiceRtcSessionRef.current = null;
@@ -1088,6 +1111,7 @@ export function useWorkspaceCoreEffects({
     accessToken,
     joinedVoiceChannelId,
     setUiNotice,
+    voiceJoinReadyChannelId,
     workspace?.current_user?.id
   ]);
 

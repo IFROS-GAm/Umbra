@@ -147,6 +147,7 @@ export function createWorkspaceCoreActions(context) {
     setUiNotice,
     setUploadingAttachments,
     setVoiceMenu,
+    setVoiceJoinReadyChannelId,
     setVoiceSessions,
     setVoiceState,
     setWorkspace,
@@ -1160,7 +1161,9 @@ export function createWorkspaceCoreActions(context) {
         guildId: targetLookup.guild.id,
         kind: "guild"
       });
+      setVoiceJoinReadyChannelId(null);
       applyLocalVoicePresence(targetChannel.id);
+      console.debug("[voice] join request", { channelId: targetChannel.id });
       getLiveSocket().emit("voice:join", {
         channelId: targetChannel.id
       });
@@ -1183,7 +1186,9 @@ export function createWorkspaceCoreActions(context) {
         }));
       }
 
+      setVoiceJoinReadyChannelId(null);
       applyLocalVoicePresence(targetChannel.id);
+      console.debug("[voice] join request", { channelId: targetChannel.id });
       getLiveSocket().emit("voice:join", {
         channelId: targetChannel.id
       });
@@ -1232,6 +1237,7 @@ export function createWorkspaceCoreActions(context) {
     setVoiceMenu(null);
     setHeaderPanel(null);
     setJoinedVoiceChannelId(null);
+    setVoiceJoinReadyChannelId(null);
     setVoiceState((previous) => ({
       ...previous,
       cameraEnabled: false,

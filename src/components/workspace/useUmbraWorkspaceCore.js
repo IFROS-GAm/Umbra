@@ -79,6 +79,7 @@ export function useUmbraWorkspaceCore({
     shareAudio: true
   });
   const [voiceSessions, setVoiceSessions] = useState({});
+  const [voiceJoinReadyChannelId, setVoiceJoinReadyChannelId] = useState(null);
   const [voiceDevices, setVoiceDevices] = useState({
     audioinput: [],
     audiooutput: [],
@@ -106,6 +107,7 @@ export function useUmbraWorkspaceCore({
   const loadBootstrapRef = useRef(null);
   const accessTokenRef = useRef(accessToken);
   const joinedVoiceChannelIdRef = useRef(joinedVoiceChannelId);
+  const voiceJoinReadyChannelIdRef = useRef(voiceJoinReadyChannelId);
   const workspaceRef = useRef(workspace);
   const voiceInputSessionRef = useRef(null);
   const cameraSessionRef = useRef(null);
@@ -253,6 +255,7 @@ export function useUmbraWorkspaceCore({
   activeSelectionRef.current = activeSelection;
   accessTokenRef.current = accessToken;
   joinedVoiceChannelIdRef.current = joinedVoiceChannelId;
+  voiceJoinReadyChannelIdRef.current = voiceJoinReadyChannelId;
   workspaceRef.current = workspace;
 
   const activeLookup = findChannelInSession(workspace, activeSelection.channelId);
@@ -327,6 +330,8 @@ export function useUmbraWorkspaceCore({
     initialSelection,
     joinedVoiceChannelId,
     joinedVoiceChannelIdRef,
+    voiceJoinReadyChannelId,
+    voiceJoinReadyChannelIdRef,
     listRef,
     loadBootstrapRef,
     loadMessages,
@@ -369,9 +374,11 @@ export function useUmbraWorkspaceCore({
     setVoiceInputSpeaking,
     setVoiceInputStream,
     setVoiceInputStatus,
+    setVoiceJoinReadyChannelId,
     setVoiceMenu,
     setVoiceSessions,
     setVoiceState,
+    setVoiceJoinReadyChannelId,
     setWorkspace,
     theme,
     topbarActionsRef,
@@ -491,9 +498,9 @@ export function useUmbraWorkspaceCore({
     setComposerPicker, setDialog, setEditingMessage, setHeaderPanel, setHoveredVoiceChannelId, setInboxTab,
     setJoinedVoiceChannelId, setMembersPanelVisible, setMessageMenuFor, setProfileCard, setWorkspace,
     setReactionPickerFor, setReplyMentionEnabled, setReplyTarget, setSettingsOpen, setTheme, setTypingEvents,
-    setSubmittingMessage, setUiNotice, setVoiceDevices, setVoiceMenu, setVoiceSessions, setVoiceState, settingsOpen, showUiNotice,
+    setSubmittingMessage, setUiNotice, setVoiceDevices, setVoiceMenu, setVoiceSessions, setVoiceState, setVoiceJoinReadyChannelId, settingsOpen, showUiNotice,
     submittingMessage, theme, toggleHeaderPanel, toggleVoiceMenu, toggleVoiceState, topbarActionsRef, typingEvents, typingUsers,
     uiNotice, updateVoiceSetting, uploadingAttachments, voiceDevices, voiceInputLevel, voiceInputStatus,
-    voiceInputSpeaking, voiceMenu, voiceSessions, voiceState, voiceUserIds, workspace
+    voiceInputSpeaking, voiceJoinReadyChannelId, voiceJoinReadyChannelIdRef, voiceMenu, voiceSessions, voiceState, voiceUserIds, workspace
   };
 }

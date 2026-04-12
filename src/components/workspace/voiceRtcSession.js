@@ -57,6 +57,9 @@ export function createVoiceRtcSession({
   let destroyed = false;
   let localAudioStream = null;
   let localAudioTrack = null;
+  const log = (...args) => {
+    console.debug("[voice-rtc]", ...args);
+  };
   let playbackState = {
     deafened: Boolean(deafened),
     outputDeviceId,
@@ -105,6 +108,7 @@ export function createVoiceRtcSession({
 
     try {
       entry.makingOffer = true;
+      log("offer:local", { channelId, peerId: entry.peerId });
       await entry.peerConnection.setLocalDescription(
         await entry.peerConnection.createOffer()
       );
@@ -221,6 +225,7 @@ export function createVoiceRtcSession({
         return;
       }
 
+      log("ice:local", { channelId, targetPeerId: peerId });
       socket.emit("voice:signal", {
         signal: {
           candidate: event.candidate
@@ -230,6 +235,7 @@ export function createVoiceRtcSession({
     };
 
     entry.peerConnection.ontrack = (event) => {
+      log("track", { channelId, peerId, hasStreams: Boolean(event.streams?.length) });
       const nextStream = event.streams?.[0] || null;
       if (nextStream) {
         entry.audioElement.srcObject = nextStream;
@@ -247,6 +253,7 @@ export function createVoiceRtcSession({
 
     entry.peerConnection.onconnectionstatechange = () => {
       const { connectionState } = entry.peerConnection;
+      log("state", { channelId, peerId, connectionState });
       if (connectionState === "failed" || connectionState === "closed") {
         cleanupPeer(peerId);
       }
@@ -264,6 +271,7 @@ export function createVoiceRtcSession({
       return;
     }
 
+    log("peers", { channelId: snapshotChannelId, count: nextPeers.length });
     const activePeerIds = new Set();
 
     for (const peer of nextPeers) {
@@ -299,6 +307,12 @@ export function createVoiceRtcSession({
       return;
     }
 
+    log("signal", {
+      channelId: signalChannelId,
+      fromPeerId,
+      hasDescription: Boolean(signal.description),
+      hasCandidate: Boolean(signal.candidate)
+    });
     const entry = await ensurePeer({
       peerId: fromPeerId,
       userId
@@ -327,6 +341,7 @@ export function createVoiceRtcSession({
         entry.isSettingRemoteAnswerPending = false;
 
         if (description.type === "offer") {
+          log("offer", { channelId: signalChannelId, fromPeerId });
           await syncLocalAudioToPeer(entry, {
             renegotiate: false
           });
@@ -346,6 +361,7 @@ export function createVoiceRtcSession({
           entry.pendingNegotiation &&
           entry.peerConnection.signalingState === "stable"
         ) {
+          log("answer", { channelId: signalChannelId, fromPeerId });
           entry.pendingNegotiation = false;
           queueMicrotask(() => {
             negotiatePeer(entry);
@@ -354,6 +370,7 @@ export function createVoiceRtcSession({
       }
 
       if (signal.candidate && !entry.ignoreOffer) {
+        log("ice:remote", { channelId: signalChannelId, fromPeerId });
         await entry.peerConnection.addIceCandidate(signal.candidate);
       }
     } catch (error) {
@@ -366,6 +383,7 @@ export function createVoiceRtcSession({
       return;
     }
 
+    log("peer-left", { channelId: peerChannelId, peerId });
     cleanupPeer(peerId);
   }
 
@@ -374,6 +392,7 @@ export function createVoiceRtcSession({
       return;
     }
 
+    log("socket-connect", { channelId });
     for (const peerId of [...peers.keys()]) {
       cleanupPeer(peerId);
     }
