@@ -517,6 +517,15 @@ export function useWorkspaceCoreEffects({
         setJoinedVoiceChannelId(null);
       }
 
+      if (
+        socket.connected &&
+        currentUserId &&
+        joinedVoiceChannelIdRef.current === channelId &&
+        normalizedUserIds.includes(currentUserId)
+      ) {
+        socket.emit("voice:sync-peers");
+      }
+
       if (typeof onVoiceUpdateNotification === "function") {
         onVoiceUpdateNotification({
           channelId,

@@ -361,6 +361,29 @@ export async function startServer(options = {}) {
       .filter(Boolean);
   }
 
+  function emitVoicePeerSnapshots(channelId) {
+    if (!channelId) {
+      return;
+    }
+
+    const room = io.sockets.adapter.rooms.get(`voice:${channelId}`);
+    if (!room?.size) {
+      return;
+    }
+
+    for (const socketId of room) {
+      const targetSocket = io.sockets.sockets.get(socketId);
+      if (!targetSocket) {
+        continue;
+      }
+
+      targetSocket.emit("voice:peers", {
+        channelId,
+        peers: listVoicePeers(channelId, socketId)
+      });
+    }
+  }
+
   function emitVoiceUpdate(channelId) {
     io.emit("voice:update", buildVoicePayload(channelId));
   }
@@ -403,6 +426,7 @@ export async function startServer(options = {}) {
     socket.leave(`voice:${previousChannelId}`);
     socket.data.voiceChannelId = null;
     emitVoiceUpdate(previousChannelId);
+    emitVoicePeerSnapshots(previousChannelId);
   }
 
   async function removeUserFromGuildVoiceSessions(userId, guildId) {
@@ -1289,11 +1313,11 @@ export async function startServer(options = {}) {
         }
 
         if (socket.data.activeChannelId) {
-          socket.leave(`channel:${socket.data.activeChannelId}`);
+          await socket.leave(`channel:${socket.data.activeChannelId}`);
         }
 
         socket.data.activeChannelId = channelId;
-        socket.join(`channel:${channelId}`);
+        await socket.join(`channel:${channelId}`);
       } catch (error) {
         socket.emit("room:error", {
           channelId,
@@ -1355,12 +1379,9 @@ export async function startServer(options = {}) {
         voiceSessions.set(channelId, channelUsers);
 
         socket.data.voiceChannelId = channelId;
-        socket.join(`voice:${channelId}`);
+        await socket.join(`voice:${channelId}`);
         emitVoiceUpdate(channelId);
-        socket.emit("voice:peers", {
-          channelId,
-          peers: listVoicePeers(channelId, socket.id)
-        });
+        emitVoicePeerSnapshots(channelId);
       } catch (error) {
         socket.emit("room:error", {
           channelId,
