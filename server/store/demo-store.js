@@ -163,6 +163,35 @@ function assertInviteUsable(invite) {
   }
 }
 
+function normalizeBanExpiration(expiresAt) {
+  if (!expiresAt) {
+    return null;
+  }
+
+  const parsed = new Date(expiresAt);
+  if (Number.isNaN(parsed.getTime())) {
+    throw createError("La duracion del ban no es valida.", 400);
+  }
+
+  if (parsed.getTime() <= Date.now()) {
+    throw createError("La duracion del ban debe terminar en el futuro.", 400);
+  }
+
+  return parsed.toISOString();
+}
+
+function buildGuildBanMessage(ban) {
+  if (!ban) {
+    return "";
+  }
+
+  if (ban.expires_at) {
+    return `Sigues baneado de este servidor hasta ${ban.expires_at}.`;
+  }
+
+  return "No puedes unirte a este servidor porque sigues baneado.";
+}
+
 export class DemoStore {
   constructor(filePath) {
     this.filePath = filePath;
@@ -203,6 +232,7 @@ export class DemoStore {
       banner_image_url: "",
       ...guild
     }));
+    this.db.guild_bans = this.db.guild_bans || [];
     const membershipOrderByUser = new Map();
     this.db.guild_members = (this.db.guild_members || []).map((membership) => {
       const nextPosition = membershipOrderByUser.get(membership.user_id) ?? 0;
@@ -322,6 +352,82 @@ export class DemoStore {
 
   assertCanManageGuild(guildId, userId) {
     this.assertCanManageChannels(guildId, userId);
+  }
+
+  pruneExpiredGuildBans({ guildId = null, userId = null } = {}) {
+    const previousLength = this.db.guild_bans.length;
+    const now = Date.now();
+
+    this.db.guild_bans = this.db.guild_bans.filter((ban) => {
+      if (!ban?.expires_at) {
+        return true;
+      }
+
+      if (guildId && ban.guild_id !== guildId) {
+        return true;
+      }
+
+      if (userId && ban.user_id !== userId) {
+        return true;
+      }
+
+      const expiresAt = new Date(ban.expires_at).getTime();
+      if (!Number.isFinite(expiresAt)) {
+        return true;
+      }
+
+      return expiresAt > now;
+    });
+
+    return this.db.guild_bans.length !== previousLength;
+  }
+
+  getActiveGuildBan(guildId, userId) {
+    return (
+      this.db.guild_bans.find(
+        (ban) => ban.guild_id === guildId && ban.user_id === userId
+      ) || null
+    );
+  }
+
+  removeGuildMembershipRecords(guildId, userId) {
+    const membershipIndex = this.db.guild_members.findIndex(
+      (membership) => membership.guild_id === guildId && membership.user_id === userId
+    );
+    if (membershipIndex === -1) {
+      return false;
+    }
+
+    this.db.guild_members.splice(membershipIndex, 1);
+    const guildChannelIds = new Set(
+      this.db.channels
+        .filter((channel) => channel.guild_id === guildId)
+        .map((channel) => channel.id)
+    );
+    this.db.channel_members = this.db.channel_members.filter(
+      (membership) =>
+        membership.user_id !== userId || !guildChannelIds.has(membership.channel_id)
+    );
+    return true;
+  }
+
+  assertCanModerateGuildMember(guildId, actorId, targetUserId) {
+    const guild = this.db.guilds.find((item) => item.id === guildId);
+    if (!guild) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    this.assertCanManageGuild(guildId, actorId);
+
+    if (targetUserId === actorId) {
+      throw createError("No puedes moderarte a ti mismo desde este panel.", 400);
+    }
+
+    if (targetUserId === guild.owner_id) {
+      throw createError("No puedes moderar al owner del servidor.", 403);
+    }
+
+    return guild;
   }
 
   getNextGuildMembershipPosition(userId) {
@@ -1385,6 +1491,19 @@ export class DemoStore {
       throw createError("Servidor no encontrado.", 404);
     }
 
+    const removedExpiredBans = this.pruneExpiredGuildBans({
+      guildId: guild.id,
+      userId
+    });
+    if (removedExpiredBans) {
+      await this.save();
+    }
+
+    const activeBan = this.getActiveGuildBan(guild.id, userId);
+    if (activeBan) {
+      throw createError(buildGuildBanMessage(activeBan), 403);
+    }
+
     const defaultChannel = getDefaultGuildChannel(this.db.channels, guild.id);
     const alreadyJoined = this.db.guild_members.some(
       (membership) => membership.guild_id === guild.id && membership.user_id === userId
@@ -1829,6 +1948,60 @@ export class DemoStore {
     };
   }
 
+  async kickGuildMember({ guildId, targetUserId, userId }) {
+    this.assertCanModerateGuildMember(guildId, userId, targetUserId);
+
+    const removed = this.removeGuildMembershipRecords(guildId, targetUserId);
+    if (!removed) {
+      throw createError("Ese miembro ya no pertenece a este servidor.", 404);
+    }
+
+    await this.save();
+
+    return {
+      guild_id: guildId,
+      kicked: true,
+      user_id: targetUserId
+    };
+  }
+
+  async banGuildMember({ expiresAt = null, guildId, targetUserId, userId }) {
+    this.assertCanModerateGuildMember(guildId, userId, targetUserId);
+
+    const normalizedExpiresAt = normalizeBanExpiration(expiresAt);
+    const existingBanIndex = this.db.guild_bans.findIndex(
+      (ban) => ban.guild_id === guildId && ban.user_id === targetUserId
+    );
+
+    const nextBan = {
+      created_at: new Date().toISOString(),
+      created_by: userId,
+      expires_at: normalizedExpiresAt,
+      guild_id: guildId,
+      id:
+        existingBanIndex >= 0
+          ? this.db.guild_bans[existingBanIndex].id
+          : createId(),
+      user_id: targetUserId
+    };
+
+    if (existingBanIndex >= 0) {
+      this.db.guild_bans[existingBanIndex] = nextBan;
+    } else {
+      this.db.guild_bans.push(nextBan);
+    }
+
+    this.removeGuildMembershipRecords(guildId, targetUserId);
+    await this.save();
+
+    return {
+      banned: true,
+      expires_at: normalizedExpiresAt,
+      guild_id: guildId,
+      user_id: targetUserId
+    };
+  }
+
   async setPresence({ status, userId }) {
     const profile = this.db.profiles.find((item) => item.id === userId);
     if (!profile) {
@@ -1999,16 +2172,16 @@ export class DemoStore {
     const attachments = [];
 
     for (const file of files) {
-      if (!file?.buffer || !file.mimetype?.startsWith("image/")) {
+      if (!file?.buffer) {
         continue;
       }
 
-      const extension = path.extname(file.originalname || "") || ".png";
+      const extension = path.extname(file.originalname || "") || ".bin";
       const objectName = `${createId()}${extension}`;
       await fs.writeFile(path.join(this.uploadDir, objectName), file.buffer);
 
       attachments.push({
-        content_type: file.mimetype,
+        content_type: file.mimetype || "application/octet-stream",
         name: file.originalname || objectName,
         path: `/uploads/${objectName}`,
         size: file.size || file.buffer.length,

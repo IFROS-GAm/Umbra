@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { findChannelInSession } from "../../utils.js";
 import {
+  attachmentKey,
   renderHeaderCopy,
 } from "./workspaceHelpers.js";
 import { createWorkspaceCoreActions } from "./workspaceCoreActions.js";
@@ -26,6 +27,7 @@ export function useUmbraWorkspaceCore({
   const [loadingHistoryMessages, setLoadingHistoryMessages] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [messageLoadError, setMessageLoadError] = useState(null);
+  const [submittingMessage, setSubmittingMessage] = useState(false);
   const [composer, setComposer] = useState("");
   const [composerAttachments, setComposerAttachments] = useState([]);
   const [replyTarget, setReplyTarget] = useState(null);
@@ -127,6 +129,8 @@ export function useUmbraWorkspaceCore({
     attempt: 0,
     timer: null
   });
+  const attachmentUploadCounterRef = useRef(0);
+  const previousComposerAttachmentsRef = useRef([]);
 
   function areSelectionsEqual(left, right) {
     return (
@@ -184,6 +188,39 @@ export function useUmbraWorkspaceCore({
       pendingViewportTracker: null
     };
   }, [activeSelection.channelId]);
+
+  useEffect(() => {
+    const previousByKey = new Map(
+      (previousComposerAttachmentsRef.current || []).map((attachment) => [
+        attachmentKey(attachment),
+        attachment
+      ])
+    );
+    const currentKeys = new Set((composerAttachments || []).map((attachment) => attachmentKey(attachment)));
+
+    previousByKey.forEach((attachment, key) => {
+      if (currentKeys.has(key)) {
+        return;
+      }
+
+      if (attachment?.preview_url?.startsWith("blob:")) {
+        URL.revokeObjectURL(attachment.preview_url);
+      }
+    });
+
+    previousComposerAttachmentsRef.current = composerAttachments;
+  }, [composerAttachments]);
+
+  useEffect(
+    () => () => {
+      (previousComposerAttachmentsRef.current || []).forEach((attachment) => {
+        if (attachment?.preview_url?.startsWith("blob:")) {
+          URL.revokeObjectURL(attachment.preview_url);
+        }
+      });
+    },
+    []
+  );
 
   useEffect(() => {
     const retryState = bootstrapRetryRef.current;
@@ -323,6 +360,7 @@ export function useUmbraWorkspaceCore({
     setReplyMentionEnabled,
     setReplyTarget,
     setSelectedVoiceDevices,
+    setSubmittingMessage,
     setTheme,
     setTypingEvents,
     setUiNotice,
@@ -365,10 +403,11 @@ export function useUmbraWorkspaceCore({
     joinVoiceChannelById,
     handleSelectGuildChannel,
     handleStatusChange,
-    handleStickerSelect,
-    handleSubmitMessage,
-    handleVoiceDeviceChange,
-    handleVoiceLeave,
+      handleStickerSelect,
+      handleSubmitMessage,
+      updateComposerAttachment,
+      handleVoiceDeviceChange,
+      handleVoiceLeave,
     removeComposerAttachment,
     showUiNotice,
     toggleHeaderPanel,
@@ -406,6 +445,8 @@ export function useUmbraWorkspaceCore({
     replyMentionEnabled,
     replyTarget,
     selectedVoiceDevices,
+    attachmentUploadCounterRef,
+    submittingMessage,
     setActiveSelection,
     setAppError,
     setComposer,
@@ -421,6 +462,7 @@ export function useUmbraWorkspaceCore({
     setReplyMentionEnabled,
     setReplyTarget,
     setSelectedVoiceDevices,
+    setSubmittingMessage,
     setUiNotice,
     setUploadingAttachments,
     setVoiceMenu,
@@ -438,18 +480,19 @@ export function useUmbraWorkspaceCore({
     composerMenuOpen, composerPicker, composerRef, currentUserLabel, cycleVoiceDevice, dialog, directUnreadCount, editingMessage,
     handleAttachmentSelection, handleComposerChange, handleComposerShortcut, handleDeleteMessage, handleDialogSubmit,
     handlePickerInsert, handleProfileUpdate, handleReaction, handleRetryMessages, handleScroll, handleJumpToLatest, joinVoiceChannelById, handleSelectGuildChannel,
-    handleStickerSelect,
-    handleStatusChange, handleSubmitMessage, handleVoiceDeviceChange, handleVoiceLeave, handleJoinDirectCall, hasMore, headerActionsRef,
-    getSelectedDeviceLabel, headerCopy, headerPanel, headerPanelRef, hoveredVoiceChannelId, inboxTab, isVoiceChannel, joinedVoiceChannelId,
-    joinedVoiceChannelIdRef, lastTypingAtRef, listRef, loadBootstrap, loadBootstrapRef, loadMessages,
-    loadingHistoryMessages, loadingMessages, messageLoadError, messageMenuFor, messages, membersPanelVisible, profileCard,
-    reactionPickerFor, removeComposerAttachment, replyMentionEnabled, replyTarget, selectedVoiceDevices,
-    setActiveSelection, setAppError, setBooting, setComposer, setComposerAttachments, setComposerMenuOpen,
+      handleStickerSelect,
+      handleStatusChange, handleSubmitMessage, handleVoiceDeviceChange, handleVoiceLeave, handleJoinDirectCall, hasMore, headerActionsRef,
+      getSelectedDeviceLabel, headerCopy, headerPanel, headerPanelRef, hoveredVoiceChannelId, inboxTab, isVoiceChannel, joinedVoiceChannelId,
+      joinedVoiceChannelIdRef, lastTypingAtRef, listRef, loadBootstrap, loadBootstrapRef, loadMessages,
+      loadingHistoryMessages, loadingMessages, messageLoadError, messageMenuFor, messages, membersPanelVisible, profileCard,
+      reactionPickerFor, removeComposerAttachment, replyMentionEnabled, replyTarget, selectedVoiceDevices,
+      updateComposerAttachment,
+      setActiveSelection, setAppError, setBooting, setComposer, setComposerAttachments, setComposerMenuOpen,
     setComposerPicker, setDialog, setEditingMessage, setHeaderPanel, setHoveredVoiceChannelId, setInboxTab,
     setJoinedVoiceChannelId, setMembersPanelVisible, setMessageMenuFor, setProfileCard, setWorkspace,
     setReactionPickerFor, setReplyMentionEnabled, setReplyTarget, setSettingsOpen, setTheme, setTypingEvents,
-    setUiNotice, setVoiceDevices, setVoiceMenu, setVoiceSessions, setVoiceState, settingsOpen, showUiNotice,
-    theme, toggleHeaderPanel, toggleVoiceMenu, toggleVoiceState, topbarActionsRef, typingEvents, typingUsers,
+    setSubmittingMessage, setUiNotice, setVoiceDevices, setVoiceMenu, setVoiceSessions, setVoiceState, settingsOpen, showUiNotice,
+    submittingMessage, theme, toggleHeaderPanel, toggleVoiceMenu, toggleVoiceState, topbarActionsRef, typingEvents, typingUsers,
     uiNotice, updateVoiceSetting, uploadingAttachments, voiceDevices, voiceInputLevel, voiceInputStatus,
     voiceInputSpeaking, voiceMenu, voiceSessions, voiceState, voiceUserIds, workspace
   };

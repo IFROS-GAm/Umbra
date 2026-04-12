@@ -2,6 +2,7 @@ import { api } from "../../api.js";
 import { getSocket } from "../../socket.js";
 import { findChannelInSession } from "../../utils.js";
 import {
+  MAX_COMPOSER_ATTACHMENTS,
   applyChannelPreviewToWorkspace,
   attachmentKey,
   fallbackDeviceLabel,
@@ -100,6 +101,7 @@ export function createWorkspaceCoreActions(context) {
     activeSelection,
     activeSelectionRef,
     attachmentInputRef,
+    attachmentUploadCounterRef,
     composer,
     composerAttachments,
     composerRef,
@@ -125,6 +127,7 @@ export function createWorkspaceCoreActions(context) {
     replyMentionEnabled,
     replyTarget,
     selectedVoiceDevices,
+    submittingMessage,
     setActiveSelection,
     setAppError,
     setComposer,
@@ -140,6 +143,7 @@ export function createWorkspaceCoreActions(context) {
     setReplyMentionEnabled,
     setReplyTarget,
     setSelectedVoiceDevices,
+    setSubmittingMessage,
     setUiNotice,
     setUploadingAttachments,
     setVoiceMenu,
@@ -150,6 +154,37 @@ export function createWorkspaceCoreActions(context) {
     workspace
   } = context;
   const currentUserId = workspace?.current_user?.id || "";
+
+  function sanitizeAttachmentForMessage(attachment) {
+    if (!attachment) {
+      return attachment;
+    }
+
+    const {
+      alt_text,
+      display_name,
+      is_spoiler,
+      local_id: _localId,
+      preview_url: _previewUrl,
+      upload_error: _uploadError,
+      upload_status: _uploadStatus,
+      ...sanitized
+    } = attachment;
+
+    const nextName = String(display_name || sanitized.name || "").trim();
+    const nextAltText = String(alt_text || "").trim();
+
+    return {
+      ...sanitized,
+      alt_text: nextAltText,
+      is_spoiler: Boolean(is_spoiler),
+      name: nextName || sanitized.name || "Adjunto"
+    };
+  }
+
+  function isAttachmentReady(attachment) {
+    return attachment?.upload_status !== "uploading" && attachment?.upload_status !== "failed";
+  }
 
   function applyLocalVoicePresence(nextChannelId = null) {
     if (!currentUserId) {
@@ -472,17 +507,41 @@ export function createWorkspaceCoreActions(context) {
 
   async function handleSubmitMessage(event) {
     event.preventDefault();
-    if ((!composer.trim() && !composerAttachments.length) || !activeSelection.channelId || isVoiceChannel) {
+    if (
+      submittingMessage ||
+      (!composer.trim() && !composerAttachments.length) ||
+      !activeSelection.channelId ||
+      isVoiceChannel
+    ) {
+      return;
+    }
+
+    const pendingAttachments = composerAttachments.filter(
+      (attachment) => attachment?.upload_status === "uploading"
+    );
+    if (pendingAttachments.length) {
+      showUiNotice("Espera a que terminen de subirse los adjuntos antes de enviarlos.");
+      return;
+    }
+
+    const failedAttachments = composerAttachments.filter(
+      (attachment) => attachment?.upload_status === "failed"
+    );
+    if (failedAttachments.length) {
+      showUiNotice("Quita o vuelve a subir los adjuntos que fallaron antes de enviar.");
       return;
     }
 
     const draftComposer = composer;
-    const draftAttachments = composerAttachments;
+    const draftComposerAttachments = composerAttachments;
+    const draftAttachments = draftComposerAttachments.map(sanitizeAttachmentForMessage);
     const draftReplyTarget = replyTarget;
     const draftReplyMentionEnabled = replyMentionEnabled;
     let pendingClientNonce = null;
 
     try {
+      setSubmittingMessage(true);
+
       if (editingMessage) {
         await api.updateMessage({
           content: composer,
@@ -532,7 +591,6 @@ export function createWorkspaceCoreActions(context) {
         scrollToBottom();
 
         setComposer("");
-        setComposerAttachments([]);
         setReplyTarget(null);
         setReplyMentionEnabled(true);
         setEditingMessage(null);
@@ -558,6 +616,8 @@ export function createWorkspaceCoreActions(context) {
             )
           );
         }
+
+        setComposerAttachments([]);
       }
 
       if (editingMessage) {
@@ -574,12 +634,14 @@ export function createWorkspaceCoreActions(context) {
           previous.filter((item) => item.client_nonce !== pendingClientNonce)
         );
         setComposer(draftComposer);
-        setComposerAttachments(draftAttachments);
+        setComposerAttachments(draftComposerAttachments);
         setReplyTarget(draftReplyTarget);
         setReplyMentionEnabled(draftReplyMentionEnabled);
         await loadBootstrap(activeSelectionRef.current);
       }
       setAppError(error.message);
+    } finally {
+      setSubmittingMessage(false);
     }
   }
 
@@ -954,26 +1016,124 @@ export function createWorkspaceCoreActions(context) {
       return;
     }
 
+    if (submittingMessage) {
+      showUiNotice("Espera a que el mensaje actual termine de enviarse antes de subir mas archivos.");
+      return;
+    }
+
+    const remainingSlots = Math.max(0, MAX_COMPOSER_ATTACHMENTS - composerAttachments.length);
+    if (!remainingSlots) {
+      showUiNotice(`Solo puedes preparar hasta ${MAX_COMPOSER_ATTACHMENTS} adjuntos por mensaje.`);
+      return;
+    }
+
+    const nextFiles = files.slice(0, remainingSlots);
+    const discardedCount = files.length - nextFiles.length;
+    const localDrafts = nextFiles.map((file, index) => {
+      const localId =
+        globalThis.crypto?.randomUUID?.() ||
+        `attachment-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`;
+
+      return {
+        alt_text: "",
+        content_type: file.type || "application/octet-stream",
+        display_name: file.name || `Adjunto ${composerAttachments.length + index + 1}`,
+        is_spoiler: false,
+        local_id: localId,
+        name: file.name || `Adjunto ${composerAttachments.length + index + 1}`,
+        preview_url: file.type?.startsWith("image/") ? URL.createObjectURL(file) : "",
+        size: file.size || 0,
+        upload_error: "",
+        upload_status: "uploading"
+      };
+    });
+
+    const localIds = new Set(localDrafts.map((attachment) => attachment.local_id));
+    setComposerAttachments((previous) => [...previous, ...localDrafts].slice(0, MAX_COMPOSER_ATTACHMENTS));
+    attachmentUploadCounterRef.current += 1;
+    setUploadingAttachments(true);
+
     try {
-      setUploadingAttachments(true);
-      const payload = await api.uploadAttachments(files);
+      const payload = await api.uploadAttachments(nextFiles);
+      const uploadedAttachments = payload.attachments || [];
+
       setComposerAttachments((previous) =>
-        [...previous, ...(payload.attachments || [])].slice(0, 8)
+        previous.map((attachment) => {
+          if (!localIds.has(attachment.local_id)) {
+            return attachment;
+          }
+
+          const draftIndex = localDrafts.findIndex((draft) => draft.local_id === attachment.local_id);
+          const uploadedAttachment = draftIndex >= 0 ? uploadedAttachments[draftIndex] : null;
+
+          if (!uploadedAttachment) {
+            return {
+              ...attachment,
+              upload_error: "No se pudo procesar este adjunto.",
+              upload_status: "failed"
+            };
+          }
+
+          return {
+            ...attachment,
+            ...uploadedAttachment,
+            local_id: attachment.local_id,
+            preview_url: attachment.preview_url,
+            upload_error: "",
+            upload_status: "ready"
+          };
+        })
       );
+
+      const uploadedCount = uploadedAttachments.length || nextFiles.length;
       showUiNotice(
-        `${payload.attachments?.length || files.length} adjunto(s) listos para enviar.`
+        discardedCount
+          ? `${uploadedCount} adjunto(s) listos. Solo se guardaron ${nextFiles.length} porque el maximo es ${MAX_COMPOSER_ATTACHMENTS}.`
+          : `${uploadedCount} adjunto(s) listos para enviar.`
       );
       setAppError("");
     } catch (error) {
+      setComposerAttachments((previous) =>
+        previous.map((attachment) =>
+          localIds.has(attachment.local_id)
+            ? {
+                ...attachment,
+                upload_error: error.message,
+                upload_status: "failed"
+              }
+            : attachment
+        )
+      );
       setAppError(error.message);
     } finally {
-      setUploadingAttachments(false);
+      attachmentUploadCounterRef.current = Math.max(0, attachmentUploadCounterRef.current - 1);
+      setUploadingAttachments(attachmentUploadCounterRef.current > 0);
     }
   }
 
   function removeComposerAttachment(targetAttachment) {
     setComposerAttachments((previous) =>
       previous.filter((attachment) => attachmentKey(attachment) !== attachmentKey(targetAttachment))
+    );
+  }
+
+  function updateComposerAttachment(targetAttachment, patch = {}) {
+    const targetKey = attachmentKey(targetAttachment);
+    if (!targetKey) {
+      return;
+    }
+
+    setComposerAttachments((previous) =>
+      previous.map((attachment) => {
+        if (attachmentKey(attachment) !== targetKey) {
+          return attachment;
+        }
+
+        return {
+          ...attachment,
+          ...patch
+        };
+      })
     );
   }
 
@@ -1116,6 +1276,7 @@ export function createWorkspaceCoreActions(context) {
     handleStatusChange,
     handleStickerSelect,
     handleSubmitMessage,
+    updateComposerAttachment,
     handleVoiceDeviceChange,
     handleVoiceLeave,
     removeComposerAttachment,

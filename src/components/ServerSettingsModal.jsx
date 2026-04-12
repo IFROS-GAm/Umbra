@@ -21,6 +21,22 @@ function getServerSettingsCopy(language) {
   const t = (key, fallback) => translate(language, key, fallback);
 
   return {
+    banAction: t("server.settings.members.ban", "Banear"),
+    banDurationDays: t("server.settings.members.duration.days", "dias"),
+    banDurationHours: t("server.settings.members.duration.hours", "horas"),
+    banDurationMinutes: t("server.settings.members.duration.minutes", "minutos"),
+    banDurationWeeks: t("server.settings.members.duration.weeks", "semanas"),
+    banDurationLabel: t("server.settings.members.duration.label", "Duracion del ban"),
+    banDurationPlaceholder: t("server.settings.members.duration.placeholder", "Cantidad"),
+    banDurationPermanent: t("server.settings.members.duration.permanent", "Permanente"),
+    banDurationValueInvalid: t(
+      "server.settings.members.duration.invalid",
+      "Elige una duracion valida o marca el ban como permanente."
+    ),
+    banPanelCancel: t("common.cancel", "Cancelar"),
+    banPanelConfirm: t("server.settings.members.confirmBan", "Confirmar ban"),
+    banPanelTitle: t("server.settings.members.banPanelTitle", "Configurar ban"),
+    banSuccess: t("server.settings.members.banSuccess", "{name} fue baneado del servidor."),
     admin: t("server.settings.role.admin", "Admin"),
     banner: t("server.settings.profile.banner", "Cartel"),
     changeBanner: t("server.settings.profile.changeBanner", "Cambiar imagen del cartel"),
@@ -73,6 +89,8 @@ function getServerSettingsCopy(language) {
       "server.settings.profile.invalidIcon",
       "Selecciona una imagen valida para el icono del servidor."
     ),
+    kickAction: t("server.settings.members.kick", "Expulsar"),
+    kickSuccess: t("server.settings.members.kickSuccess", "{name} fue expulsado del servidor."),
     members: t("server.settings.nav.members", "Miembros"),
     membersCount: t("server.settings.members.count", "personas en este servidor"),
     membersEmpty: t("server.settings.members.empty", "No se encontraron miembros con ese filtro."),
@@ -80,7 +98,9 @@ function getServerSettingsCopy(language) {
       "server.settings.header.membersBody",
       "Gestiona y revisa la gente que forma parte de tu espacio."
     ),
+    membersModerating: t("server.settings.members.moderating", "Aplicando cambios..."),
     membersVisible: t("server.settings.preview.visibleMembers", "miembros visibles"),
+    memberYou: t("server.settings.members.you", "Tu"),
     name: t("server.settings.profile.name", "Nombre"),
     noDate: t("common.noDate", "Sin fecha"),
     noRoles: t("server.settings.roles.empty", "No hay roles configurados todavia."),
@@ -187,7 +207,16 @@ function replaceName(template, name, fallback) {
   return String(template || fallback).replace("{name}", name || "Umbra");
 }
 
-export function ServerSettingsModal({ guild, language = "es", memberCount = 0, onClose, onSave }) {
+export function ServerSettingsModal({
+  currentUserId = null,
+  guild,
+  language = "es",
+  memberCount = 0,
+  onBanMember,
+  onClose,
+  onKickMember,
+  onSave
+}) {
   const iconInputRef = useRef(null);
   const bannerInputRef = useRef(null);
   const copy = useMemo(() => getServerSettingsCopy(language), [language]);
@@ -222,6 +251,18 @@ export function ServerSettingsModal({ guild, language = "es", memberCount = 0, o
     loaded: false,
     loading: false
   });
+  const [memberActionState, setMemberActionState] = useState({
+    error: "",
+    memberId: null,
+    mode: "",
+    success: ""
+  });
+  const [banDraft, setBanDraft] = useState({
+    memberId: null,
+    permanent: false,
+    unit: "hours",
+    value: "24"
+  });
 
   useEffect(() => {
     setActiveTab("profile");
@@ -254,7 +295,19 @@ export function ServerSettingsModal({ guild, language = "es", memberCount = 0, o
       loaded: false,
       loading: false
     });
-  }, [guild]);
+    setMemberActionState({
+      error: "",
+      memberId: null,
+      mode: "",
+      success: ""
+    });
+    setBanDraft({
+      memberId: null,
+      permanent: false,
+      unit: "hours",
+      value: "24"
+    });
+  }, [guild.id]);
 
   useEffect(
     () => () => {
@@ -304,6 +357,10 @@ export function ServerSettingsModal({ guild, language = "es", memberCount = 0, o
         .includes(normalizedQuery)
     );
   }, [membersQuery, sortedMembers]);
+  const canManageMembers = useMemo(
+    () => guild.owner_id === currentUserId || Boolean(guild.permissions?.can_manage_guild),
+    [currentUserId, guild.owner_id, guild.permissions?.can_manage_guild]
+  );
   const filteredRoles = useMemo(() => {
     const normalizedQuery = String(rolesQuery || "").trim().toLowerCase();
     if (!normalizedQuery) {
@@ -526,6 +583,144 @@ export function ServerSettingsModal({ guild, language = "es", memberCount = 0, o
     } catch {
       setSaved(`Invitacion: ${inviteUrl}`);
       setError("");
+    }
+  }
+
+  function clearMemberActionFeedback() {
+    setMemberActionState((previous) => ({
+      ...previous,
+      error: "",
+      success: ""
+    }));
+  }
+
+  function openBanDraft(memberId) {
+    clearMemberActionFeedback();
+    setBanDraft({
+      memberId,
+      permanent: false,
+      unit: "hours",
+      value: "24"
+    });
+  }
+
+  function closeBanDraft() {
+    setBanDraft({
+      memberId: null,
+      permanent: false,
+      unit: "hours",
+      value: "24"
+    });
+  }
+
+  function buildBanExpirationIso() {
+    if (banDraft.permanent) {
+      return null;
+    }
+
+    const numericValue = Number(banDraft.value);
+    if (!Number.isFinite(numericValue) || numericValue <= 0) {
+      throw new Error(copy.banDurationValueInvalid);
+    }
+
+    const unitToMs = {
+      days: 24 * 60 * 60 * 1000,
+      hours: 60 * 60 * 1000,
+      minutes: 60 * 1000,
+      weeks: 7 * 24 * 60 * 60 * 1000
+    };
+
+    const multiplier = unitToMs[banDraft.unit] || unitToMs.hours;
+    return new Date(Date.now() + numericValue * multiplier).toISOString();
+  }
+
+  async function handleKickMemberAction(member) {
+    if (!onKickMember || !member?.id) {
+      return;
+    }
+
+    setMemberActionState({
+      error: "",
+      memberId: member.id,
+      mode: "kick",
+      success: ""
+    });
+
+    try {
+      await onKickMember({
+        guildId: guild.id,
+        member
+      });
+      closeBanDraft();
+      setMemberActionState({
+        error: "",
+        memberId: null,
+        mode: "",
+        success: replaceName(
+          copy.kickSuccess,
+          member.display_name || member.username,
+          `${member.display_name || member.username} fue expulsado del servidor.`
+        )
+      });
+    } catch (actionError) {
+      setMemberActionState({
+        error: actionError.message,
+        memberId: null,
+        mode: "",
+        success: ""
+      });
+    }
+  }
+
+  async function handleBanMemberAction(member) {
+    if (!onBanMember || !member?.id) {
+      return;
+    }
+
+    let expiresAt = null;
+    try {
+      expiresAt = buildBanExpirationIso();
+    } catch (validationError) {
+      setMemberActionState({
+        error: validationError.message,
+        memberId: null,
+        mode: "",
+        success: ""
+      });
+      return;
+    }
+
+    setMemberActionState({
+      error: "",
+      memberId: member.id,
+      mode: "ban",
+      success: ""
+    });
+
+    try {
+      await onBanMember({
+        expiresAt,
+        guildId: guild.id,
+        member
+      });
+      closeBanDraft();
+      setMemberActionState({
+        error: "",
+        memberId: null,
+        mode: "",
+        success: replaceName(
+          copy.banSuccess,
+          member.display_name || member.username,
+          `${member.display_name || member.username} fue baneado del servidor.`
+        )
+      });
+    } catch (actionError) {
+      setMemberActionState({
+        error: actionError.message,
+        memberId: null,
+        mode: "",
+        success: ""
+      });
     }
   }
 
@@ -759,6 +954,216 @@ export function ServerSettingsModal({ guild, language = "es", memberCount = 0, o
     );
   }
 
+  function renderMembersModerationTab() {
+    return (
+      <div className="server-settings-body single-column">
+        <div className="server-settings-tab-panel">
+          <div className="server-settings-list-header">
+            <h3>{copy.members}</h3>
+            <span>
+              {replaceCount(
+                copy.membersCount,
+                sortedMembers.length,
+                `${sortedMembers.length} personas en este servidor`
+              )}
+            </span>
+          </div>
+
+          <label className="settings-search server-settings-search">
+            <Icon name="search" size={16} />
+            <input
+              onChange={(event) => setMembersQuery(event.target.value)}
+              placeholder={copy.searchMembers}
+              type="text"
+              value={membersQuery}
+            />
+          </label>
+
+          {memberActionState.success ? (
+            <p className="settings-form-success">{memberActionState.success}</p>
+          ) : null}
+          {memberActionState.error ? (
+            <div className="server-settings-empty error">{memberActionState.error}</div>
+          ) : null}
+
+          <div className="server-settings-list">
+            {filteredMembers.length ? (
+              filteredMembers.map((member) => {
+                const isBusy =
+                  memberActionState.memberId === member.id &&
+                  (memberActionState.mode === "kick" || memberActionState.mode === "ban");
+                const canModerateMember =
+                  canManageMembers && member.id !== guild.owner_id && member.id !== currentUserId;
+
+                return (
+                  <div className="server-settings-list-stack" key={member.id}>
+                    <div className="server-settings-list-row">
+                      <div className="server-settings-member-main">
+                        <div className="server-settings-member-avatar">
+                          {member.avatar_url ? (
+                            <img alt={member.display_name || member.username} src={resolveAssetUrl(member.avatar_url)} />
+                          ) : (
+                            <span>{buildGuildInitials(member.display_name || member.username)}</span>
+                          )}
+                        </div>
+                        <div className="server-settings-member-copy">
+                          <strong style={member.role_color ? { color: member.role_color } : undefined}>
+                            {member.display_name || member.username}
+                          </strong>
+                          <span>
+                            @{member.username}
+                            {member.custom_status ? ` - ${member.custom_status}` : ""}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="server-settings-member-side">
+                        <div className="server-settings-badges">
+                          {member.id === currentUserId ? (
+                            <span className="server-settings-pill">{copy.memberYou}</span>
+                          ) : null}
+                          {member.id === guild.owner_id ? (
+                            <span className="server-settings-pill accent">{copy.owner}</span>
+                          ) : null}
+                          <span className="server-settings-pill">
+                            {member.status || translate(language, "presence.offline", "offline")}
+                          </span>
+                        </div>
+
+                        {canModerateMember ? (
+                          <div className="server-settings-member-actions">
+                            <button
+                              className="ghost-button small danger"
+                              disabled={Boolean(memberActionState.mode)}
+                              onClick={() => handleKickMemberAction(member)}
+                              type="button"
+                            >
+                              <span>
+                                {isBusy && memberActionState.mode === "kick"
+                                  ? copy.membersModerating
+                                  : copy.kickAction}
+                              </span>
+                            </button>
+                            <button
+                              className={`ghost-button small ${banDraft.memberId === member.id ? "active" : ""}`.trim()}
+                              disabled={Boolean(memberActionState.mode)}
+                              onClick={() =>
+                                banDraft.memberId === member.id
+                                  ? closeBanDraft()
+                                  : openBanDraft(member.id)
+                              }
+                              type="button"
+                            >
+                              <span>{copy.banAction}</span>
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    {banDraft.memberId === member.id ? (
+                      <div className="server-settings-member-ban-panel">
+                        <div className="server-settings-member-ban-header">
+                          <div>
+                            <strong>{copy.banPanelTitle}</strong>
+                            <span>@{member.username}</span>
+                          </div>
+                          <button
+                            className="ghost-button small"
+                            disabled={isBusy}
+                            onClick={closeBanDraft}
+                            type="button"
+                          >
+                            <span>{copy.banPanelCancel}</span>
+                          </button>
+                        </div>
+
+                        <div className="server-settings-ban-controls">
+                          <label className="settings-field server-settings-ban-field">
+                            <span>{copy.banDurationLabel}</span>
+                            <div className="server-settings-ban-grid">
+                              <input
+                                disabled={banDraft.permanent || isBusy}
+                                min="1"
+                                onChange={(event) =>
+                                  setBanDraft((previous) => ({
+                                    ...previous,
+                                    value: event.target.value
+                                  }))
+                                }
+                                placeholder={copy.banDurationPlaceholder}
+                                type="number"
+                                value={banDraft.value}
+                              />
+                              <select
+                                disabled={banDraft.permanent || isBusy}
+                                onChange={(event) =>
+                                  setBanDraft((previous) => ({
+                                    ...previous,
+                                    unit: event.target.value
+                                  }))
+                                }
+                                value={banDraft.unit}
+                              >
+                                <option value="minutes">{copy.banDurationMinutes}</option>
+                                <option value="hours">{copy.banDurationHours}</option>
+                                <option value="days">{copy.banDurationDays}</option>
+                                <option value="weeks">{copy.banDurationWeeks}</option>
+                              </select>
+                            </div>
+                          </label>
+
+                          <button
+                            className={`server-settings-pill-button ${banDraft.permanent ? "active" : ""}`.trim()}
+                            disabled={isBusy}
+                            onClick={() =>
+                              setBanDraft((previous) => ({
+                                ...previous,
+                                permanent: !previous.permanent
+                              }))
+                            }
+                            type="button"
+                          >
+                            {copy.banDurationPermanent}
+                          </button>
+                        </div>
+
+                        <div className="server-settings-member-actions">
+                          <button
+                            className="ghost-button small"
+                            disabled={isBusy}
+                            onClick={closeBanDraft}
+                            type="button"
+                          >
+                            <span>{copy.banPanelCancel}</span>
+                          </button>
+                          <button
+                            className="ghost-button small danger"
+                            disabled={isBusy}
+                            onClick={() => handleBanMemberAction(member)}
+                            type="button"
+                          >
+                            <span>
+                              {isBusy && memberActionState.mode === "ban"
+                                ? copy.membersModerating
+                                : copy.banPanelConfirm}
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })
+            ) : (
+              <div className="server-settings-empty">{copy.membersEmpty}</div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   function renderRolesTab() {
     return (
       <div className="server-settings-body single-column">
@@ -965,7 +1370,7 @@ export function ServerSettingsModal({ guild, language = "es", memberCount = 0, o
             </button>
           </div>
           {activeTab === "profile" ? renderProfileTab() : null}
-          {activeTab === "members" ? renderMembersTab() : null}
+          {activeTab === "members" ? renderMembersModerationTab() : null}
           {activeTab === "roles" ? renderRolesTab() : null}
           {activeTab === "invites" ? renderInvitesTab() : null}
           {activeTab === "stickers" ? <ServerStickersPanel guildId={guild.id} language={language} /> : null}

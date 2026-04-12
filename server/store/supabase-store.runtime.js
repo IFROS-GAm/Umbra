@@ -54,6 +54,35 @@ function createError(message, statusCode = 400) {
   return error;
 }
 
+function normalizeBanExpiration(expiresAt) {
+  if (!expiresAt) {
+    return null;
+  }
+
+  const parsed = new Date(expiresAt);
+  if (Number.isNaN(parsed.getTime())) {
+    throw createError("La duracion del ban no es valida.", 400);
+  }
+
+  if (parsed.getTime() <= Date.now()) {
+    throw createError("La duracion del ban debe terminar en el futuro.", 400);
+  }
+
+  return parsed.toISOString();
+}
+
+function buildGuildBanMessage(ban) {
+  if (!ban) {
+    return "";
+  }
+
+  if (ban.expires_at) {
+    return `Sigues baneado de este servidor hasta ${ban.expires_at}.`;
+  }
+
+  return "No puedes unirte a este servidor porque sigues baneado.";
+}
+
 function normalizeProfileColor(candidate, fallback = "#5865F2") {
   const normalized = String(candidate || "")
     .trim()
@@ -1333,6 +1362,11 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
       throw createError("Servidor no encontrado.", 404);
     }
 
+    const activeBan = await this.getActiveGuildBan(guild.id, userId);
+    if (activeBan) {
+      throw createError(buildGuildBanMessage(activeBan), 403);
+    }
+
     const defaultChannel = getDefaultGuildChannel(channels, guild.id);
     const alreadyJoined = guildMembers.some((membership) => membership.user_id === userId);
 
@@ -2121,6 +2155,61 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
     };
   }
 
+  async pruneExpiredGuildBans({ guildId = null, userId = null } = {}) {
+    if (!this.guildModerationEnabled) {
+      return;
+    }
+
+    try {
+      let query = this.client
+        .from("guild_bans")
+        .delete()
+        .lte("expires_at", new Date().toISOString());
+
+      if (guildId) {
+        query = query.eq("guild_id", guildId);
+      }
+
+      if (userId) {
+        query = query.eq("user_id", userId);
+      }
+
+      await expectData(query);
+    } catch (error) {
+      if (this.handleMissingGuildModerationSchemaError?.(error)) {
+        return;
+      }
+
+      throw error;
+    }
+  }
+
+  async getActiveGuildBan(guildId, userId) {
+    if (!guildId || !userId || !this.guildModerationEnabled) {
+      return null;
+    }
+
+    try {
+      await this.pruneExpiredGuildBans({ guildId, userId });
+      const rows = await expectData(
+        this.client
+          .from("guild_bans")
+          .select("*")
+          .eq("guild_id", guildId)
+          .eq("user_id", userId)
+          .limit(1)
+      );
+
+      return rows[0] || null;
+    } catch (error) {
+      if (this.handleMissingGuildModerationSchemaError?.(error)) {
+        return null;
+      }
+
+      throw error;
+    }
+  }
+
   async leaveGuild({ guildId, userId }) {
     const [guildRows, membershipRows, channels] = await Promise.all([
       expectData(this.client.from("guilds").select("id").eq("id", guildId).limit(1)),
@@ -2166,6 +2255,151 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
     return {
       guild_id: guildId,
       left: true
+    };
+  }
+
+  async assertCanModerateGuildMember(guildId, actorId, targetUserId) {
+    const [guildRows, membershipRows] = await Promise.all([
+      expectData(this.client.from("guilds").select("id,owner_id").eq("id", guildId).limit(1)),
+      expectData(
+        this.client
+          .from("guild_members")
+          .select("guild_id,user_id")
+          .eq("guild_id", guildId)
+          .eq("user_id", targetUserId)
+          .limit(1)
+      )
+    ]);
+
+    const guild = guildRows[0] || null;
+    if (!guild) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    const permissionBits = await this.getPermissionBits(guildId, actorId);
+    if ((permissionBits & PERMISSIONS.ADMINISTRATOR) !== PERMISSIONS.ADMINISTRATOR) {
+      throw createError("Solo el administrador puede moderar miembros del servidor.", 403);
+    }
+
+    if (targetUserId === actorId) {
+      throw createError("No puedes moderarte a ti mismo desde este panel.", 400);
+    }
+
+    if (targetUserId === guild.owner_id) {
+      throw createError("No puedes moderar al owner del servidor.", 403);
+    }
+
+    if (!membershipRows[0]) {
+      throw createError("Ese miembro ya no pertenece a este servidor.", 404);
+    }
+
+    return guild;
+  }
+
+  async kickGuildMember({ guildId, targetUserId, userId }) {
+    await this.assertCanModerateGuildMember(guildId, userId, targetUserId);
+
+    const channels = await expectData(
+      this.client.from("channels").select("id").eq("guild_id", guildId)
+    );
+    const guildChannelIds = channels.map((channel) => channel.id);
+
+    if (guildChannelIds.length) {
+      await expectData(
+        this.client
+          .from("channel_members")
+          .delete()
+          .eq("user_id", targetUserId)
+          .in("channel_id", guildChannelIds)
+      );
+    }
+
+    await expectData(
+      this.client
+        .from("guild_members")
+        .delete()
+        .eq("guild_id", guildId)
+        .eq("user_id", targetUserId)
+    );
+
+    return {
+      guild_id: guildId,
+      kicked: true,
+      user_id: targetUserId
+    };
+  }
+
+  async banGuildMember({ expiresAt = null, guildId, targetUserId, userId }) {
+    await this.assertCanModerateGuildMember(guildId, userId, targetUserId);
+    this.assertGuildModerationFeatureAvailable?.();
+
+    const normalizedExpiresAt = normalizeBanExpiration(expiresAt);
+    await this.pruneExpiredGuildBans({ guildId, userId: targetUserId });
+
+    const [existingBanRows, channels] = await Promise.all([
+      expectData(
+        this.client
+          .from("guild_bans")
+          .select("id")
+          .eq("guild_id", guildId)
+          .eq("user_id", targetUserId)
+          .limit(1)
+      ),
+      expectData(this.client.from("channels").select("id").eq("guild_id", guildId))
+    ]);
+
+    const existingBan = existingBanRows[0] || null;
+    const nextBanPayload = {
+      created_at: new Date().toISOString(),
+      created_by: userId,
+      expires_at: normalizedExpiresAt,
+      guild_id: guildId,
+      user_id: targetUserId
+    };
+
+    try {
+      if (existingBan) {
+        await expectData(
+          this.client
+            .from("guild_bans")
+            .update(nextBanPayload)
+            .eq("id", existingBan.id)
+        );
+      } else {
+        await expectData(this.client.from("guild_bans").insert(nextBanPayload));
+      }
+    } catch (error) {
+      if (this.handleMissingGuildModerationSchemaError?.(error)) {
+        this.assertGuildModerationFeatureAvailable?.();
+      }
+
+      throw error;
+    }
+
+    const guildChannelIds = channels.map((channel) => channel.id);
+    if (guildChannelIds.length) {
+      await expectData(
+        this.client
+          .from("channel_members")
+          .delete()
+          .eq("user_id", targetUserId)
+          .in("channel_id", guildChannelIds)
+      );
+    }
+
+    await expectData(
+      this.client
+        .from("guild_members")
+        .delete()
+        .eq("guild_id", guildId)
+        .eq("user_id", targetUserId)
+    );
+
+    return {
+      banned: true,
+      expires_at: normalizedExpiresAt,
+      guild_id: guildId,
+      user_id: targetUserId
     };
   }
 
@@ -2266,19 +2500,19 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
     const attachments = [];
 
     for (const file of files) {
-      if (!file?.buffer || !file.mimetype?.startsWith("image/")) {
+      if (!file?.buffer) {
         continue;
       }
 
       const extension = (file.originalname || "").includes(".")
         ? file.originalname.slice(file.originalname.lastIndexOf("."))
-        : ".png";
+        : ".bin";
       const objectPath = `${new Date().toISOString().slice(0, 10)}/${createId()}${extension}`;
 
       const { error } = await this.client.storage
         .from(this.attachmentsBucket)
         .upload(objectPath, file.buffer, {
-          contentType: file.mimetype,
+          contentType: file.mimetype || "application/octet-stream",
           upsert: false
         });
 
@@ -2291,7 +2525,7 @@ export const supabaseStoreRuntimeMethods = class SupabaseStoreRuntime {
         .getPublicUrl(objectPath);
 
       attachments.push({
-        content_type: file.mimetype,
+        content_type: file.mimetype || "application/octet-stream",
         name: file.originalname || objectPath,
         path: objectPath,
         size: file.size || file.buffer.length,

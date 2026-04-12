@@ -1,6 +1,7 @@
 import React, { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { MessageFeedItem } from "./MessageFeedItem.jsx";
+import { MessageImageViewer } from "./MessageImageViewer.jsx";
 import { buildMessageStageRows } from "./messageStageHelpers.js";
 
 const AUTO_FOLLOW_DISABLE_THRESHOLD = 72;
@@ -83,6 +84,7 @@ export const VirtualMessageFeed = memo(function VirtualMessageFeed({
   messages,
   onJumpToLatest,
   onMenuAction,
+  onAcceptInvite,
   onRetryMessages,
   onSetMessageMenuFor,
   onSetReactionPickerFor,
@@ -101,6 +103,7 @@ export const VirtualMessageFeed = memo(function VirtualMessageFeed({
     rowCount: 0
   });
   const [showHistoryBanner, setShowHistoryBanner] = useState(false);
+  const [imageViewerState, setImageViewerState] = useState(null);
 
   const rows = useMemo(() => buildMessageStageRows(messages), [messages]);
   const firstRowKey = rows[0]?.key || null;
@@ -191,6 +194,10 @@ export const VirtualMessageFeed = memo(function VirtualMessageFeed({
       observer.disconnect();
     };
   }, [channelId, scrollToBottom]);
+
+  useEffect(() => {
+    setImageViewerState(null);
+  }, [channelId]);
 
   function scrollToMessage(messageId) {
     const element = document.getElementById(`message-${messageId}`);
@@ -400,6 +407,13 @@ export const VirtualMessageFeed = memo(function VirtualMessageFeed({
                 message={row.message}
                 onHandleReaction={handleReaction}
                 onMenuAction={onMenuAction}
+                onAcceptInvite={onAcceptInvite}
+                onOpenAttachmentViewer={(attachments, index) =>
+                  setImageViewerState({
+                    attachments,
+                    index
+                  })
+                }
                 onScrollToMessage={scrollToMessage}
                 onSetMessageMenuFor={onSetMessageMenuFor}
                 onSetReactionPickerFor={onSetReactionPickerFor}
@@ -414,6 +428,14 @@ export const VirtualMessageFeed = memo(function VirtualMessageFeed({
           <MessageFeedFooterSpacer />
         </div>
       </section>
+
+      {imageViewerState?.attachments?.length ? (
+        <MessageImageViewer
+          attachments={imageViewerState.attachments}
+          initialIndex={imageViewerState.index}
+          onClose={() => setImageViewerState(null)}
+        />
+      ) : null}
     </div>
   );
 });

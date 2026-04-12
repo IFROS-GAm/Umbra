@@ -408,7 +408,7 @@ export function createWorkspaceMessageStore({
     preferredSelection = activeSelectionRef.current,
     options = {}
   ) {
-    const { selectionMode = "preserve-current" } = options;
+    const { selectionMode = "preserve-current", silentError = false } = options;
     const requestId = bootstrapRequestIdRef.current + 1;
     const preferredSelectionSnapshot = cloneSelection(preferredSelection);
     const selectionVersionAtStart = selectionVersionRef.current;
@@ -453,7 +453,9 @@ export function createWorkspaceMessageStore({
         onSignOut();
         return;
       }
-      setAppError(error.message);
+      if (!silentError) {
+        setAppError(error.message);
+      }
     } finally {
       if (requestId === bootstrapRequestIdRef.current) {
         setBooting(false);

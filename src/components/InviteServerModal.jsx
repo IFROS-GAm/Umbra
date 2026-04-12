@@ -13,10 +13,12 @@ export function InviteServerModal({
   loading,
   onClose,
   onRefresh,
+  onSendInviteToFriend,
   onShowNotice
 }) {
   const [copied, setCopied] = useState(false);
   const [invitedIds, setInvitedIds] = useState([]);
+  const [sendingIds, setSendingIds] = useState([]);
   const [search, setSearch] = useState("");
 
   const inviteCode = invite?.code || "";
@@ -59,6 +61,26 @@ export function InviteServerModal({
   }
 
   async function handleInviteFriend(friend) {
+    if (!friend?.id || !inviteCode) {
+      return;
+    }
+
+    if (onSendInviteToFriend) {
+      setSendingIds((current) => (current.includes(friend.id) ? current : [...current, friend.id]));
+
+      try {
+        await onSendInviteToFriend(friend, inviteCode);
+        setInvitedIds((current) =>
+          current.includes(friend.id) ? current : [...current, friend.id]
+        );
+      } catch (error) {
+        onShowNotice?.(error.message || "No se pudo enviar la invitacion.");
+      } finally {
+        setSendingIds((current) => current.filter((id) => id !== friend.id));
+      }
+      return;
+    }
+
     const copiedOk = await copyValue(
       inviteLink || inviteCode,
       `Invitacion lista para ${friend.display_name || friend.username}.`
@@ -115,6 +137,7 @@ export function InviteServerModal({
                 {filteredFriends.length ? (
                   filteredFriends.map((friend) => {
                     const invited = invitedIds.includes(friend.id);
+                    const sending = sendingIds.includes(friend.id);
 
                     return (
                       <div className="invite-friend-row" key={friend.id}>
@@ -136,10 +159,11 @@ export function InviteServerModal({
                           className={`ghost-button small invite-row-action ${
                             invited ? "active" : ""
                           }`.trim()}
+                          disabled={sending}
                           onClick={() => handleInviteFriend(friend)}
                           type="button"
                         >
-                          {invited ? "Invitado" : "Invitar"}
+                          {sending ? "Enviando..." : invited ? "Invitado" : "Invitar"}
                         </button>
                       </div>
                     );

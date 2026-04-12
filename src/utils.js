@@ -57,6 +57,10 @@ export function formatMessageHtml(text = "") {
     .replace(/\*([^*]+)\*/g, "<em>$1</em>")
     .replace(/~~([^~]+)~~/g, "<s>$1</s>")
     .replace(/\|\|([^|]+)\|\|/g, '<span class="spoiler">$1</span>')
+    .replace(
+      /((?:https?:\/\/|umbra:\/\/)[^\s<]+)/gi,
+      '<a class="message-inline-link" href="$1" rel="noreferrer" target="_blank">$1</a>'
+    )
     .replace(/(^|\s)@everyone\b/gi, (_, prefix) => {
       const token = `%%EVERYONE_${everyoneMentions.length}%%`;
       everyoneMentions.push(
@@ -80,6 +84,27 @@ export function formatMessageHtml(text = "") {
   });
 
   return html;
+}
+
+export function extractFirstInviteCode(text = "") {
+  const value = String(text || "").trim();
+  if (!value) {
+    return "";
+  }
+
+  const inviteMatch = value.match(
+    /(?:https?:\/\/[^\s]+\/invite\/|umbra:\/\/invite\/)([A-Z0-9_-]+)/i
+  );
+
+  if (!inviteMatch?.[1]) {
+    return "";
+  }
+
+  try {
+    return decodeURIComponent(inviteMatch[1]).trim().toUpperCase();
+  } catch {
+    return String(inviteMatch[1]).trim().toUpperCase();
+  }
 }
 
 export function relativeTime(isoDate) {

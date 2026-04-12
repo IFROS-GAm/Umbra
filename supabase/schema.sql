@@ -230,6 +230,15 @@ create table if not exists public.invites (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.guild_bans (
+  id uuid primary key default gen_random_uuid(),
+  guild_id uuid not null references public.guilds(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  created_by uuid references public.profiles(id) on delete set null,
+  expires_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
 create index if not exists idx_roles_guild_id on public.roles(guild_id);
 create index if not exists idx_guild_members_user_id on public.guild_members(user_id);
 create index if not exists idx_guild_members_user_position on public.guild_members(user_id, position);
@@ -246,6 +255,8 @@ create unique index if not exists idx_friend_requests_pair on public.friend_requ
 create index if not exists idx_friend_requests_recipient on public.friend_requests(recipient_id, status);
 create unique index if not exists idx_user_blocks_pair on public.user_blocks(blocker_id, blocked_id);
 create index if not exists idx_profile_reports_target on public.profile_reports(target_user_id, created_at desc);
+create unique index if not exists idx_guild_bans_pair on public.guild_bans(guild_id, user_id);
+create index if not exists idx_guild_bans_expires_at on public.guild_bans(expires_at);
 
 drop trigger if exists trg_profiles_updated_at on public.profiles;
 create trigger trg_profiles_updated_at

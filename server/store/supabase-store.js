@@ -111,6 +111,7 @@ export class SupabaseStore {
   constructor(client) {
     this.client = client;
     this.attachmentsBucket = process.env.SUPABASE_ATTACHMENTS_BUCKET || "attachments";
+    this.guildModerationEnabled = true;
     this.guildStickersEnabled = true;
     this.guildMessageContextCache = new Map();
   }
@@ -141,10 +142,28 @@ export class SupabaseStore {
     return true;
   }
 
+  handleMissingGuildModerationSchemaError(error) {
+    if (!isMissingSchemaFeatureError(error, ["guild_bans"])) {
+      return false;
+    }
+
+    this.guildModerationEnabled = false;
+    return true;
+  }
+
   assertGuildStickerFeatureAvailable() {
     if (!this.guildStickersEnabled) {
       throw createError(
         "Los stickers del servidor aun no estan habilitados. Aplica el schema nuevo en Supabase para usarlos.",
+        501
+      );
+    }
+  }
+
+  assertGuildModerationFeatureAvailable() {
+    if (!this.guildModerationEnabled) {
+      throw createError(
+        "La moderacion avanzada del servidor aun no esta habilitada. Aplica el schema nuevo en Supabase para usar baneos temporales.",
         501
       );
     }

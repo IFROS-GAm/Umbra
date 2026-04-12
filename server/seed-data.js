@@ -727,6 +727,7 @@ export function createSeedData() {
     channel_members,
     messages,
     message_reactions,
+    guild_bans: [],
     invites: [],
     metadata: {
       created_at: isoMinutesAfter(0)

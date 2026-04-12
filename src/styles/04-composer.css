@@ -47,6 +47,283 @@
   font-size: 0.9rem;
 }
 
+.composer-attachments {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 6px 0 12px;
+}
+
+.composer-attachment-chip {
+  background: #171a20;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  display: grid;
+  flex: 0 0 220px;
+  gap: 12px;
+  grid-template-rows: auto auto;
+  min-height: 218px;
+  padding: 14px;
+  position: relative;
+}
+
+.composer-attachment-chip.uploading {
+  border-color: rgba(116, 134, 255, 0.24);
+}
+
+.composer-attachment-chip.failed {
+  border-color: rgba(255, 109, 126, 0.26);
+}
+
+.composer-attachment-chip.spoiler .composer-attachment-preview img {
+  filter: blur(18px);
+}
+
+.composer-attachment-toolbar {
+  align-items: center;
+  background: rgba(31, 33, 39, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  z-index: 2;
+}
+
+.composer-attachment-tool {
+  background: #171a20;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-0);
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
+.composer-attachment-tool:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.composer-attachment-tool.danger {
+  color: #ff8f98;
+}
+
+.composer-attachment-tool.danger:hover {
+  background: rgba(242, 63, 67, 0.14);
+}
+
+.composer-attachment-preview-button {
+  background: transparent;
+  border: 0;
+  display: block;
+  padding: 0;
+  text-align: left;
+  width: 100%;
+}
+
+.composer-attachment-preview {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 14px;
+  display: inline-flex;
+  height: 124px;
+  justify-content: center;
+  overflow: hidden;
+  width: 100%;
+}
+
+.composer-attachment-chip.image .composer-attachment-preview {
+  background: #0f1117;
+}
+
+.composer-attachment-preview.file {
+  background: linear-gradient(180deg, rgba(32, 34, 42, 0.92), rgba(18, 20, 26, 0.92));
+}
+
+.composer-attachment-preview img {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.composer-attachment-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.composer-attachment-copy strong {
+  color: var(--text-0);
+  font-size: 0.98rem;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-attachment-meta {
+  color: var(--text-2);
+  font-size: 0.84rem;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-attachment-meta.uploading {
+  color: #9fb0ff;
+}
+
+.composer-attachment-meta.failed {
+  color: #ffb8c2;
+}
+
+.composer-attachment-flag {
+  color: #cfd6ff;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.composer-attachment-file-icon {
+  align-items: center;
+  background: rgba(88, 101, 242, 0.16);
+  border-radius: 14px;
+  color: #c8d0ff;
+  display: inline-flex;
+  height: 54px;
+  justify-content: center;
+  width: 54px;
+}
+
+.attachment-editor-backdrop {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 96;
+}
+
+.attachment-editor-card {
+  background: #17191f;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  box-shadow: 0 28px 60px rgba(0, 0, 0, 0.45);
+  display: grid;
+  gap: 18px;
+  padding: 22px 24px 24px;
+  width: min(480px, calc(100vw - 32px));
+}
+
+.attachment-editor-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.attachment-editor-header strong {
+  color: var(--text-0);
+  font-size: 1.6rem;
+  letter-spacing: -0.04em;
+}
+
+.attachment-editor-close {
+  align-items: center;
+  background: rgba(22, 25, 32, 0.96);
+  border: 0;
+  border-radius: 999px;
+  color: var(--text-0);
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.attachment-editor-preview {
+  align-items: center;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.attachment-editor-preview img,
+.attachment-editor-file-preview {
+  border-radius: 14px;
+  display: block;
+  height: 180px;
+  object-fit: cover;
+  width: 240px;
+}
+
+.attachment-editor-file-preview {
+  align-items: center;
+  background: linear-gradient(180deg, rgba(32, 34, 42, 0.92), rgba(18, 20, 26, 0.92));
+  color: #c8d0ff;
+  display: inline-flex;
+  justify-content: center;
+}
+
+.attachment-editor-field {
+  display: grid;
+  gap: 8px;
+}
+
+.attachment-editor-field span,
+.attachment-editor-check span {
+  color: var(--text-0);
+  font-size: 0.94rem;
+  font-weight: 700;
+}
+
+.attachment-editor-field input {
+  background: #14161b;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  color: var(--text-0);
+  min-height: 48px;
+  outline: none;
+  padding: 0 14px;
+}
+
+.attachment-editor-field input::placeholder {
+  color: var(--text-3);
+}
+
+.attachment-editor-check {
+  align-items: center;
+  display: inline-flex;
+  gap: 12px;
+}
+
+.attachment-editor-check input {
+  accent-color: #7388ff;
+  height: 20px;
+  margin: 0;
+  width: 20px;
+}
+
+.attachment-editor-actions {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.attachment-editor-actions .ghost-button,
+.attachment-editor-actions .primary-button {
+  justify-content: center;
+  min-height: 46px;
+}
+
 .composer-frame {
   align-items: center;
   background: #1e1f22;
@@ -57,13 +334,16 @@
   grid-template-columns: auto 1fr;
   min-height: 50px;
   min-width: 0;
+  overflow: visible;
   padding: 0 8px;
   position: relative;
+  z-index: 2;
 }
 
 .composer-side {
   display: flex;
   position: relative;
+  z-index: 4;
 }
 
 .composer-icon-button {
@@ -157,7 +437,7 @@
   border: 1px solid rgba(174, 194, 255, 0.08);
   border-radius: 16px;
   box-shadow: 0 28px 52px rgba(0, 0, 0, 0.38);
-  z-index: 8;
+  z-index: 90;
 }
 
 .shortcut-menu {
@@ -166,6 +446,7 @@
   padding: 8px;
   position: absolute;
   width: 280px;
+  z-index: 92;
 }
 
 .shortcut-item {
@@ -216,6 +497,7 @@
   position: absolute;
   right: 0;
   width: min(430px, calc(100% - 56px));
+  z-index: 91;
 }
 
 .picker-panel-header {

@@ -1,5 +1,6 @@
 import React from "react";
 
+import { Avatar } from "../Avatar.jsx";
 import { Icon } from "../Icon.jsx";
 import { UmbraLogo } from "../UmbraLogo.jsx";
 import { resolveGuildIcon } from "./workspaceHelpers.js";
@@ -59,6 +60,7 @@ function GuildPill({
       ref={setServerDropTargetNode("guild", guild.id, folderId)}
       type="button"
     >
+      <span aria-hidden="true" className="server-pill-indicator" />
       {guildIcon ? (
         <img alt={guild.name} className="server-pill-image" draggable="false" src={guildIcon} />
       ) : (
@@ -150,37 +152,92 @@ function ServerRailItem({
   );
 }
 
+function DirectMessagePill({
+  activeChannelId,
+  activeSelectionKind,
+  dm,
+  onSelectDirectLink
+}) {
+  return (
+    <button
+      className={`server-pill direct-message-pill tooltip-anchor ${
+        activeSelectionKind === "dm" && activeChannelId === dm.channelId ? "active" : ""
+      }`.trim()}
+      data-tooltip={dm.displayName}
+      data-tooltip-position="right"
+      onClick={() => onSelectDirectLink?.("dm", null, dm.channelId)}
+      type="button"
+    >
+      <span aria-hidden="true" className="server-pill-indicator" />
+      <Avatar
+        hue={dm.avatarHue}
+        label={dm.displayName}
+        size={38}
+        src={dm.avatarUrl}
+        status={dm.status}
+      />
+      {dm.unreadCount ? <i>{dm.unreadCount}</i> : null}
+    </button>
+  );
+}
+
 export function WorkspaceServerRail({
+  activeChannelId,
   activeGuildId,
   activeSelectionKind,
   beginGuildPointerDrag,
   canDragGuild,
   directUnreadCount,
+  directMessageShortcuts = [],
   draggedGuildId,
   guildDropHint,
   handleGuildClick,
   onOpenContextMenu,
   onOpenDialog,
+  onSelectDirectLink,
   onSelectHome,
   onToggleServerFolder,
   serverRailItems,
   setServerDropTargetNode
 }) {
+  const hasActiveDirectShortcut =
+    activeSelectionKind === "dm" &&
+    directMessageShortcuts.some((dm) => dm.channelId === activeChannelId);
+
   return (
     <aside className="server-rail">
       <div className="server-rail-stack">
         <button
           className={`server-pill tooltip-anchor home ${
-            activeSelectionKind === "dm" || activeSelectionKind === "home" ? "active" : ""
+            activeSelectionKind === "home" ||
+            activeSelectionKind === "requests" ||
+            (activeSelectionKind === "dm" && !hasActiveDirectShortcut)
+              ? "active"
+              : ""
           }`}
           data-tooltip="Mensajes directos"
           data-tooltip-position="right"
           onClick={onSelectHome}
           type="button"
         >
+          <span aria-hidden="true" className="server-pill-indicator" />
           <UmbraLogo alt="Mensajes directos" className="server-pill-logo" size={24} />
           {directUnreadCount ? <i>{directUnreadCount}</i> : null}
         </button>
+
+        {directMessageShortcuts.length ? (
+          <div className="server-direct-shortcuts">
+            {directMessageShortcuts.map((dm) => (
+              <DirectMessagePill
+                activeChannelId={activeChannelId}
+                activeSelectionKind={activeSelectionKind}
+                dm={dm}
+                key={dm.channelId}
+                onSelectDirectLink={onSelectDirectLink}
+              />
+            ))}
+          </div>
+        ) : null}
 
         <div className="server-rail-divider" />
 
@@ -209,6 +266,7 @@ export function WorkspaceServerRail({
           onClick={() => onOpenDialog("guild")}
           type="button"
         >
+          <span aria-hidden="true" className="server-pill-indicator" />
           <Icon name="add" />
         </button>
       </div>

@@ -16,12 +16,6 @@ export const COMPOSER_SHORTCUTS = [
     icon: "mission",
     label: "Crear encuesta",
     description: "Las encuestas todavia no estan en backend."
-  },
-  {
-    id: "apps",
-    icon: "appGrid",
-    label: "Usar aplicaciones",
-    description: "Reserva visual para slash commands e integraciones."
   }
 ];
 
@@ -61,6 +55,7 @@ export const HOME_LINKS = [
 ];
 
 export const CHANNEL_CACHE_TTL_MS = 60_000;
+export const MAX_COMPOSER_ATTACHMENTS = 10;
 
 export function isVisibleStatus(status) {
   return status && status !== "offline" && status !== "invisible";
@@ -143,11 +138,15 @@ export function findDirectDmByUserId(dms = [], currentUserId, targetUserId) {
 }
 
 export function isImageAttachment(attachment) {
-  return Boolean(attachment?.content_type?.startsWith("image/"));
+  if (attachment?.content_type?.startsWith?.("image/")) {
+    return true;
+  }
+
+  return Boolean(String(attachment?.name || "").match(/\.(avif|gif|jpe?g|png|svg|webp)$/i));
 }
 
 export function attachmentKey(attachment) {
-  return attachment.path || attachment.url || attachment.name;
+  return attachment.local_id || attachment.path || attachment.url || attachment.name;
 }
 
 export function formatVoiceCount(count) {

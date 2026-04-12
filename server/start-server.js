@@ -191,7 +191,7 @@ export async function startServer(options = {}) {
     storage: multer.memoryStorage(),
     limits: {
       fileSize: Number(process.env.MAX_ATTACHMENT_BYTES || 8 * 1024 * 1024),
-      files: Number(process.env.MAX_ATTACHMENT_FILES || 8)
+      files: Number(process.env.MAX_ATTACHMENT_FILES || 10)
     }
   });
 
@@ -405,6 +405,32 @@ export async function startServer(options = {}) {
     emitVoiceUpdate(previousChannelId);
   }
 
+  async function removeUserFromGuildVoiceSessions(userId, guildId) {
+    if (!userId || !guildId) {
+      return;
+    }
+
+    const sockets = [...io.sockets.sockets.values()].filter(
+      (socket) => socket?.data?.user?.id === userId
+    );
+
+    for (const socket of sockets) {
+      const channelId = socket.data.voiceChannelId;
+      if (!channelId) {
+        continue;
+      }
+
+      try {
+        const channel = await store.getChannel(channelId);
+        if (channel?.guild_id === guildId) {
+          leaveVoiceChannel(socket, userId);
+        }
+      } catch {
+        // Keep moderation flow alive even if voice cleanup cannot resolve the channel.
+      }
+    }
+  }
+
   app.get("/api/health", async (_, res) => {
     res.json({
       ok: true,
@@ -512,7 +538,7 @@ export async function startServer(options = {}) {
   app.post(
     "/api/attachments",
     requireViewer,
-    upload.array("files", Number(process.env.MAX_ATTACHMENT_FILES || 8)),
+    upload.array("files", Number(process.env.MAX_ATTACHMENT_FILES || 10)),
     async (req, res) => {
       try {
         if (!req.files?.length) {
@@ -1109,6 +1135,70 @@ export async function startServer(options = {}) {
         userId: req.viewer.id
       });
       res.json(payload);
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.delete("/api/guilds/:guildId/members/:userId", requireViewer, async (req, res) => {
+    try {
+      if (!String(req.params.userId || "").trim()) {
+        throw createHttpError("Miembro invalido.", 400);
+      }
+
+      const audienceUserIds =
+        typeof store.listGuildAudienceIds === "function"
+          ? await store.listGuildAudienceIds(req.params.guildId)
+          : [];
+      const payload = await store.kickGuildMember({
+        guildId: req.params.guildId,
+        targetUserId: req.params.userId,
+        userId: req.viewer.id
+      });
+
+      await removeUserFromGuildVoiceSessions(req.params.userId, req.params.guildId);
+      emitNavigationUpdateToUsers(
+        [...audienceUserIds, req.params.userId],
+        {
+          guildId: req.params.guildId,
+          type: "guild:member-kick",
+          userId: req.params.userId
+        }
+      );
+      res.json(payload);
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.post("/api/guilds/:guildId/bans", requireViewer, async (req, res) => {
+    try {
+      if (!String(req.body.userId || "").trim()) {
+        throw createHttpError("Miembro invalido.", 400);
+      }
+
+      const audienceUserIds =
+        typeof store.listGuildAudienceIds === "function"
+          ? await store.listGuildAudienceIds(req.params.guildId)
+          : [];
+      const payload = await store.banGuildMember({
+        expiresAt: req.body.expiresAt || null,
+        guildId: req.params.guildId,
+        targetUserId: req.body.userId,
+        userId: req.viewer.id
+      });
+
+      await removeUserFromGuildVoiceSessions(req.body.userId, req.params.guildId);
+      emitNavigationUpdateToUsers(
+        [...audienceUserIds, req.body.userId],
+        {
+          expiresAt: payload.expires_at || null,
+          guildId: req.params.guildId,
+          type: "guild:member-ban",
+          userId: req.body.userId
+        }
+      );
+      res.status(201).json(payload);
     } catch (error) {
       sendError(res, error);
     }

@@ -457,7 +457,7 @@ button {
   display: grid;
   gap: 0;
   grid-template-columns:
-    78px
+    88px
     var(--navigator-panel-width, 272px)
     minmax(0, 1fr)
     var(--members-panel-resizer-width, 10px)
@@ -469,19 +469,19 @@ button {
 }
 
 .app-shell.members-collapsed {
-  grid-template-columns: 78px var(--navigator-panel-width, 272px) minmax(0, 1fr);
+  grid-template-columns: 88px var(--navigator-panel-width, 272px) minmax(0, 1fr);
 }
 
 .app-shell.navigator-collapsed {
   grid-template-columns:
-    78px
+    88px
     minmax(0, 1fr)
     var(--members-panel-resizer-width, 10px)
     var(--members-panel-width, 324px);
 }
 
 .app-shell.navigator-collapsed.members-collapsed {
-  grid-template-columns: 78px minmax(0, 1fr);
+  grid-template-columns: 88px minmax(0, 1fr);
 }
 
 .server-rail,

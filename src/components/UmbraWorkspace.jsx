@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 
-import { api } from "../api.js";
+import { api, buildInviteUrl } from "../api.js";
 import { translate } from "../i18n.js";
 import { AccountManagerModal } from "./AccountManagerModal.jsx";
 import { CurrentUserMenu } from "./CurrentUserMenu.jsx";
@@ -18,6 +18,7 @@ import {
   WorkspaceShareMenu
 } from "./workspace/WorkspaceVoiceMenus.jsx";
 import { WorkspaceNavigation } from "./workspace/WorkspaceNavigation.jsx";
+import { WorkspaceTooltipLayer } from "./workspace/WorkspaceTooltipLayer.jsx";
 import {
   createVoiceScreenShareSession,
   SCREEN_SHARE_QUALITY_PRESETS
@@ -98,9 +99,10 @@ export function UmbraWorkspace({
     setHeaderPanel, setHoveredVoiceChannelId, setInboxTab, setMembersPanelVisible,
     setMessageMenuFor, setProfileCard, setReactionPickerFor, setAppError, setWorkspace,
     setReplyMentionEnabled, setReplyTarget, setSettingsOpen, setTheme, setVoiceMenu, theme, settingsOpen,
-    showUiNotice, toggleHeaderPanel, toggleVoiceMenu, toggleVoiceState, topbarActionsRef,
+    showUiNotice, submittingMessage, toggleHeaderPanel, toggleVoiceMenu, toggleVoiceState, topbarActionsRef,
     typingUsers, uiNotice, updateVoiceSetting, uploadingAttachments, voiceDevices, voiceMenu,
     voiceSessions, voiceState, voiceUserIds, voiceInputLevel, voiceInputSpeaking, voiceInputStatus, workspace,
+    updateComposerAttachment,
     cycleVoiceDevice, getSelectedDeviceLabel, selectedVoiceDevices
   } = useUmbraWorkspaceCore({ accessToken, initialSelection, onSignOut });
   const openingDmRequestsRef = useRef(new Map());
@@ -210,10 +212,11 @@ export function UmbraWorkspace({
   const resolvedMembersPanelMinWidth = isSingleDirectMessagePanel ? 320 : 292;
   const minimumNavigatorWidth = 272;
   const minimumChatStageWidth = isSingleDirectMessagePanel ? 540 : 500;
+  const serverRailWidth = 88;
   const effectiveNavigatorVisible =
-    viewportWidth >= 78 + minimumNavigatorWidth + minimumChatStageWidth;
+    viewportWidth >= serverRailWidth + minimumNavigatorWidth + minimumChatStageWidth;
   const requiredViewportWidth =
-    78 +
+    serverRailWidth +
     (effectiveNavigatorVisible ? minimumNavigatorWidth : 0) +
     resolvedMembersPanelWidth +
     (isSingleDirectMessagePanel ? 10 : 0) +
@@ -225,7 +228,7 @@ export function UmbraWorkspace({
   const inviteTargetGuild =
     workspace?.guilds.find((guild) => guild.id === inviteModalState.guildId) || null;
   const shellGridTemplateColumns = useMemo(() => {
-    const columns = ["78px"];
+    const columns = [`${serverRailWidth}px`];
 
     if (effectiveNavigatorVisible) {
       columns.push("272px");
@@ -246,7 +249,8 @@ export function UmbraWorkspace({
     effectiveMembersPanelVisible,
     effectiveNavigatorVisible,
     isSingleDirectMessagePanel,
-    resolvedMembersPanelWidth
+    resolvedMembersPanelWidth,
+    serverRailWidth
   ]);
 
   useEffect(() => {
@@ -1494,6 +1498,63 @@ export function UmbraWorkspace({
     }
   }
 
+  async function handleSendInviteToFriend(friend, inviteCode) {
+    if (!friend?.id || !inviteCode) {
+      return;
+    }
+
+    try {
+      const channel = await ensureDirectDmChannel(
+        {
+          ...friend,
+          displayName: friend.display_name || friend.username || "Umbra user",
+          isCurrentUser: friend.id === currentUserId,
+          username: friend.username || "umbra_user"
+        },
+        { loadConversation: false }
+      );
+
+      if (!channel?.id) {
+        return;
+      }
+
+      await api.createMessage({
+        attachments: [],
+        channelId: channel.id,
+        content: buildInviteUrl(inviteCode) || inviteCode,
+        replyMentionUserId: null,
+        replyTo: null
+      });
+
+      await loadBootstrap(activeSelectionRef.current);
+      showUiNotice(`Invitacion enviada a ${friend.display_name || friend.username}.`);
+    } catch (error) {
+      setAppError(error.message);
+      throw error;
+    }
+  }
+
+  async function handleAcceptInviteFromMessage(inviteCode) {
+    if (!inviteCode) {
+      return null;
+    }
+
+    const payload = await api.acceptInvite(inviteCode);
+    await loadBootstrap(
+      {
+        channelId: payload?.channel_id || null,
+        guildId: payload?.guild_id || null,
+        kind: payload?.guild_id ? "guild" : "dm"
+      },
+      {
+        selectionMode: "target"
+      }
+    );
+    setAppError("");
+    showUiNotice(payload?.already_joined ? "Abriendo servidor..." : "Te uniste al servidor.");
+    return payload;
+  }
+
   async function handleSaveGuildProfile(nextGuild) {
     if (!serverSettingsGuild?.id) {
       return;
@@ -1547,6 +1608,43 @@ export function UmbraWorkspace({
       showUiNotice("Servidor actualizado.");
     } catch (error) {
       setAppError(error.message);
+      throw error;
+    }
+  }
+
+  async function handleKickGuildMember({ guildId, member }) {
+    if (!guildId || !member?.id) {
+      return;
+    }
+
+    try {
+      await api.kickGuildMember({
+        guildId,
+        userId: member.id
+      });
+      await loadBootstrap(activeSelectionRef.current);
+      setAppError("");
+      showUiNotice(`${member.display_name || member.username} fue expulsado.`);
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async function handleBanGuildMember({ expiresAt = null, guildId, member }) {
+    if (!guildId || !member?.id) {
+      return;
+    }
+
+    try {
+      await api.banGuildMember({
+        expiresAt,
+        guildId,
+        userId: member.id
+      });
+      await loadBootstrap(activeSelectionRef.current);
+      setAppError("");
+      showUiNotice(`${member.display_name || member.username} fue baneado.`);
+    } catch (error) {
       throw error;
     }
   }
@@ -1995,7 +2093,6 @@ export function UmbraWorkspace({
         <main className="chat-stage">
           {activeSelection.kind === "home" ? (
             <>
-              {appError ? <div className="error-banner">{appError}</div> : null}
               <Suspense fallback={<WorkspacePanelFallback />}>
                 <FriendsHome
                   availableUsers={workspace.available_users}
@@ -2014,7 +2111,6 @@ export function UmbraWorkspace({
             </>
           ) : activeSelection.kind === "requests" ? (
             <>
-              {appError ? <div className="error-banner">{appError}</div> : null}
               <Suspense fallback={<WorkspacePanelFallback />}>
                 <MessageRequestsHome
                   onOpenDm={handleOpenDmFromCard}
@@ -2046,8 +2142,6 @@ export function UmbraWorkspace({
                 subtitle={activeGuild?.name || headerCopy.eyebrow}
                 title={headerCopy.title}
               />
-
-              {appError ? <div className="error-banner">{appError}</div> : null}
 
               {isVoiceChannel || isDirectCallActive ? (
                 <Suspense fallback={<WorkspacePanelFallback />}>
@@ -2124,6 +2218,7 @@ export function UmbraWorkspace({
                     }}
                     onEditMessage={handleEditMessage}
                     onJumpToLatest={handleJumpToLatest}
+                    onAcceptInvite={handleAcceptInviteFromMessage}
                     onRetryMessages={handleRetryMessages}
                     onSetComposerMenuOpen={setComposerMenuOpen}
                     onSetComposerPicker={setComposerPicker}
@@ -2138,12 +2233,14 @@ export function UmbraWorkspace({
                     removeComposerAttachment={removeComposerAttachment}
                     replyMentionEnabled={replyMentionEnabled}
                     replyTarget={replyTarget}
-                    showUiNotice={showUiNotice}
-                    typingUsers={typingUsers}
-                    uiNotice={uiNotice}
-                    uploadingAttachments={uploadingAttachments}
-                    availableUsersById={availableUsersById}
-                    workspace={workspace}
+                      showUiNotice={showUiNotice}
+                      submittingMessage={submittingMessage}
+                      typingUsers={typingUsers}
+                      uiNotice={uiNotice}
+                      updateComposerAttachment={updateComposerAttachment}
+                      uploadingAttachments={uploadingAttachments}
+                      availableUsersById={availableUsersById}
+                      workspace={workspace}
                   />
                 </Suspense>
               )}
@@ -2344,10 +2441,13 @@ export function UmbraWorkspace({
         {serverSettingsGuild ? (
           <Suspense fallback={<WorkspacePanelFallback compact />}>
             <ServerSettingsModal
+              currentUserId={currentUserId}
               guild={serverSettingsGuild}
               language={language}
               memberCount={serverSettingsGuild.members?.length || 0}
+              onBanMember={handleBanGuildMember}
               onClose={() => setServerSettingsGuildId(null)}
+              onKickMember={handleKickGuildMember}
               onSave={handleSaveGuildProfile}
             />
           </Suspense>
@@ -2369,6 +2469,7 @@ export function UmbraWorkspace({
                 }))
               }
               onRefresh={() => openInviteModal(inviteTargetGuild)}
+              onSendInviteToFriend={handleSendInviteToFriend}
               onShowNotice={showUiNotice}
             />
           </Suspense>
@@ -2426,6 +2527,8 @@ export function UmbraWorkspace({
             qualityOptions={screenShareQualityOptions}
           />
         ) : null}
+
+        <WorkspaceTooltipLayer />
       </div>
     </div>
   );

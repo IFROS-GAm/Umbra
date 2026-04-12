@@ -304,6 +304,20 @@ export const api = {
       })
     });
   },
+  kickGuildMember({ guildId, userId }) {
+    return request(`/api/guilds/${guildId}/members/${userId}`, {
+      method: "DELETE"
+    });
+  },
+  banGuildMember({ expiresAt = null, guildId, userId }) {
+    return request(`/api/guilds/${guildId}/bans`, {
+      method: "POST",
+      body: JSON.stringify({
+        expiresAt,
+        userId
+      })
+    });
+  },
   createDm({ recipientId }) {
     return request("/api/dms", {
       method: "POST",

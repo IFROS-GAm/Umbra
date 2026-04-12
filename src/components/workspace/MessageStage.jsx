@@ -48,6 +48,7 @@ export function MessageStage(props) {
     onSetReactionPickerFor,
     onStartReply,
     onJumpToLatest,
+    onAcceptInvite,
     onRetryMessages,
     onToggleReplyMention,
     onShowNotice,
@@ -57,8 +58,10 @@ export function MessageStage(props) {
     replyMentionEnabled,
     replyTarget,
     showUiNotice,
+    submittingMessage,
     typingUsers,
     uiNotice,
+    updateComposerAttachment,
     uploadingAttachments,
     availableUsersById
   } = props;
@@ -164,6 +167,7 @@ export function MessageStage(props) {
         messages={messages}
         onMenuAction={handleMessageMenuAction}
         onJumpToLatest={onJumpToLatest}
+        onAcceptInvite={onAcceptInvite}
         onRetryMessages={onRetryMessages}
         onSetMessageMenuFor={onSetMessageMenuFor}
         onSetReactionPickerFor={onSetReactionPickerFor}
@@ -199,8 +203,10 @@ export function MessageStage(props) {
         replyMentionEnabled={replyMentionEnabled}
         replyTarget={replyTarget}
         showUiNotice={showUiNotice}
+        submittingMessage={submittingMessage}
         typingUsers={typingUsers}
         uiNotice={uiNotice}
+        updateComposerAttachment={updateComposerAttachment}
         uploadingAttachments={uploadingAttachments}
       />
     </>

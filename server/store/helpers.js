@@ -462,6 +462,7 @@ export function buildInvitePreview({
         )
     ),
     guild: {
+      created_at: guild.created_at || null,
       id: guild.id,
       name: guild.name,
       description: guild.description || "",

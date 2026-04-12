@@ -2,12 +2,29 @@ import React, { memo } from "react";
 
 import { resolveAssetUrl } from "../../api.js";
 import { Icon } from "../Icon.jsx";
+import { MessageImageViewer } from "./MessageImageViewer.jsx";
 import {
   COMPOSER_SHORTCUTS,
   PICKER_CONTENT,
   attachmentKey,
   isImageAttachment
 } from "./workspaceHelpers.js";
+
+function getComposerAttachmentLabel(attachment) {
+  return String(attachment?.display_name || attachment?.name || "Adjunto");
+}
+
+function getComposerAttachmentStatus(attachment) {
+  if (attachment?.upload_status === "uploading") {
+    return "Subiendo...";
+  }
+
+  if (attachment?.upload_status === "failed") {
+    return attachment?.upload_error || "No se pudo subir";
+  }
+
+  return isImageAttachment(attachment) ? "Imagen lista" : "Archivo listo";
+}
 
 export const MessageComposer = memo(function MessageComposer({
   activeChannel,
@@ -34,15 +51,108 @@ export const MessageComposer = memo(function MessageComposer({
   replyMentionEnabled,
   replyTarget,
   showUiNotice,
+  submittingMessage,
   typingUsers,
   uiNotice,
+  updateComposerAttachment,
   uploadingAttachments,
   guildStickers = []
 }) {
+  const resolveComposerAttachmentUrl = (attachment) =>
+    resolveAssetUrl(attachment.preview_url || attachment.url || "");
+  const [attachmentViewerState, setAttachmentViewerState] = React.useState(null);
+  const [attachmentEditorState, setAttachmentEditorState] = React.useState(null);
+  const imageAttachmentsForViewer = React.useMemo(
+    () =>
+      composerAttachments
+        .filter((attachment) => isImageAttachment(attachment))
+        .map((attachment) => ({
+          ...attachment,
+          url: attachment.preview_url || attachment.url || ""
+        })),
+    [composerAttachments]
+  );
+  const editingAttachment = React.useMemo(
+    () =>
+      attachmentEditorState
+        ? composerAttachments.find(
+            (attachment) => attachmentKey(attachment) === attachmentEditorState.key
+          ) || null
+        : null,
+    [attachmentEditorState, composerAttachments]
+  );
+
+  React.useEffect(() => {
+    if (!attachmentEditorState) {
+      return;
+    }
+
+    const exists = composerAttachments.some(
+      (attachment) => attachmentKey(attachment) === attachmentEditorState.key
+    );
+
+    if (!exists) {
+      setAttachmentEditorState(null);
+    }
+  }, [attachmentEditorState, composerAttachments]);
+
+  function openAttachmentViewer(attachment) {
+    if (!isImageAttachment(attachment)) {
+      return;
+    }
+
+    const key = attachmentKey(attachment);
+    const index = imageAttachmentsForViewer.findIndex(
+      (item) => attachmentKey(item) === key
+    );
+
+    if (index < 0) {
+      return;
+    }
+
+    setAttachmentViewerState({
+      attachments: imageAttachmentsForViewer,
+      index
+    });
+  }
+
+  function openAttachmentEditor(attachment) {
+    setAttachmentEditorState({
+      altText: String(attachment?.alt_text || ""),
+      displayName: getComposerAttachmentLabel(attachment),
+      isSpoiler: Boolean(attachment?.is_spoiler),
+      key: attachmentKey(attachment)
+    });
+  }
+
+  function handleAttachmentEditorChange(field, value) {
+    setAttachmentEditorState((previous) =>
+      previous
+        ? {
+            ...previous,
+            [field]: value
+          }
+        : previous
+    );
+  }
+
+  function handleAttachmentEditorSave() {
+    if (!attachmentEditorState || !editingAttachment) {
+      setAttachmentEditorState(null);
+      return;
+    }
+
+    updateComposerAttachment?.(editingAttachment, {
+      alt_text: String(attachmentEditorState.altText || "").trim().slice(0, 240),
+      display_name: String(attachmentEditorState.displayName || "").trim().slice(0, 140),
+      is_spoiler: Boolean(attachmentEditorState.isSpoiler)
+    });
+    setAttachmentEditorState(null);
+  }
+
   return (
     <footer className="composer-shell">
       <input
-        accept="image/*"
         className="hidden-file-input"
         multiple
         onChange={handleAttachmentSelection}
@@ -98,27 +208,77 @@ export const MessageComposer = memo(function MessageComposer({
       {composerAttachments.length ? (
         <div className="composer-attachments">
           {composerAttachments.map((attachment) => (
-            <div className="composer-attachment-chip" key={attachmentKey(attachment)}>
-              {isImageAttachment(attachment) ? (
-                <img alt={attachment.name || "Adjunto"} src={resolveAssetUrl(attachment.url)} />
-              ) : (
-                <span className="composer-attachment-file-icon">
-                  <Icon name="upload" size={14} />
-                </span>
-              )}
-              <div className="composer-attachment-copy">
-                <strong>{attachment.name || "Adjunto"}</strong>
-                <span>{isImageAttachment(attachment) ? "Imagen lista" : "Archivo listo"}</span>
+            <article
+              className={`composer-attachment-chip ${isImageAttachment(attachment) ? "image" : "file"} ${
+                attachment.upload_status || "ready"
+              } ${attachment.is_spoiler ? "spoiler" : ""}`.trim()}
+              key={attachmentKey(attachment)}
+            >
+              <div className="composer-attachment-toolbar">
+                {isImageAttachment(attachment) ? (
+                  <button
+                    aria-label="Ver imagen"
+                    className="composer-attachment-tool"
+                    onClick={() => openAttachmentViewer(attachment)}
+                    type="button"
+                  >
+                    <Icon name="eye" size={15} />
+                  </button>
+                ) : null}
+                <button
+                  aria-label="Editar adjunto"
+                  className="composer-attachment-tool"
+                  onClick={() => openAttachmentEditor(attachment)}
+                  type="button"
+                >
+                  <Icon name="edit" size={15} />
+                </button>
+                <button
+                  aria-label="Descartar adjunto"
+                  className="composer-attachment-tool danger"
+                  disabled={submittingMessage}
+                  onClick={() => removeComposerAttachment(attachment)}
+                  type="button"
+                >
+                  <Icon name="trash" size={15} />
+                </button>
               </div>
-              <button
-                aria-label="Quitar adjunto"
-                className="ghost-button icon-only small"
-                onClick={() => removeComposerAttachment(attachment)}
-                type="button"
-              >
-                <Icon name="close" size={14} />
-              </button>
-            </div>
+
+              {isImageAttachment(attachment) ? (
+                <button
+                  className="composer-attachment-preview-button"
+                  onClick={() => openAttachmentViewer(attachment)}
+                  type="button"
+                >
+                  <div className="composer-attachment-preview">
+                    <img
+                      alt={attachment.alt_text || getComposerAttachmentLabel(attachment)}
+                      src={resolveComposerAttachmentUrl(attachment)}
+                    />
+                  </div>
+                </button>
+              ) : (
+                <div className="composer-attachment-preview file">
+                  <span className="composer-attachment-file-icon">
+                    <Icon name="upload" size={20} />
+                  </span>
+                </div>
+              )}
+
+              <div className="composer-attachment-copy">
+                <strong title={getComposerAttachmentLabel(attachment)}>
+                  {getComposerAttachmentLabel(attachment)}
+                </strong>
+                <span
+                  className={`composer-attachment-meta ${attachment.upload_status || "ready"}`.trim()}
+                >
+                  {getComposerAttachmentStatus(attachment)}
+                </span>
+                {attachment.is_spoiler ? (
+                  <small className="composer-attachment-flag">Spoiler</small>
+                ) : null}
+              </div>
+            </article>
           ))}
         </div>
       ) : null}
@@ -217,27 +377,32 @@ export const MessageComposer = memo(function MessageComposer({
             >
               <Icon name="emoji" size={14} />
             </button>
-            <button
-              className="composer-action-chip icon-only tooltip-anchor"
-              data-tooltip="Aplicaciones"
-              data-tooltip-position="top"
-              onClick={() =>
-                showUiNotice("Integraciones y slash apps quedan preparadas para la siguiente pasada.")
-              }
-              type="button"
-            >
-              <Icon name="appGrid" size={14} />
-            </button>
-            {editingMessage || uploadingAttachments ? (
+            {editingMessage || uploadingAttachments || composer.trim() || composerAttachments.length ? (
               <button
                 className="primary-button send-button tooltip-anchor"
-                data-tooltip={uploadingAttachments ? "Subiendo adjuntos" : "Guardar cambios"}
+                data-tooltip={
+                  submittingMessage
+                    ? "Enviando mensaje"
+                    : uploadingAttachments
+                    ? "Subiendo adjuntos"
+                    : editingMessage
+                      ? "Guardar cambios"
+                      : "Enviar mensaje"
+                }
                 data-tooltip-position="top"
-                disabled={uploadingAttachments}
+                disabled={uploadingAttachments || submittingMessage}
                 type="submit"
               >
                 <Icon name={editingMessage ? "save" : "send"} />
-                <span>{uploadingAttachments ? "Subiendo..." : "Guardar"}</span>
+                <span>
+                  {submittingMessage
+                    ? "Enviando..."
+                    : uploadingAttachments
+                      ? "Subiendo..."
+                      : editingMessage
+                        ? "Guardar"
+                        : "Enviar"}
+                </span>
               </button>
             ) : null}
           </div>
@@ -316,6 +481,105 @@ export const MessageComposer = memo(function MessageComposer({
           </div>
         ) : null}
       </div>
+
+      {attachmentEditorState && editingAttachment ? (
+        <div
+          className="attachment-editor-backdrop"
+          onClick={() => setAttachmentEditorState(null)}
+        >
+          <div
+            className="attachment-editor-card"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="attachment-editor-header">
+              <strong>Modificar archivo adjunto</strong>
+              <button
+                aria-label="Cerrar editor"
+                className="attachment-editor-close"
+                onClick={() => setAttachmentEditorState(null)}
+                type="button"
+              >
+                <Icon name="close" size={18} />
+              </button>
+            </div>
+
+            <div className="attachment-editor-preview">
+              {isImageAttachment(editingAttachment) ? (
+                <img
+                  alt={
+                    attachmentEditorState.altText ||
+                    getComposerAttachmentLabel(editingAttachment)
+                  }
+                  src={resolveComposerAttachmentUrl(editingAttachment)}
+                />
+              ) : (
+                <div className="attachment-editor-file-preview">
+                  <Icon name="upload" size={28} />
+                </div>
+              )}
+            </div>
+
+            <label className="attachment-editor-field">
+              <span>Nombre de archivo</span>
+              <input
+                onChange={(event) =>
+                  handleAttachmentEditorChange("displayName", event.target.value)
+                }
+                type="text"
+                value={attachmentEditorState.displayName}
+              />
+            </label>
+
+            <label className="attachment-editor-field">
+              <span>Descripcion (texto alternativo)</span>
+              <input
+                onChange={(event) =>
+                  handleAttachmentEditorChange("altText", event.target.value)
+                }
+                placeholder="Anadir una descripcion"
+                type="text"
+                value={attachmentEditorState.altText}
+              />
+            </label>
+
+            <label className="attachment-editor-check">
+              <input
+                checked={attachmentEditorState.isSpoiler}
+                onChange={(event) =>
+                  handleAttachmentEditorChange("isSpoiler", event.target.checked)
+                }
+                type="checkbox"
+              />
+              <span>Marcar como spoiler</span>
+            </label>
+
+            <div className="attachment-editor-actions">
+              <button
+                className="ghost-button"
+                onClick={() => setAttachmentEditorState(null)}
+                type="button"
+              >
+                Cancelar
+              </button>
+              <button
+                className="primary-button"
+                onClick={handleAttachmentEditorSave}
+                type="button"
+              >
+                Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {attachmentViewerState?.attachments?.length ? (
+        <MessageImageViewer
+          attachments={attachmentViewerState.attachments}
+          initialIndex={attachmentViewerState.index}
+          onClose={() => setAttachmentViewerState(null)}
+        />
+      ) : null}
     </footer>
   );
 });

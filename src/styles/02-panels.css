@@ -837,8 +837,10 @@
   flex-direction: column;
   gap: 10px;
   min-width: 0;
-  overflow-x: hidden;
+  overflow: visible;
   padding: 16px 22px 20px;
+  position: relative;
+  z-index: 12;
 }
 
 .workspace-panel-fallback {

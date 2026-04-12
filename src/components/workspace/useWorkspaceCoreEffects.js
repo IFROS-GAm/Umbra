@@ -172,6 +172,7 @@ export function useWorkspaceCoreEffects({
   setReplyMentionEnabled,
   setReplyTarget,
   setSelectedVoiceDevices,
+  setSubmittingMessage,
   setTheme,
   setTypingEvents,
   setUiNotice,
@@ -234,6 +235,7 @@ export function useWorkspaceCoreEffects({
     setEditingMessage(null);
     setComposerMenuOpen(false);
     setComposerPicker(null);
+    setSubmittingMessage(false);
     setReactionPickerFor(null);
     setProfileCard(null);
     setHeaderPanel(null);
@@ -714,7 +716,9 @@ export function useWorkspaceCoreEffects({
       bootstrapFallbackSyncRef.current = true;
 
       try {
-        await loadBootstrapRef.current?.(activeSelectionRef.current);
+        await loadBootstrapRef.current?.(activeSelectionRef.current, {
+          silentError: true
+        });
       } catch {
         // Background sync should not surface noisy errors.
       } finally {
