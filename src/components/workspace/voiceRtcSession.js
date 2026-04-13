@@ -1,3 +1,6 @@
+import { supabase } from "../../supabase-browser.js";
+import { buildVoicePeersFromPresenceState } from "./voiceRealtimeHelpers.js";
+
 const DEFAULT_RTC_CONFIGURATION = {
   iceServers: [
     {
@@ -52,10 +55,12 @@ export function createVoiceRtcSession({
   channelId,
   currentUserId,
   deafened = false,
+  localPeerId = "",
   onError = null,
   outputDeviceId = "default",
   outputVolume = 1,
-  socket
+  socket,
+  useSharedRealtime = false
 }) {
   if (!socket) {
     throw new Error("No hay socket disponible para iniciar voz.");
@@ -65,14 +70,23 @@ export function createVoiceRtcSession({
     throw new Error("Este entorno no soporta conexiones WebRTC.");
   }
 
+  const realtimeEnabled = Boolean(useSharedRealtime && supabase);
   const peers = new Map();
   let destroyed = false;
   let localAudioStream = null;
   let localAudioTrack = null;
+  let realtimeChannel = null;
+  const selfPeerId = String(
+    localPeerId ||
+      socket.id ||
+      globalThis.crypto?.randomUUID?.() ||
+      `voice-peer-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  ).trim();
   const log = (event, details = {}, level = "info") => {
     const logger = typeof console[level] === "function" ? console[level] : console.info;
     logger(`[voice/client] ${event}`, {
       channelId,
+      peerId: selfPeerId,
       socketId: socket.id || null,
       ...details
     });
@@ -110,7 +124,42 @@ export function createVoiceRtcSession({
   }
 
   function shouldIgnorePeer({ peerId, userId }) {
-    return !peerId || peerId === socket.id || (currentUserId && userId === currentUserId);
+    return !peerId || peerId === selfPeerId || (currentUserId && userId === currentUserId);
+  }
+
+  function sendSignal(targetPeerId, signal) {
+    if (!targetPeerId || !signal) {
+      return;
+    }
+
+    if (realtimeEnabled && realtimeChannel) {
+      log("signal:emit", {
+        signalType: getVoiceSignalType(signal),
+        targetPeerId,
+        transport: "supabase"
+      });
+      realtimeChannel
+        .send({
+          type: "broadcast",
+          event: "signal",
+          payload: {
+            channelId,
+            fromPeerId: selfPeerId,
+            signal,
+            targetPeerId,
+            userId: currentUserId || null
+          }
+        })
+        .catch((error) => {
+          handleSessionError(error);
+        });
+      return;
+    }
+
+    socket.emit("voice:signal", {
+      signal,
+      targetPeerId
+    });
   }
 
   async function negotiatePeer(entry) {
@@ -129,12 +178,13 @@ export function createVoiceRtcSession({
       await entry.peerConnection.setLocalDescription(
         await entry.peerConnection.createOffer()
       );
-      log("offer:emit", { peerId: entry.peerId, userId: entry.userId || null });
-      socket.emit("voice:signal", {
-        signal: {
-          description: entry.peerConnection.localDescription
-        },
-        targetPeerId: entry.peerId
+      log("offer:emit", {
+        peerId: entry.peerId,
+        transport: realtimeEnabled ? "supabase" : "socket",
+        userId: entry.userId || null
+      });
+      sendSignal(entry.peerId, {
+        description: entry.peerConnection.localDescription
       });
     } catch (error) {
       handleSessionError(error);
@@ -246,18 +296,20 @@ export function createVoiceRtcSession({
       log("ice:emit", {
         peerId,
         targetPeerId: peerId,
+        transport: realtimeEnabled ? "supabase" : "socket",
         userId: entry.userId || null
       });
-      socket.emit("voice:signal", {
-        signal: {
-          candidate: event.candidate
-        },
-        targetPeerId: peerId
+      sendSignal(peerId, {
+        candidate: event.candidate
       });
     };
 
     entry.peerConnection.ontrack = (event) => {
-      log("track", { peerId, userId: entry.userId || null, hasStreams: Boolean(event.streams?.length) });
+      log("track", {
+        hasStreams: Boolean(event.streams?.length),
+        peerId,
+        userId: entry.userId || null
+      });
       const nextStream = event.streams?.[0] || null;
       if (nextStream) {
         entry.audioElement.srcObject = nextStream;
@@ -275,7 +327,7 @@ export function createVoiceRtcSession({
 
     entry.peerConnection.onconnectionstatechange = () => {
       const { connectionState } = entry.peerConnection;
-      log("rtc:state", { peerId, userId: entry.userId || null, connectionState });
+      log("rtc:state", { connectionState, peerId, userId: entry.userId || null });
       if (connectionState === "failed" || connectionState === "closed") {
         cleanupPeer(peerId);
       }
@@ -334,9 +386,9 @@ export function createVoiceRtcSession({
 
     log("signal:received", {
       fromPeerId,
-      signalType: getVoiceSignalType(signal),
+      hasCandidate: Boolean(signal.candidate),
       hasDescription: Boolean(signal.description),
-      hasCandidate: Boolean(signal.candidate)
+      signalType: getVoiceSignalType(signal)
     });
     const entry = await ensurePeer({
       peerId: fromPeerId,
@@ -354,7 +406,7 @@ export function createVoiceRtcSession({
           (entry.peerConnection.signalingState === "stable" ||
             entry.isSettingRemoteAnswerPending);
         const offerCollision = description.type === "offer" && !readyForOffer;
-        const polite = String(socket.id || "").localeCompare(String(fromPeerId || "")) > 0;
+        const polite = selfPeerId.localeCompare(String(fromPeerId || "")) > 0;
 
         entry.ignoreOffer = !polite && offerCollision;
         if (entry.ignoreOffer) {
@@ -377,12 +429,13 @@ export function createVoiceRtcSession({
           await entry.peerConnection.setLocalDescription(
             await entry.peerConnection.createAnswer()
           );
-          log("answer:emit", { targetPeerId: fromPeerId, userId: entry.userId || null });
-          socket.emit("voice:signal", {
-            signal: {
-              description: entry.peerConnection.localDescription
-            },
-            targetPeerId: fromPeerId
+          log("answer:emit", {
+            targetPeerId: fromPeerId,
+            transport: realtimeEnabled ? "supabase" : "socket",
+            userId: entry.userId || null
+          });
+          sendSignal(fromPeerId, {
+            description: entry.peerConnection.localDescription
           });
         }
 
@@ -417,7 +470,7 @@ export function createVoiceRtcSession({
   }
 
   function handleSocketConnect() {
-    if (destroyed) {
+    if (destroyed || realtimeEnabled) {
       return;
     }
 
@@ -432,16 +485,109 @@ export function createVoiceRtcSession({
     });
   }
 
-  socket.on("voice:peers", handlePeersSnapshot);
-  socket.on("voice:peer-left", handlePeerLeft);
-  socket.on("voice:signal", handleSignal);
-  socket.on("connect", handleSocketConnect);
+  async function handleRealtimePresenceSync() {
+    if (destroyed || !realtimeChannel) {
+      return;
+    }
 
-  if (socket.connected) {
-    log("sync-peers:emit", {});
-    socket.emit("voice:sync-peers", {
-      channelId
+    const nextPeers = buildVoicePeersFromPresenceState(realtimeChannel.presenceState(), {
+      channelId,
+      currentUserId,
+      localPeerId: selfPeerId
     });
+
+    log("realtime:peers", {
+      peerIds: nextPeers.map((peer) => peer.peerId),
+      peerUserIds: nextPeers.map((peer) => peer.userId)
+    });
+    await handlePeersSnapshot({
+      channelId,
+      peers: nextPeers
+    });
+  }
+
+  async function setupRealtimeTransport() {
+    if (!realtimeEnabled || destroyed || realtimeChannel) {
+      return;
+    }
+
+    realtimeChannel = supabase.channel(`umbra-voice-room:${channelId}`, {
+      config: {
+        presence: {
+          key: selfPeerId
+        }
+      }
+    });
+
+    realtimeChannel.on("presence", { event: "sync" }, () => {
+      handleRealtimePresenceSync();
+    });
+    realtimeChannel.on("presence", { event: "join" }, () => {
+      handleRealtimePresenceSync();
+    });
+    realtimeChannel.on("presence", { event: "leave" }, ({ leftPresences = [] } = {}) => {
+      leftPresences.forEach((presence) => {
+        const peerId = String(presence?.peerId || presence?.presence_ref || "").trim();
+        if (peerId) {
+          log("peer:left", {
+            peerId,
+            transport: "supabase"
+          });
+          cleanupPeer(peerId);
+        }
+      });
+      handleRealtimePresenceSync();
+    });
+    realtimeChannel.on("broadcast", { event: "signal" }, ({ payload } = {}) => {
+      const nextPayload = payload || {};
+      if (!nextPayload?.targetPeerId || nextPayload.targetPeerId !== selfPeerId) {
+        return;
+      }
+
+      handleSignal({
+        channelId: nextPayload.channelId,
+        fromPeerId: nextPayload.fromPeerId,
+        signal: nextPayload.signal,
+        userId: nextPayload.userId
+      });
+    });
+
+    realtimeChannel.subscribe(async (status) => {
+      log("realtime:status", { status });
+      if (status !== "SUBSCRIBED" || destroyed) {
+        return;
+      }
+
+      try {
+        await realtimeChannel.track({
+          channelId,
+          joinedAt: new Date().toISOString(),
+          peerId: selfPeerId,
+          userId: currentUserId || null
+        });
+        await handleRealtimePresenceSync();
+      } catch (error) {
+        handleSessionError(error);
+      }
+    });
+  }
+
+  if (realtimeEnabled) {
+    setupRealtimeTransport().catch((error) => {
+      handleSessionError(error);
+    });
+  } else {
+    socket.on("voice:peers", handlePeersSnapshot);
+    socket.on("voice:peer-left", handlePeerLeft);
+    socket.on("voice:signal", handleSignal);
+    socket.on("connect", handleSocketConnect);
+
+    if (socket.connected) {
+      log("sync-peers:emit", {});
+      socket.emit("voice:sync-peers", {
+        channelId
+      });
+    }
   }
 
   return {
@@ -481,10 +627,29 @@ export function createVoiceRtcSession({
     },
     async destroy() {
       destroyed = true;
-      socket.off("voice:peers", handlePeersSnapshot);
-      socket.off("voice:peer-left", handlePeerLeft);
-      socket.off("voice:signal", handleSignal);
-      socket.off("connect", handleSocketConnect);
+
+      if (realtimeEnabled) {
+        if (realtimeChannel) {
+          try {
+            await realtimeChannel.untrack();
+          } catch {
+            // Ignore untrack races during teardown.
+          }
+
+          try {
+            await supabase.removeChannel(realtimeChannel);
+          } catch {
+            // Ignore realtime teardown failures.
+          }
+
+          realtimeChannel = null;
+        }
+      } else {
+        socket.off("voice:peers", handlePeersSnapshot);
+        socket.off("voice:peer-left", handlePeerLeft);
+        socket.off("voice:signal", handleSignal);
+        socket.off("connect", handleSocketConnect);
+      }
 
       for (const peerId of [...peers.keys()]) {
         cleanupPeer(peerId);

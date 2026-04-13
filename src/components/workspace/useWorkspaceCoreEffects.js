@@ -2,6 +2,7 @@ import { startTransition, useEffect, useRef } from "react";
 
 import { api } from "../../api.js";
 import { getSocket } from "../../socket.js";
+import { supabase } from "../../supabase-browser.js";
 import {
   applyChannelPreviewToWorkspace,
   isChannelCacheFresh,
@@ -12,6 +13,9 @@ import {
 import { BACKGROUND_PREFETCH_COOLDOWN_MS } from "./workspaceCoreMessageStore.js";
 import { createVoiceCameraSession } from "./voiceCameraSession.js";
 import { createVoiceInputProcessingSession } from "./voiceInputProcessing.js";
+import {
+  buildVoiceSessionsFromPresenceState
+} from "./voiceRealtimeHelpers.js";
 import { createVoiceRtcSession } from "./voiceRtcSession.js";
 
 function areVoiceSessionsEqual(previous = {}, next = {}) {
@@ -212,6 +216,38 @@ export function useWorkspaceCoreEffects({
   const bootstrapFallbackSyncRef = useRef(false);
   const voiceFallbackSyncRef = useRef(false);
   const voiceRtcSessionRef = useRef(null);
+  const voicePresenceChannelRef = useRef(null);
+  const localVoicePeerIdRef = useRef(
+    globalThis.crypto?.randomUUID?.() ||
+      `voice-peer-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  );
+
+  function applyVoiceSessions(payload = {}) {
+    const normalizedSessions = normalizeVoiceSessions(payload);
+    voiceSessionsRef.current = normalizedSessions;
+    setVoiceSessions(normalizedSessions);
+    return normalizedSessions;
+  }
+
+  function buildCurrentVoicePresencePayload() {
+    const currentUserId = String(workspaceRef.current?.current_user?.id || "").trim();
+    const currentChannelId = String(joinedVoiceChannelIdRef.current || "").trim();
+
+    if (!currentUserId || !currentChannelId) {
+      return null;
+    }
+
+    const lookup = findChannelInSession(workspaceRef.current, currentChannelId);
+
+    return {
+      channelId: currentChannelId,
+      guildId: lookup?.guild?.id || null,
+      kind: lookup?.kind || lookup?.channel?.type || "",
+      peerId: localVoicePeerIdRef.current,
+      updatedAt: new Date().toISOString(),
+      userId: currentUserId
+    };
+  }
 
   useEffect(() => {
     if (!accessToken) {
@@ -231,11 +267,117 @@ export function useWorkspaceCoreEffects({
   }, [setTheme, workspace?.current_user?.id, workspace?.current_user?.theme]);
 
   useEffect(() => {
+    if (!supabase || !accessToken) {
+      return;
+    }
+
+    supabase.realtime.setAuth?.(accessToken);
+  }, [accessToken]);
+
+  useEffect(() => {
     document.documentElement.dataset.theme = theme;
     if (workspace?.current_user?.id) {
       localStorage.setItem(`umbra-theme-${workspace.current_user.id}`, theme);
     }
   }, [theme, workspace?.current_user?.id]);
+
+  useEffect(() => {
+    if (!supabase || workspace?.mode !== "supabase" || !workspace?.current_user?.id) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    const channel = supabase.channel("umbra-voice-presence", {
+      config: {
+        presence: {
+          key: localVoicePeerIdRef.current
+        }
+      }
+    });
+    voicePresenceChannelRef.current = channel;
+
+    const syncPresenceState = () => {
+      if (cancelled) {
+        return;
+      }
+
+      const nextSessions = buildVoiceSessionsFromPresenceState(channel.presenceState());
+      console.info("[voice/client] realtime:presence:sync", {
+        channelIds: Object.keys(nextSessions),
+        peerId: localVoicePeerIdRef.current,
+        userId: workspaceRef.current?.current_user?.id || null
+      });
+      applyVoiceSessions(nextSessions);
+    };
+
+    const syncTrackedPresence = async () => {
+      const payload = buildCurrentVoicePresencePayload();
+
+      try {
+        if (payload) {
+          console.info("[voice/client] realtime:presence:track", payload);
+          await channel.track(payload);
+        } else {
+          console.info("[voice/client] realtime:presence:untrack", {
+            peerId: localVoicePeerIdRef.current
+          });
+          await channel.untrack();
+        }
+      } catch (error) {
+        console.warn("[voice/client] realtime:presence:error", {
+          error: error?.message || String(error),
+          peerId: localVoicePeerIdRef.current
+        });
+      }
+    };
+
+    channel.on("presence", { event: "sync" }, syncPresenceState);
+    channel.on("presence", { event: "join" }, syncPresenceState);
+    channel.on("presence", { event: "leave" }, syncPresenceState);
+    channel.subscribe(async (status) => {
+      console.info("[voice/client] realtime:presence:status", {
+        peerId: localVoicePeerIdRef.current,
+        status
+      });
+      if (status !== "SUBSCRIBED" || cancelled) {
+        return;
+      }
+
+      await syncTrackedPresence();
+      syncPresenceState();
+    });
+
+    return () => {
+      cancelled = true;
+      if (voicePresenceChannelRef.current === channel) {
+        voicePresenceChannelRef.current = null;
+      }
+
+      channel.untrack().catch(() => {});
+      supabase.removeChannel(channel).catch(() => {});
+    };
+  }, [accessToken, workspace?.mode, workspace?.current_user?.id]);
+
+  useEffect(() => {
+    if (!supabase || workspace?.mode !== "supabase") {
+      return undefined;
+    }
+
+    const channel = voicePresenceChannelRef.current;
+    if (!channel) {
+      return undefined;
+    }
+
+    const payload = buildCurrentVoicePresencePayload();
+
+    if (payload) {
+      channel.track(payload).catch(() => {});
+    } else {
+      channel.untrack().catch(() => {});
+    }
+
+    return undefined;
+  }, [joinedVoiceChannelId, workspace?.mode, workspace?.current_user?.id]);
 
   useEffect(() => {
     setComposer("");
@@ -430,14 +572,11 @@ export function useWorkspaceCoreEffects({
       }
     };
 
-    const applyVoiceSessions = (payload = {}) => {
-      const normalizedSessions = normalizeVoiceSessions(payload);
-      voiceSessionsRef.current = normalizedSessions;
-      setVoiceSessions(normalizedSessions);
-      return normalizedSessions;
-    };
-
     const syncVoiceSessionsNow = async () => {
+      if (workspaceRef.current?.mode === "supabase") {
+        return;
+      }
+
       try {
         const payload = await api.fetchVoiceState();
         applyVoiceSessions(payload?.sessions || {});
@@ -499,6 +638,9 @@ export function useWorkspaceCoreEffects({
       logVoiceClient(socket, "state", {
         activeVoiceChannels: Object.keys(payload || {})
       });
+      if (workspaceRef.current?.mode === "supabase") {
+        return;
+      }
       applyVoiceSessions(payload || {});
     };
 
@@ -514,6 +656,9 @@ export function useWorkspaceCoreEffects({
         previousUserIds,
         userIds: normalizedUserIds
       });
+      if (workspaceRef.current?.mode === "supabase") {
+        return;
+      }
       const currentUserId = workspaceRef.current?.current_user?.id || "";
 
       setVoiceSessions((previous) => {
@@ -762,7 +907,7 @@ export function useWorkspaceCoreEffects({
   }, [accessToken, activeChannel?.is_voice, activeSelection.channelId, Boolean(workspace)]);
 
   useEffect(() => {
-    if (!accessToken || !workspace) {
+    if (!accessToken || !workspace || workspace.mode === "supabase") {
       return undefined;
     }
 
@@ -844,7 +989,7 @@ export function useWorkspaceCoreEffects({
       window.clearInterval(interval);
       voiceFallbackSyncRef.current = false;
     };
-  }, [accessToken, Boolean(workspace), setVoiceSessions]);
+  }, [accessToken, workspace?.mode, Boolean(workspace), setVoiceSessions]);
 
   useEffect(() => {
     if (!workspace || !accessToken) {
@@ -1092,11 +1237,13 @@ export function useWorkspaceCoreEffects({
 
   useEffect(() => {
     const readyChannelId = voiceJoinReadyChannelIdRef?.current || null;
+    const useSharedVoiceRealtime =
+      workspaceRef.current?.mode === "supabase" && Boolean(supabase);
     if (
       !accessToken ||
       !joinedVoiceChannelId ||
       !workspaceRef.current?.current_user?.id ||
-      joinedVoiceChannelId !== readyChannelId
+      (!useSharedVoiceRealtime && joinedVoiceChannelId !== readyChannelId)
     ) {
       if (voiceRtcSessionRef.current) {
         voiceRtcSessionRef.current.destroy().catch(() => {});
@@ -1116,6 +1263,7 @@ export function useWorkspaceCoreEffects({
         channelId: joinedVoiceChannelId,
         currentUserId: workspaceRef.current.current_user.id,
         deafened: Boolean(voiceState.deafen),
+        localPeerId: localVoicePeerIdRef.current,
         onError: (error) => {
           if (error?.message) {
             setUiNotice(error.message);
@@ -1123,7 +1271,8 @@ export function useWorkspaceCoreEffects({
         },
         outputDeviceId: selectedVoiceDevices.audiooutput,
         outputVolume: (Number(voiceState.outputVolume) || 0) / 100,
-        socket
+        socket,
+        useSharedRealtime: useSharedVoiceRealtime
       });
 
       voiceRtcSessionRef.current = session;
@@ -1146,6 +1295,7 @@ export function useWorkspaceCoreEffects({
     joinedVoiceChannelId,
     setUiNotice,
     voiceJoinReadyChannelId,
+    workspace?.mode,
     workspace?.current_user?.id
   ]);
 
