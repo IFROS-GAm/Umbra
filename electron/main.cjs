@@ -95,24 +95,64 @@ function trimTrailingSlash(value) {
   return String(value || "").replace(/\/$/, "");
 }
 
+function isLoopbackUrl(value) {
+  const normalizedValue = trimTrailingSlash(value);
+  if (!normalizedValue) {
+    return false;
+  }
+
+  try {
+    const parsedUrl = new URL(normalizedValue);
+    return ["127.0.0.1", "localhost", "::1"].includes(parsedUrl.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function pickDesktopServiceBaseUrl({
+  electronOverride,
+  fallbackUrl,
+  publicAppUrl,
+  viteUrl
+}) {
+  const explicitUrl = trimTrailingSlash(electronOverride);
+  if (explicitUrl) {
+    return explicitUrl;
+  }
+
+  const normalizedViteUrl = trimTrailingSlash(viteUrl);
+  const normalizedPublicAppUrl = trimTrailingSlash(publicAppUrl);
+
+  if (
+    normalizedPublicAppUrl &&
+    (!normalizedViteUrl || isLoopbackUrl(normalizedViteUrl))
+  ) {
+    return normalizedPublicAppUrl;
+  }
+
+  return normalizedViteUrl || normalizedPublicAppUrl || trimTrailingSlash(fallbackUrl);
+}
+
 function getDesktopRuntimeConfig() {
   if (isDev) {
-    const apiBaseUrl = trimTrailingSlash(
-      process.env.ELECTRON_API_URL ||
-        process.env.VITE_API_URL ||
-        "http://localhost:3030"
-    );
-    const socketBaseUrl = trimTrailingSlash(
-      process.env.ELECTRON_SOCKET_URL ||
-        process.env.VITE_SOCKET_URL ||
-        apiBaseUrl
-    );
     const publicAppUrl = trimTrailingSlash(
       process.env.ELECTRON_PUBLIC_APP_URL ||
         process.env.PUBLIC_APP_URL ||
         process.env.VITE_PUBLIC_APP_URL ||
         ""
     );
+    const apiBaseUrl = pickDesktopServiceBaseUrl({
+      electronOverride: process.env.ELECTRON_API_URL,
+      fallbackUrl: "http://localhost:3030",
+      publicAppUrl,
+      viteUrl: process.env.VITE_API_URL
+    });
+    const socketBaseUrl = pickDesktopServiceBaseUrl({
+      electronOverride: process.env.ELECTRON_SOCKET_URL,
+      fallbackUrl: apiBaseUrl,
+      publicAppUrl: apiBaseUrl,
+      viteUrl: process.env.VITE_SOCKET_URL
+    });
 
     return {
       apiBaseUrl,
@@ -565,6 +605,8 @@ ipcMain.on("umbra:get-runtime-config", (event) => {
 app.whenReady().then(async () => {
   try {
     writeDesktopLog("Electron app ready.");
+    const runtimeConfig = getDesktopRuntimeConfig();
+    writeDesktopLog(`Desktop runtime config: ${JSON.stringify(runtimeConfig)}`);
     await createWindow();
 
     app.on("activate", async () => {

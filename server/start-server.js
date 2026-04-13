@@ -345,11 +345,53 @@ export async function startServer(options = {}) {
     }
   }
 
+  function listVoiceUserIds(channelId) {
+    const normalizedChannelId = normalizeVoiceChannelId(channelId);
+    if (!normalizedChannelId) {
+      return [];
+    }
+
+    const userIds = new Set();
+
+    const sessionUsers = voiceSessions.get(normalizedChannelId);
+    if (sessionUsers) {
+      [...sessionUsers.keys()].forEach((userId) => {
+        if (userId) {
+          userIds.add(userId);
+        }
+      });
+    }
+
+    const trackedRoom = getTrackedVoiceRoom(normalizedChannelId);
+    if (trackedRoom) {
+      for (const [socketId, entry] of trackedRoom.entries()) {
+        if (entry?.userId) {
+          userIds.add(entry.userId);
+          continue;
+        }
+
+        const socket = io.sockets.sockets.get(socketId);
+        if (socket?.data?.user?.id) {
+          userIds.add(socket.data.user.id);
+        }
+      }
+    }
+
+    for (const socketId of getAdapterVoiceRoomSocketIds(normalizedChannelId)) {
+      const socket = io.sockets.sockets.get(socketId);
+      if (socket?.data?.user?.id) {
+        userIds.add(socket.data.user.id);
+      }
+    }
+
+    return [...userIds];
+  }
+
   function buildVoicePayload(channelId) {
     const normalizedChannelId = normalizeVoiceChannelId(channelId);
     return {
       channelId: normalizedChannelId,
-      userIds: [...(voiceSessions.get(normalizedChannelId)?.keys() || [])]
+      userIds: listVoiceUserIds(normalizedChannelId)
     };
   }
 
@@ -532,10 +574,15 @@ export async function startServer(options = {}) {
   }
 
   function serializeVoiceState() {
+    const channelIds = new Set([
+      ...voiceSessions.keys(),
+      ...voicePeerRooms.keys()
+    ]);
+
     return Object.fromEntries(
-      [...voiceSessions.keys()].map((channelId) => [
+      [...channelIds].map((channelId) => [
         channelId,
-        [...(voiceSessions.get(channelId)?.keys() || [])]
+        listVoiceUserIds(channelId)
       ])
     );
   }

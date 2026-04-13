@@ -95,6 +95,19 @@ function AppContent() {
   }, [language]);
 
   useEffect(() => {
+    const desktop = getDesktopBridge();
+    if (!desktop) {
+      return;
+    }
+
+    console.info("[runtime/client]", {
+      apiBaseUrl: desktop.apiBaseUrl || "",
+      publicAppUrl: desktop.publicAppUrl || "",
+      socketBaseUrl: desktop.socketBaseUrl || ""
+    });
+  }, []);
+
+  useEffect(() => {
     if (!supabase) {
       setReady(true);
       return undefined;
