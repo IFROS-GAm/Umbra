@@ -36,6 +36,18 @@ function createRemoteStream() {
   return new MediaStream();
 }
 
+function getVoiceSignalType(signal = {}) {
+  if (signal?.description?.type) {
+    return signal.description.type;
+  }
+
+  if (signal?.candidate) {
+    return "ice";
+  }
+
+  return "unknown";
+}
+
 export function createVoiceRtcSession({
   channelId,
   currentUserId,
@@ -57,8 +69,13 @@ export function createVoiceRtcSession({
   let destroyed = false;
   let localAudioStream = null;
   let localAudioTrack = null;
-  const log = (...args) => {
-    console.debug("[voice-rtc]", ...args);
+  const log = (event, details = {}, level = "info") => {
+    const logger = typeof console[level] === "function" ? console[level] : console.info;
+    logger(`[voice/client] ${event}`, {
+      channelId,
+      socketId: socket.id || null,
+      ...details
+    });
   };
   let playbackState = {
     deafened: Boolean(deafened),
@@ -108,10 +125,11 @@ export function createVoiceRtcSession({
 
     try {
       entry.makingOffer = true;
-      log("offer:local", { channelId, peerId: entry.peerId });
+      log("offer:create", { peerId: entry.peerId, userId: entry.userId || null });
       await entry.peerConnection.setLocalDescription(
         await entry.peerConnection.createOffer()
       );
+      log("offer:emit", { peerId: entry.peerId, userId: entry.userId || null });
       socket.emit("voice:signal", {
         signal: {
           description: entry.peerConnection.localDescription
@@ -225,7 +243,11 @@ export function createVoiceRtcSession({
         return;
       }
 
-      log("ice:local", { channelId, targetPeerId: peerId });
+      log("ice:emit", {
+        peerId,
+        targetPeerId: peerId,
+        userId: entry.userId || null
+      });
       socket.emit("voice:signal", {
         signal: {
           candidate: event.candidate
@@ -235,7 +257,7 @@ export function createVoiceRtcSession({
     };
 
     entry.peerConnection.ontrack = (event) => {
-      log("track", { channelId, peerId, hasStreams: Boolean(event.streams?.length) });
+      log("track", { peerId, userId: entry.userId || null, hasStreams: Boolean(event.streams?.length) });
       const nextStream = event.streams?.[0] || null;
       if (nextStream) {
         entry.audioElement.srcObject = nextStream;
@@ -253,7 +275,7 @@ export function createVoiceRtcSession({
 
     entry.peerConnection.onconnectionstatechange = () => {
       const { connectionState } = entry.peerConnection;
-      log("state", { channelId, peerId, connectionState });
+      log("rtc:state", { peerId, userId: entry.userId || null, connectionState });
       if (connectionState === "failed" || connectionState === "closed") {
         cleanupPeer(peerId);
       }
@@ -271,7 +293,10 @@ export function createVoiceRtcSession({
       return;
     }
 
-    log("peers", { channelId: snapshotChannelId, count: nextPeers.length });
+    log("peers:received", {
+      peerIds: nextPeers.map((peer) => peer.peerId),
+      peerUserIds: nextPeers.map((peer) => peer.userId)
+    });
     const activePeerIds = new Set();
 
     for (const peer of nextPeers) {
@@ -307,9 +332,9 @@ export function createVoiceRtcSession({
       return;
     }
 
-    log("signal", {
-      channelId: signalChannelId,
+    log("signal:received", {
       fromPeerId,
+      signalType: getVoiceSignalType(signal),
       hasDescription: Boolean(signal.description),
       hasCandidate: Boolean(signal.candidate)
     });
@@ -336,18 +361,23 @@ export function createVoiceRtcSession({
           return;
         }
 
+        if (description.type === "answer") {
+          log("answer:received", { fromPeerId, userId: entry.userId || null });
+        }
+
         entry.isSettingRemoteAnswerPending = description.type === "answer";
         await entry.peerConnection.setRemoteDescription(description);
         entry.isSettingRemoteAnswerPending = false;
 
         if (description.type === "offer") {
-          log("offer", { channelId: signalChannelId, fromPeerId });
+          log("offer:received", { fromPeerId, userId: entry.userId || null });
           await syncLocalAudioToPeer(entry, {
             renegotiate: false
           });
           await entry.peerConnection.setLocalDescription(
             await entry.peerConnection.createAnswer()
           );
+          log("answer:emit", { targetPeerId: fromPeerId, userId: entry.userId || null });
           socket.emit("voice:signal", {
             signal: {
               description: entry.peerConnection.localDescription
@@ -361,7 +391,6 @@ export function createVoiceRtcSession({
           entry.pendingNegotiation &&
           entry.peerConnection.signalingState === "stable"
         ) {
-          log("answer", { channelId: signalChannelId, fromPeerId });
           entry.pendingNegotiation = false;
           queueMicrotask(() => {
             negotiatePeer(entry);
@@ -370,7 +399,7 @@ export function createVoiceRtcSession({
       }
 
       if (signal.candidate && !entry.ignoreOffer) {
-        log("ice:remote", { channelId: signalChannelId, fromPeerId });
+        log("ice:received", { fromPeerId, userId: entry.userId || null });
         await entry.peerConnection.addIceCandidate(signal.candidate);
       }
     } catch (error) {
@@ -383,7 +412,7 @@ export function createVoiceRtcSession({
       return;
     }
 
-    log("peer-left", { channelId: peerChannelId, peerId });
+    log("peer:left", { peerId });
     cleanupPeer(peerId);
   }
 
@@ -392,12 +421,15 @@ export function createVoiceRtcSession({
       return;
     }
 
-    log("socket-connect", { channelId });
+    log("socket:connect", {});
     for (const peerId of [...peers.keys()]) {
       cleanupPeer(peerId);
     }
 
-    socket.emit("voice:sync-peers");
+    log("sync-peers:emit", {});
+    socket.emit("voice:sync-peers", {
+      channelId
+    });
   }
 
   socket.on("voice:peers", handlePeersSnapshot);
@@ -406,7 +438,10 @@ export function createVoiceRtcSession({
   socket.on("connect", handleSocketConnect);
 
   if (socket.connected) {
-    socket.emit("voice:sync-peers");
+    log("sync-peers:emit", {});
+    socket.emit("voice:sync-peers", {
+      channelId
+    });
   }
 
   return {

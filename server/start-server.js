@@ -181,6 +181,18 @@ function createCloseHandle({ io, server }) {
   };
 }
 
+function getVoiceSignalType(signal = {}) {
+  if (signal?.description?.type) {
+    return signal.description.type;
+  }
+
+  if (signal?.candidate) {
+    return "ice";
+  }
+
+  return "unknown";
+}
+
 export async function startServer(options = {}) {
   const store = await createStore();
   const port = Number(options.port ?? process.env.PORT ?? 3030);
@@ -335,30 +347,45 @@ export async function startServer(options = {}) {
     };
   }
 
+  function getVoiceRoomSocketIds(channelId) {
+    if (!channelId) {
+      return new Set();
+    }
+
+    return new Set(io.sockets.adapter.rooms.get(`voice:${channelId}`) || []);
+  }
+
   function listVoicePeers(channelId, excludedSocketId = null) {
     if (!channelId) {
       return [];
     }
 
-    const room = io.sockets.adapter.rooms.get(`voice:${channelId}`);
-    if (!room?.size) {
-      return [];
-    }
+    const roomSocketIds = getVoiceRoomSocketIds(channelId);
 
-    return [...room]
-      .filter((socketId) => socketId && socketId !== excludedSocketId)
-      .map((socketId) => {
-        const peerSocket = io.sockets.sockets.get(socketId);
-        if (!peerSocket?.data?.user?.id) {
-          return null;
+    return [...io.sockets.sockets.values()]
+      .filter((peerSocket) => {
+        if (!peerSocket?.id || peerSocket.id === excludedSocketId) {
+          return false;
         }
 
-        return {
-          peerId: socketId,
-          userId: peerSocket.data.user.id
-        };
+        if (!peerSocket?.data?.user?.id) {
+          return false;
+        }
+
+        return (
+          peerSocket.data.voiceChannelId === channelId ||
+          roomSocketIds.has(peerSocket.id)
+        );
       })
+      .map((peerSocket) => ({
+        peerId: peerSocket.id,
+        userId: peerSocket.data.user.id
+      }))
       .filter(Boolean);
+  }
+
+  function logVoiceServer(event, details = {}) {
+    console.info(`[voice/server] ${event}`, details);
   }
 
   function emitVoicePeerSnapshots(channelId) {
@@ -366,21 +393,35 @@ export async function startServer(options = {}) {
       return;
     }
 
-    const room = io.sockets.adapter.rooms.get(`voice:${channelId}`);
-    if (!room?.size) {
+    const roomSocketIds = getVoiceRoomSocketIds(channelId);
+    const peersInChannel = listVoicePeers(channelId);
+    if (!roomSocketIds.size && !peersInChannel.length) {
       return;
     }
 
-    console.info("[voice] peers snapshot", { channelId, count: room.size });
-    for (const socketId of room) {
+    const targetSocketIds = roomSocketIds.size
+      ? [...roomSocketIds]
+      : peersInChannel.map((peer) => peer.peerId);
+
+    for (const socketId of targetSocketIds) {
       const targetSocket = io.sockets.sockets.get(socketId);
       if (!targetSocket) {
         continue;
       }
 
+      const peers = listVoicePeers(channelId, socketId);
+      logVoiceServer("peers:snapshot", {
+        channelId,
+        roomSocketIds: [...roomSocketIds],
+        socketId,
+        targetSocketId: socketId,
+        peerIds: peers.map((peer) => peer.peerId),
+        peerUserIds: peers.map((peer) => peer.userId)
+      });
+
       targetSocket.emit("voice:peers", {
         channelId,
-        peers: listVoicePeers(channelId, socketId)
+        peers
       });
     }
   }
@@ -403,6 +444,12 @@ export async function startServer(options = {}) {
     if (!previousChannelId) {
       return;
     }
+
+    logVoiceServer("leave", {
+      channelId: previousChannelId,
+      socketId: socket.id,
+      userId
+    });
 
     socket.to(`voice:${previousChannelId}`).emit("voice:peer-left", {
       channelId: previousChannelId,
@@ -1365,7 +1412,11 @@ export async function startServer(options = {}) {
         }
 
         if (socket.data.voiceChannelId === channelId) {
-          console.info("[voice] join:already", { channelId, userId: viewer.id, socketId: socket.id });
+          logVoiceServer("join:already", {
+            channelId,
+            socketId: socket.id,
+            userId: viewer.id
+          });
           socket.emit("voice:update", buildVoicePayload(channelId));
           socket.emit("voice:peers", {
             channelId,
@@ -1382,13 +1433,22 @@ export async function startServer(options = {}) {
 
         socket.data.voiceChannelId = channelId;
         await socket.join(`voice:${channelId}`);
-        console.info("[voice] join", { channelId, userId: viewer.id, socketId: socket.id });
+        await new Promise((resolve) => setImmediate(resolve));
+        const peers = listVoicePeers(channelId, socket.id);
+        logVoiceServer("join", {
+          channelId,
+          peerIds: peers.map((peer) => peer.peerId),
+          peerUserIds: peers.map((peer) => peer.userId),
+          roomSocketIds: [...getVoiceRoomSocketIds(channelId)],
+          socketId: socket.id,
+          userId: viewer.id
+        });
         emitVoiceUpdate(channelId);
         emitVoicePeerSnapshots(channelId);
         socket.emit("voice:joined", {
           channelId,
           peerId: socket.id,
-          peers: listVoicePeers(channelId, socket.id)
+          peers
         });
       } catch (error) {
         socket.emit("room:error", {
@@ -1398,8 +1458,8 @@ export async function startServer(options = {}) {
       }
     });
 
-    socket.on("voice:sync-peers", () => {
-      const channelId = socket.data.voiceChannelId;
+    socket.on("voice:sync-peers", ({ channelId: requestedChannelId } = {}) => {
+      const channelId = requestedChannelId || socket.data.voiceChannelId;
       if (!channelId) {
         socket.emit("voice:peers", {
           channelId: null,
@@ -1408,10 +1468,19 @@ export async function startServer(options = {}) {
         return;
       }
 
-      console.info("[voice] sync-peers", { channelId, userId: viewer.id, socketId: socket.id });
+      const peers = listVoicePeers(channelId, socket.id);
+      logVoiceServer("sync-peers", {
+        channelId,
+        peerIds: peers.map((peer) => peer.peerId),
+        peerUserIds: peers.map((peer) => peer.userId),
+        requestedChannelId: requestedChannelId || null,
+        roomSocketIds: [...getVoiceRoomSocketIds(channelId)],
+        socketId: socket.id,
+        userId: viewer.id
+      });
       socket.emit("voice:peers", {
         channelId,
-        peers: listVoicePeers(channelId, socket.id)
+        peers
       });
     });
 
@@ -1426,10 +1495,14 @@ export async function startServer(options = {}) {
         return;
       }
 
-      console.info("[voice] signal", {
+      logVoiceServer("signal:relay", {
         channelId,
         fromPeerId: socket.id,
+        fromSocketId: socket.id,
+        signalType: getVoiceSignalType(signal),
+        socketId: socket.id,
         targetPeerId,
+        targetSocketId: targetPeerId,
         hasDescription: Boolean(signal.description),
         hasCandidate: Boolean(signal.candidate)
       });

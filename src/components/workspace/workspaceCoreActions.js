@@ -13,6 +13,13 @@ import {
 
 const DIRECT_CALL_TYPES = new Set(["dm", "group_dm"]);
 
+function logVoiceClient(socket, event, details = {}) {
+  console.info(`[voice/client] ${event}`, {
+    socketId: socket?.id || null,
+    ...details
+  });
+}
+
 function buildLocalMessagePreview(content = "", attachments = [], sticker = null) {
   const normalized = String(content || "").replace(/\s+/g, " ").trim();
   if (normalized) {
@@ -1163,8 +1170,12 @@ export function createWorkspaceCoreActions(context) {
       });
       setVoiceJoinReadyChannelId(null);
       applyLocalVoicePresence(targetChannel.id);
-      console.debug("[voice] join request", { channelId: targetChannel.id });
-      getLiveSocket().emit("voice:join", {
+      const socket = getLiveSocket();
+      logVoiceClient(socket, "join:emit", {
+        channelId: targetChannel.id,
+        selectionKind: "guild"
+      });
+      socket.emit("voice:join", {
         channelId: targetChannel.id
       });
       setJoinedVoiceChannelId(targetChannel.id);
@@ -1188,8 +1199,12 @@ export function createWorkspaceCoreActions(context) {
 
       setVoiceJoinReadyChannelId(null);
       applyLocalVoicePresence(targetChannel.id);
-      console.debug("[voice] join request", { channelId: targetChannel.id });
-      getLiveSocket().emit("voice:join", {
+      const socket = getLiveSocket();
+      logVoiceClient(socket, "join:emit", {
+        channelId: targetChannel.id,
+        selectionKind: targetChannel.type || "dm"
+      });
+      socket.emit("voice:join", {
         channelId: targetChannel.id
       });
       setJoinedVoiceChannelId(targetChannel.id);
@@ -1253,7 +1268,11 @@ export function createWorkspaceCoreActions(context) {
     }
 
     try {
-      getLiveSocket().emit("voice:leave", {
+      const socket = getLiveSocket();
+      logVoiceClient(socket, "leave:emit", {
+        channelId: previousChannelId
+      });
+      socket.emit("voice:leave", {
         channelId: previousChannelId
       });
     } catch {

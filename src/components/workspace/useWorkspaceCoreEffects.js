@@ -126,6 +126,13 @@ function patchWorkspaceUser(previous, userPatch) {
   };
 }
 
+function logVoiceClient(socket, event, details = {}) {
+  console.info(`[voice/client] ${event}`, {
+    socketId: socket?.id || null,
+    ...details
+  });
+}
+
 export function useWorkspaceCoreEffects({
   accessToken,
   activeChannel,
@@ -489,7 +496,9 @@ export function useWorkspaceCoreEffects({
     };
 
     const onVoiceState = (payload) => {
-      console.debug("[voice] state", payload);
+      logVoiceClient(socket, "state", {
+        activeVoiceChannels: Object.keys(payload || {})
+      });
       applyVoiceSessions(payload || {});
     };
 
@@ -499,8 +508,12 @@ export function useWorkspaceCoreEffects({
         return;
       }
 
-      console.debug("[voice] update", { channelId, userIds });
       const normalizedUserIds = [...new Set((userIds || []).filter(Boolean))];
+      logVoiceClient(socket, "update", {
+        channelId,
+        previousUserIds,
+        userIds: normalizedUserIds
+      });
       const currentUserId = workspaceRef.current?.current_user?.id || "";
 
       setVoiceSessions((previous) => {
@@ -528,7 +541,12 @@ export function useWorkspaceCoreEffects({
         joinedVoiceChannelIdRef.current === channelId &&
         normalizedUserIds.includes(currentUserId)
       ) {
-        socket.emit("voice:sync-peers");
+        logVoiceClient(socket, "sync-peers:emit", {
+          channelId
+        });
+        socket.emit("voice:sync-peers", {
+          channelId
+        });
       }
 
       if (typeof onVoiceUpdateNotification === "function") {
@@ -542,7 +560,12 @@ export function useWorkspaceCoreEffects({
     };
 
     const onVoiceJoined = ({ channelId, peers, peerId }) => {
-      console.debug("[voice] joined", { channelId, peerId, peers });
+      logVoiceClient(socket, "join:ack", {
+        channelId,
+        peerId,
+        peerIds: (peers || []).map((peer) => peer.peerId),
+        peerUserIds: (peers || []).map((peer) => peer.userId)
+      });
       if (channelId) {
         setVoiceJoinReadyChannelId(channelId);
       }
@@ -609,6 +632,11 @@ export function useWorkspaceCoreEffects({
         return;
       }
 
+      logVoiceClient(socket, "room:error", {
+        channelId: payload.channelId || null,
+        error: payload.error
+      });
+
       setAppError(payload.error);
       if (payload.channelId && joinedVoiceChannelIdRef.current === payload.channelId) {
         setJoinedVoiceChannelId(null);
@@ -618,7 +646,10 @@ export function useWorkspaceCoreEffects({
 
     const onConnect = () => {
       syncVoiceSessionsNow();
-      console.debug("[socket] connect");
+      logVoiceClient(socket, "socket:connect", {
+        activeChannelId: activeSelectionRef.current?.channelId || null,
+        joinedVoiceChannelId: joinedVoiceChannelIdRef.current || null
+      });
 
       if (activeSelectionRef.current?.channelId) {
         socket.emit("room:join", {
@@ -628,6 +659,9 @@ export function useWorkspaceCoreEffects({
 
       if (joinedVoiceChannelIdRef.current) {
         setVoiceJoinReadyChannelId(null);
+        logVoiceClient(socket, "join:re-emit", {
+          channelId: joinedVoiceChannelIdRef.current
+        });
         socket.emit("voice:join", {
           channelId: joinedVoiceChannelIdRef.current
         });
