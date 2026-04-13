@@ -94,7 +94,9 @@
 }
 
 .channel-row.voice.connected .channel-label,
-.channel-row.voice.connected .umbra-icon {
+.channel-row.voice.connected .umbra-icon,
+.channel-row.voice.occupied .channel-label,
+.channel-row.voice.occupied .umbra-icon {
   color: #47d790;
 }
 
@@ -128,16 +130,50 @@
   margin: 4px 0 0 26px;
 }
 
+.voice-channel-occupants-layered {
+  gap: 6px;
+  margin-top: 6px;
+  padding-left: 2px;
+  position: relative;
+}
+
+.voice-channel-occupants-layered::before {
+  background: linear-gradient(180deg, rgba(71, 215, 144, 0.44), rgba(123, 136, 255, 0.08));
+  border-radius: 999px;
+  bottom: 8px;
+  content: "";
+  left: 10px;
+  opacity: 0.9;
+  position: absolute;
+  top: 3px;
+  width: 1px;
+}
+
 .voice-channel-occupant {
   align-items: center;
   background: transparent;
+  border: 0;
   border-radius: 10px;
   color: var(--text-2);
-  display: flex;
-  gap: 8px;
-  min-height: 28px;
-  padding: 4px 8px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  min-height: 34px;
+  padding: 4px 8px 4px 0;
+  position: relative;
   text-align: left;
+  width: 100%;
+}
+
+.voice-channel-occupant::before {
+  background: rgba(71, 215, 144, 0.5);
+  border-radius: 999px;
+  content: "";
+  height: 1px;
+  left: 10px;
+  position: absolute;
+  top: 17px;
+  width: 12px;
 }
 
 .voice-channel-occupant:hover {
@@ -145,23 +181,81 @@
   color: var(--text-0);
 }
 
-.voice-channel-occupant span {
-  flex: 1;
+.voice-channel-occupant.is-fallback {
+  opacity: 0.74;
+}
+
+.voice-channel-occupant-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.voice-channel-occupant-copy strong {
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.voice-channel-occupant em {
-  background: #d94b56;
+.voice-channel-occupant-copy small {
+  color: var(--text-3);
+  font-size: 0.72rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.voice-channel-occupant-badges {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  min-width: max-content;
+}
+
+.voice-channel-badge {
+  background: rgba(123, 136, 255, 0.18);
   border-radius: 999px;
-  color: white;
+  color: #eef1ff;
   font-size: 0.66rem;
   font-style: normal;
   font-weight: 800;
   letter-spacing: 0.04em;
   padding: 3px 7px;
+  text-transform: uppercase;
+}
+
+.voice-channel-badge.soft {
+  background: rgba(255, 255, 255, 0.08);
+  color: #dce4f7;
+}
+
+.voice-channel-badge.success {
+  background: rgba(71, 215, 144, 0.16);
+  color: #7ff1b5;
+}
+
+.voice-channel-badge.gold {
+  background: rgba(255, 203, 92, 0.18);
+  color: #ffd772;
+}
+
+.voice-channel-badge.accent {
+  background: rgba(123, 136, 255, 0.22);
+  color: #d9deff;
+}
+
+.voice-channel-badge.danger {
+  background: rgba(217, 75, 86, 0.2);
+  color: #ffd6db;
 }
 
 .voice-channel-preview {

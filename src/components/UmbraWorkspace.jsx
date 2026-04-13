@@ -721,26 +721,72 @@ export function UmbraWorkspace({
       .flatMap((guild) => guild.channels)
       .find((channel) => channel.id === joinedVoiceChannelId) || null;
   const voiceUsersByChannel = useMemo(
-    () =>
-      Object.fromEntries(
-        activeGuildVoiceChannels.map((channel) => [
-          channel.id,
-          (voiceSessions[channel.id] || [])
+    () => {
+      const guildMembersById = new Map(
+        (activeGuild?.members || []).map((member) => [member.id, member])
+      );
+
+      return Object.fromEntries(
+        activeGuildVoiceChannels.map((channel) => {
+          const layeredUserIds = [
+            ...(voiceSessions[channel.id] || []),
+            ...(joinedVoiceChannelId === channel.id && currentUserId ? [currentUserId] : []),
+            ...(activeChannel?.id === channel.id ? voiceUserIds : [])
+          ];
+          const seenUserIds = new Set();
+          const resolvedUsers = layeredUserIds
+            .filter(Boolean)
             .map((userId) => {
-              if (currentUserId === userId) {
-                return currentUser;
+              if (seenUserIds.has(userId)) {
+                return null;
               }
 
-              return (
-                activeGuild?.members.find((member) => member.id === userId) ||
-                availableUsersById[userId] ||
-                null
-              );
+              seenUserIds.add(userId);
+
+              const resolvedUser =
+                userId === currentUserId
+                  ? currentUser
+                  : guildMembersById.get(userId) || availableUsersById[userId] || null;
+
+              if (resolvedUser) {
+                return {
+                  ...resolvedUser,
+                  is_voice_fallback: false,
+                  is_voice_self: userId === currentUserId
+                };
+              }
+
+              return {
+                id: userId,
+                username: `Usuario ${String(userId).slice(0, 4)}`,
+                display_name: userId === currentUserId ? currentUserLabel : "Usuario conectado",
+                avatar_hue: 215,
+                avatar_url: "",
+                custom_status: "",
+                is_voice_fallback: true,
+                is_voice_self: userId === currentUserId,
+                role_color: null,
+                status: "online"
+              };
             })
-            .filter(Boolean)
-        ])
-      ),
-    [activeGuild?.members, activeGuildVoiceChannels, availableUsersById, currentUser, currentUserId, voiceSessions]
+            .filter(Boolean);
+
+          return [channel.id, resolvedUsers];
+        })
+      );
+    },
+    [
+      activeChannel?.id,
+      activeGuild?.members,
+      activeGuildVoiceChannels,
+      availableUsersById,
+      currentUser,
+      currentUserId,
+      currentUserLabel,
+      joinedVoiceChannelId,
+      voiceSessions,
+      voiceUserIds
+    ]
   );
   const memberList =
     activeSelection.kind === "guild"

@@ -193,6 +193,10 @@ function getVoiceSignalType(signal = {}) {
   return "unknown";
 }
 
+function normalizeVoiceChannelId(channelId) {
+  return String(channelId || "").trim();
+}
+
 export async function startServer(options = {}) {
   const store = await createStore();
   const port = Number(options.port ?? process.env.PORT ?? 3030);
@@ -220,6 +224,7 @@ export async function startServer(options = {}) {
   const authCache = new Map();
   const connectedUsers = new Map();
   const voiceSessions = new Map();
+  const voicePeerRooms = new Map();
 
   app.set("trust proxy", 1);
   app.use(
@@ -341,45 +346,138 @@ export async function startServer(options = {}) {
   }
 
   function buildVoicePayload(channelId) {
+    const normalizedChannelId = normalizeVoiceChannelId(channelId);
     return {
-      channelId,
-      userIds: [...(voiceSessions.get(channelId)?.keys() || [])]
+      channelId: normalizedChannelId,
+      userIds: [...(voiceSessions.get(normalizedChannelId)?.keys() || [])]
     };
   }
 
+  function getTrackedVoiceRoom(channelId, { create = false } = {}) {
+    const normalizedChannelId = normalizeVoiceChannelId(channelId);
+    if (!normalizedChannelId) {
+      return null;
+    }
+
+    const existingRoom = voicePeerRooms.get(normalizedChannelId);
+    if (existingRoom || !create) {
+      return existingRoom || null;
+    }
+
+    const nextRoom = new Map();
+    voicePeerRooms.set(normalizedChannelId, nextRoom);
+    return nextRoom;
+  }
+
+  function registerVoicePeer(channelId, socket, userId) {
+    const normalizedChannelId = normalizeVoiceChannelId(channelId);
+    if (!normalizedChannelId || !socket?.id) {
+      return;
+    }
+
+    const room = getTrackedVoiceRoom(normalizedChannelId, { create: true });
+    room.set(socket.id, {
+      joinedAt: Date.now(),
+      userId
+    });
+  }
+
+  function unregisterVoicePeer(channelId, socketId) {
+    const normalizedChannelId = normalizeVoiceChannelId(channelId);
+    if (!normalizedChannelId || !socketId) {
+      return;
+    }
+
+    const room = getTrackedVoiceRoom(normalizedChannelId);
+    if (!room) {
+      return;
+    }
+
+    room.delete(socketId);
+    if (!room.size) {
+      voicePeerRooms.delete(normalizedChannelId);
+    }
+  }
+
   function getVoiceRoomSocketIds(channelId) {
-    if (!channelId) {
+    const normalizedChannelId = normalizeVoiceChannelId(channelId);
+    if (!normalizedChannelId) {
       return new Set();
     }
 
-    return new Set(io.sockets.adapter.rooms.get(`voice:${channelId}`) || []);
+    const trackedRoom = getTrackedVoiceRoom(normalizedChannelId);
+    return new Set(trackedRoom ? [...trackedRoom.keys()] : []);
+  }
+
+  function getAdapterVoiceRoomSocketIds(channelId) {
+    const normalizedChannelId = normalizeVoiceChannelId(channelId);
+    if (!normalizedChannelId) {
+      return new Set();
+    }
+
+    return new Set(io.sockets.adapter.rooms.get(`voice:${normalizedChannelId}`) || []);
   }
 
   function listVoicePeers(channelId, excludedSocketId = null) {
-    if (!channelId) {
+    const normalizedChannelId = normalizeVoiceChannelId(channelId);
+    if (!normalizedChannelId) {
       return [];
     }
 
-    const roomSocketIds = getVoiceRoomSocketIds(channelId);
+    const trackedRoom = getTrackedVoiceRoom(normalizedChannelId);
+    if (!trackedRoom?.size) {
+      return [];
+    }
 
-    return [...io.sockets.sockets.values()]
-      .filter((peerSocket) => {
-        if (!peerSocket?.id || peerSocket.id === excludedSocketId) {
+    const peers = [];
+    for (const [socketId, peerEntry] of trackedRoom.entries()) {
+      if (!socketId || socketId === excludedSocketId) {
+        continue;
+      }
+
+      const peerSocket = io.sockets.sockets.get(socketId);
+      if (!peerSocket?.data?.user?.id) {
+        unregisterVoicePeer(normalizedChannelId, socketId);
+        continue;
+      }
+
+      const peerChannelId = normalizeVoiceChannelId(peerSocket.data.voiceChannelId);
+      if (peerChannelId !== normalizedChannelId) {
+        unregisterVoicePeer(normalizedChannelId, socketId);
+        continue;
+      }
+
+      peers.push({
+        peerId: socketId,
+        userId: peerEntry?.userId || peerSocket.data.user.id
+      });
+    }
+
+    return peers;
+  }
+
+  function listAdapterVoicePeers(channelId, excludedSocketId = null) {
+    const normalizedChannelId = normalizeVoiceChannelId(channelId);
+    if (!normalizedChannelId) {
+      return [];
+    }
+
+    return [...getAdapterVoiceRoomSocketIds(normalizedChannelId)]
+      .filter((socketId) => {
+        if (!socketId || socketId === excludedSocketId) {
           return false;
         }
 
+        const peerSocket = io.sockets.sockets.get(socketId);
         if (!peerSocket?.data?.user?.id) {
           return false;
         }
 
-        return (
-          peerSocket.data.voiceChannelId === channelId ||
-          roomSocketIds.has(peerSocket.id)
-        );
+        return normalizeVoiceChannelId(peerSocket.data.voiceChannelId) === normalizedChannelId;
       })
       .map((peerSocket) => ({
-        peerId: peerSocket.id,
-        userId: peerSocket.data.user.id
+        peerId: peerSocket,
+        userId: io.sockets.sockets.get(peerSocket)?.data?.user?.id || null
       }))
       .filter(Boolean);
   }
@@ -389,12 +487,14 @@ export async function startServer(options = {}) {
   }
 
   function emitVoicePeerSnapshots(channelId) {
-    if (!channelId) {
+    const normalizedChannelId = normalizeVoiceChannelId(channelId);
+    if (!normalizedChannelId) {
       return;
     }
 
-    const roomSocketIds = getVoiceRoomSocketIds(channelId);
-    const peersInChannel = listVoicePeers(channelId);
+    const roomSocketIds = getVoiceRoomSocketIds(normalizedChannelId);
+    const adapterSocketIds = getAdapterVoiceRoomSocketIds(normalizedChannelId);
+    const peersInChannel = listVoicePeers(normalizedChannelId);
     if (!roomSocketIds.size && !peersInChannel.length) {
       return;
     }
@@ -409,9 +509,10 @@ export async function startServer(options = {}) {
         continue;
       }
 
-      const peers = listVoicePeers(channelId, socketId);
+      const peers = listVoicePeers(normalizedChannelId, socketId);
       logVoiceServer("peers:snapshot", {
-        channelId,
+        channelId: normalizedChannelId,
+        adapterSocketIds: [...adapterSocketIds],
         roomSocketIds: [...roomSocketIds],
         socketId,
         targetSocketId: socketId,
@@ -420,7 +521,7 @@ export async function startServer(options = {}) {
       });
 
       targetSocket.emit("voice:peers", {
-        channelId,
+        channelId: normalizedChannelId,
         peers
       });
     }
@@ -440,7 +541,7 @@ export async function startServer(options = {}) {
   }
 
   function leaveVoiceChannel(socket, userId) {
-    const previousChannelId = socket.data.voiceChannelId;
+    const previousChannelId = normalizeVoiceChannelId(socket.data.voiceChannelId);
     if (!previousChannelId) {
       return;
     }
@@ -451,6 +552,7 @@ export async function startServer(options = {}) {
       userId
     });
 
+    unregisterVoicePeer(previousChannelId, socket.id);
     socket.to(`voice:${previousChannelId}`).emit("voice:peer-left", {
       channelId: previousChannelId,
       peerId: socket.id,
@@ -1397,56 +1499,62 @@ export async function startServer(options = {}) {
       }
 
       try {
+        const normalizedChannelId = normalizeVoiceChannelId(channelId);
         const canAccess = await store.canAccessChannel({
-          channelId,
+          channelId: normalizedChannelId,
           userId: viewer.id
         });
-        const channel = await store.getChannel(channelId);
+        const channel = await store.getChannel(normalizedChannelId);
 
         if (!canAccess || !canUseSharedVoiceChannel(channel)) {
           socket.emit("room:error", {
-            channelId,
+            channelId: normalizedChannelId,
             error: "No puedes entrar a esta llamada."
           });
           return;
         }
 
-        if (socket.data.voiceChannelId === channelId) {
+        if (normalizeVoiceChannelId(socket.data.voiceChannelId) === normalizedChannelId) {
           logVoiceServer("join:already", {
-            channelId,
+            channelId: normalizedChannelId,
+            adapterSocketIds: [...getAdapterVoiceRoomSocketIds(normalizedChannelId)],
+            roomSocketIds: [...getVoiceRoomSocketIds(normalizedChannelId)],
             socketId: socket.id,
             userId: viewer.id
           });
-          socket.emit("voice:update", buildVoicePayload(channelId));
+          socket.emit("voice:update", buildVoicePayload(normalizedChannelId));
           socket.emit("voice:peers", {
-            channelId,
-            peers: listVoicePeers(channelId, socket.id)
+            channelId: normalizedChannelId,
+            peers: listVoicePeers(normalizedChannelId, socket.id)
           });
           return;
         }
 
         leaveVoiceChannel(socket, viewer.id);
 
-        const channelUsers = voiceSessions.get(channelId) || new Map();
+        const channelUsers = voiceSessions.get(normalizedChannelId) || new Map();
         channelUsers.set(viewer.id, (channelUsers.get(viewer.id) || 0) + 1);
-        voiceSessions.set(channelId, channelUsers);
+        voiceSessions.set(normalizedChannelId, channelUsers);
 
-        socket.data.voiceChannelId = channelId;
-        await socket.join(`voice:${channelId}`);
+        registerVoicePeer(normalizedChannelId, socket, viewer.id);
+        socket.data.voiceChannelId = normalizedChannelId;
+        await socket.join(`voice:${normalizedChannelId}`);
         await new Promise((resolve) => setImmediate(resolve));
-        const peers = listVoicePeers(channelId, socket.id);
+        const peers = listVoicePeers(normalizedChannelId, socket.id);
         logVoiceServer("join", {
-          channelId,
+          channelId: normalizedChannelId,
+          adapterPeerIds: listAdapterVoicePeers(normalizedChannelId, socket.id).map((peer) => peer.peerId),
+          adapterSocketIds: [...getAdapterVoiceRoomSocketIds(normalizedChannelId)],
           peerIds: peers.map((peer) => peer.peerId),
           peerUserIds: peers.map((peer) => peer.userId),
-          roomSocketIds: [...getVoiceRoomSocketIds(channelId)],
+          roomSocketIds: [...getVoiceRoomSocketIds(normalizedChannelId)],
           socketId: socket.id,
           userId: viewer.id
         });
-        emitVoiceUpdate(channelId);
-        emitVoicePeerSnapshots(channelId);
+        emitVoiceUpdate(normalizedChannelId);
+        emitVoicePeerSnapshots(normalizedChannelId);
         socket.emit("voice:joined", {
-          channelId,
+          channelId: normalizedChannelId,
           peerId: socket.id,
           peers
         });
@@ -1459,7 +1567,7 @@ export async function startServer(options = {}) {
     });
 
     socket.on("voice:sync-peers", ({ channelId: requestedChannelId } = {}) => {
-      const channelId = requestedChannelId || socket.data.voiceChannelId;
+      const channelId = normalizeVoiceChannelId(requestedChannelId || socket.data.voiceChannelId);
       if (!channelId) {
         socket.emit("voice:peers", {
           channelId: null,
@@ -1471,6 +1579,8 @@ export async function startServer(options = {}) {
       const peers = listVoicePeers(channelId, socket.id);
       logVoiceServer("sync-peers", {
         channelId,
+        adapterPeerIds: listAdapterVoicePeers(channelId, socket.id).map((peer) => peer.peerId),
+        adapterSocketIds: [...getAdapterVoiceRoomSocketIds(channelId)],
         peerIds: peers.map((peer) => peer.peerId),
         peerUserIds: peers.map((peer) => peer.userId),
         requestedChannelId: requestedChannelId || null,
@@ -1485,13 +1595,13 @@ export async function startServer(options = {}) {
     });
 
     socket.on("voice:signal", ({ signal, targetPeerId }) => {
-      const channelId = socket.data.voiceChannelId;
+      const channelId = normalizeVoiceChannelId(socket.data.voiceChannelId);
       if (!channelId || !targetPeerId || targetPeerId === socket.id || !signal) {
         return;
       }
 
       const targetSocket = io.sockets.sockets.get(targetPeerId);
-      if (!targetSocket || targetSocket.data.voiceChannelId !== channelId) {
+      if (!targetSocket || normalizeVoiceChannelId(targetSocket.data.voiceChannelId) !== channelId) {
         return;
       }
 

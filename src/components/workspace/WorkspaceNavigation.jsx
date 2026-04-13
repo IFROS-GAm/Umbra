@@ -16,6 +16,44 @@ import {
 } from "./workspaceHelpers.js";
 import { buildServerRailItems, findServerFolderByGuildId } from "./serverFolders.js";
 
+function buildVoiceOccupantBadge({ activeGuild, user }) {
+  if (!user) {
+    return null;
+  }
+
+  if (activeGuild?.owner_id && activeGuild.owner_id === user.id) {
+    return {
+      label: "OWNER",
+      tone: "gold"
+    };
+  }
+
+  if (user.is_voice_self) {
+    return {
+      label: "TU",
+      tone: "accent"
+    };
+  }
+
+  const customStatus = String(user.custom_status || "").trim();
+  if (customStatus && customStatus.length <= 12) {
+    return {
+      label: customStatus.toUpperCase(),
+      tone: "soft"
+    };
+  }
+
+  const normalizedStatus = String(user.status || "").trim().toLowerCase();
+  if (normalizedStatus && normalizedStatus !== "offline" && normalizedStatus !== "invisible") {
+    return {
+      label: normalizedStatus.toUpperCase(),
+      tone: normalizedStatus === "dnd" ? "danger" : "success"
+    };
+  }
+
+  return null;
+}
+
 export function WorkspaceNavigation({
   activeGuild,
   activeGuildTextChannels,
@@ -783,6 +821,29 @@ export function WorkspaceNavigation({
   }
 
   function renderVoiceChannel(channel, { nested = false } = {}) {
+    const channelUsers = voiceUsersByChannel[channel.id] || [];
+    const connectedCount = Math.max(
+      (voiceSessions[channel.id] || []).length,
+      channelUsers.length,
+      joinedVoiceChannelId === channel.id ? 1 : 0
+    );
+    const missingOccupantCount = Math.max(0, connectedCount - channelUsers.length);
+    const visibleChannelUsers = [
+      ...channelUsers,
+      ...Array.from({ length: missingOccupantCount }, (_, index) => ({
+        id: `${channel.id}-voice-fallback-${index}`,
+        username: "Usuario conectado",
+        display_name: "Usuario conectado",
+        avatar_hue: 215,
+        avatar_url: "",
+        custom_status: "",
+        is_voice_fallback: true,
+        is_voice_self: false,
+        role_color: null,
+        status: "online"
+      }))
+    ];
+
     return (
       <div
         className={`voice-channel-block ${nested ? "nested" : ""}`.trim()}
@@ -796,6 +857,8 @@ export function WorkspaceNavigation({
           className={`channel-row voice ${nested ? "nested" : ""} ${
             activeSelection.channelId === channel.id ? "active" : ""
           } ${joinedVoiceChannelId === channel.id ? "connected" : ""} ${
+            connectedCount ? "occupied" : ""
+          } ${
             draggedChannelId === channel.id ? "dragging" : ""
           } ${
             channelDropHint?.type === "channel" && channelDropHint.targetId === channel.id
@@ -815,34 +878,55 @@ export function WorkspaceNavigation({
             <span>{channel.name}</span>
           </span>
           <span className="voice-channel-meta">
-            <b>{formatVoiceCount((voiceSessions[channel.id] || []).length)} / 15</b>
+            <b>{formatVoiceCount(connectedCount)} / 15</b>
           </span>
         </button>
 
-        {(voiceUsersByChannel[channel.id] || []).length ? (
-          <div className="voice-channel-occupants">
-            {(voiceUsersByChannel[channel.id] || []).map((user) => (
-              <button
-                className="voice-channel-occupant"
-                key={`${channel.id}-${user.id}`}
-                onClick={(event) => onOpenProfileCard(event, user, user.display_name)}
-                type="button"
-              >
-                <Avatar
-                  hue={user.avatar_hue}
-                  label={user.display_name || user.username}
-                  size={24}
-                  src={user.avatar_url}
-                  status={user.status}
-                />
-                <span title={user.display_name || user.username}>
-                  {user.display_name || user.username}
-                </span>
-                {user.id === workspace.current_user.id && voiceState.screenShareEnabled ? (
-                  <em>EN VIVO</em>
-                ) : null}
-              </button>
-            ))}
+        {visibleChannelUsers.length ? (
+          <div className="voice-channel-occupants voice-channel-occupants-layered">
+            {visibleChannelUsers.map((user) => {
+              const badge = buildVoiceOccupantBadge({
+                activeGuild,
+                user
+              });
+
+              return (
+                <button
+                  className={`voice-channel-occupant ${user.is_voice_fallback ? "is-fallback" : ""}`.trim()}
+                  key={`${channel.id}-${user.id}`}
+                  onClick={(event) => onOpenProfileCard(event, user, user.display_name)}
+                  type="button"
+                >
+                  <Avatar
+                    hue={user.avatar_hue}
+                    label={user.display_name || user.username}
+                    size={24}
+                    src={user.avatar_url}
+                    status={user.status}
+                  />
+                  <span className="voice-channel-occupant-copy">
+                    <strong
+                      style={user.role_color ? { color: user.role_color } : undefined}
+                      title={user.display_name || user.username}
+                    >
+                      {user.display_name || user.username}
+                    </strong>
+                    <small>
+                      {user.custom_status ||
+                        (user.is_voice_fallback ? "Sincronizando presencia..." : "Conectado al canal")}
+                    </small>
+                  </span>
+                  <span className="voice-channel-occupant-badges">
+                    {badge ? (
+                      <em className={`voice-channel-badge ${badge.tone}`.trim()}>{badge.label}</em>
+                    ) : null}
+                    {user.id === workspace.current_user.id && voiceState.screenShareEnabled ? (
+                      <em className="voice-channel-badge danger">EN VIVO</em>
+                    ) : null}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         ) : null}
 
@@ -850,13 +934,13 @@ export function WorkspaceNavigation({
           <div className="voice-channel-preview floating-surface">
             <strong>{channel.name}</strong>
             <span>
-              {(voiceUsersByChannel[channel.id] || []).length
-                ? `${(voiceUsersByChannel[channel.id] || []).length} persona(s) dentro`
+              {connectedCount
+                ? `${connectedCount} persona(s) dentro`
                 : "Nadie dentro todavia"}
             </span>
-            {(voiceUsersByChannel[channel.id] || []).length ? (
+            {visibleChannelUsers.length ? (
               <div className="voice-channel-preview-avatars">
-                {(voiceUsersByChannel[channel.id] || []).slice(0, 4).map((user) => (
+                {visibleChannelUsers.slice(0, 4).map((user) => (
                   <Avatar
                     hue={user.avatar_hue}
                     key={`${channel.id}-preview-${user.id}`}
