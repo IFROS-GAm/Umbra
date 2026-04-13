@@ -298,6 +298,7 @@ async function startEmbeddedServer() {
 async function createWindow() {
   const preloadPath = path.join(__dirname, "preload.cjs");
   const iconPath = resolveDesktopIconPath();
+  const runtimeConfig = getDesktopRuntimeConfig();
 
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -320,13 +321,18 @@ async function createWindow() {
       "http://127.0.0.1:5173",
       "http://localhost:5173",
       "http://127.0.0.1:5174",
-      "http://localhost:5174"
+      "http://localhost:5174",
+      runtimeConfig.publicAppUrl || null
     ];
     let loaded = false;
     let lastError = null;
 
     for (let attempt = 0; attempt < 12 && !loaded; attempt += 1) {
       for (const url of devUrls) {
+        if (!url) {
+          continue;
+        }
+
         try {
           await mainWindow.loadURL(url);
           loaded = true;

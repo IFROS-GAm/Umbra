@@ -3,6 +3,7 @@ import { startTransition, useEffect, useRef } from "react";
 import { api } from "../../api.js";
 import { getSocket } from "../../socket.js";
 import { supabase } from "../../supabase-browser.js";
+import { findChannelInSession } from "../../utils.js";
 import {
   applyChannelPreviewToWorkspace,
   isChannelCacheFresh,
