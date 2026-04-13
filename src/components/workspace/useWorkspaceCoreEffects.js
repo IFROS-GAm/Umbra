@@ -543,7 +543,7 @@ export function useWorkspaceCoreEffects({
 
     const onVoiceJoined = ({ channelId, peers, peerId }) => {
       console.debug("[voice] joined", { channelId, peerId, peers });
-      if (channelId && joinedVoiceChannelIdRef.current === channelId) {
+      if (channelId) {
         setVoiceJoinReadyChannelId(channelId);
       }
     };

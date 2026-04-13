@@ -159,11 +159,14 @@ export function useUmbraWorkspaceCore({
   }
 
   function setJoinedVoiceChannelId(nextChannelIdOrUpdater) {
+    if (typeof nextChannelIdOrUpdater !== "function") {
+      joinedVoiceChannelIdRef.current = nextChannelIdOrUpdater;
+      setJoinedVoiceChannelIdState(nextChannelIdOrUpdater);
+      return;
+    }
+
     setJoinedVoiceChannelIdState((previous) => {
-      const nextChannelId =
-        typeof nextChannelIdOrUpdater === "function"
-          ? nextChannelIdOrUpdater(previous)
-          : nextChannelIdOrUpdater;
+      const nextChannelId = nextChannelIdOrUpdater(previous);
       joinedVoiceChannelIdRef.current = nextChannelId;
       return nextChannelId;
     });
@@ -473,6 +476,7 @@ export function useUmbraWorkspaceCore({
     setUiNotice,
     setUploadingAttachments,
     setVoiceMenu,
+    setVoiceJoinReadyChannelId,
     setVoiceSessions,
     setVoiceState,
     setWorkspace,
