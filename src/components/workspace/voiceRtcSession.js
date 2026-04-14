@@ -413,7 +413,6 @@ export function createVoiceRtcSession({
   }
 
   async function syncSenderTrack({
-    addStream,
     entry,
     nextTrack,
     senderKey
@@ -439,7 +438,13 @@ export function createVoiceRtcSession({
       }
     }
 
-    if (!nextTrack || !addStream) {
+    if (!nextTrack) {
+      return false;
+    }
+
+    const addStream =
+      senderKey === "audioSender" ? localAudioStream : getCurrentLocalVideoStream();
+    if (!addStream) {
       return false;
     }
 
@@ -449,7 +454,6 @@ export function createVoiceRtcSession({
 
   async function syncLocalAudioToPeer(entry, { renegotiate = false } = {}) {
     const changed = await syncSenderTrack({
-      addStream: localAudioStream,
       entry,
       nextTrack: getCurrentLocalAudioTrack(),
       senderKey: "audioSender"
@@ -461,10 +465,8 @@ export function createVoiceRtcSession({
   }
 
   async function syncLocalVideoToPeer(entry, { renegotiate = false } = {}) {
-    const localVideoStream = getCurrentLocalVideoStream();
     const nextTrack = getCurrentLocalVideoTrack();
     const changed = await syncSenderTrack({
-      addStream: localVideoStream,
       entry,
       nextTrack,
       senderKey: "videoSender"
@@ -536,10 +538,17 @@ export function createVoiceRtcSession({
     }
 
     const audioElement = createHiddenAudioElement();
+    const peerConnection = new RTCPeerConnection(buildRtcConfiguration());
+    const audioTransceiver = peerConnection.addTransceiver("audio", {
+      direction: "sendrecv"
+    });
+    const videoTransceiver = peerConnection.addTransceiver("video", {
+      direction: "sendrecv"
+    });
 
     const entry = {
       audioElement,
-      audioSender: null,
+      audioSender: audioTransceiver.sender,
       cameraEnabled: Boolean(cameraEnabled),
       deafened: Boolean(deafened),
       destroyed: false,
@@ -548,7 +557,7 @@ export function createVoiceRtcSession({
       isSettingRemoteAnswerPending: false,
       makingOffer: false,
       micMuted: Boolean(micMuted),
-      peerConnection: new RTCPeerConnection(buildRtcConfiguration()),
+      peerConnection,
       peerId,
       pendingNegotiation: false,
       remoteAudioStream: createRemoteStream(),
@@ -556,7 +565,8 @@ export function createVoiceRtcSession({
       screenShareEnabled: Boolean(screenShareEnabled),
       speaking: Boolean(speaking),
       userId,
-      videoMode
+      videoMode,
+      videoSender: videoTransceiver.sender
     };
 
     audioElement.srcObject = entry.remoteAudioStream;
@@ -641,6 +651,17 @@ export function createVoiceRtcSession({
         iceGatheringState: entry.peerConnection.iceGatheringState,
         peerId,
         userId: entry.userId || null
+      });
+    };
+
+    entry.peerConnection.onnegotiationneeded = () => {
+      if (destroyed || entry.destroyed) {
+        return;
+      }
+
+      log("rtc:negotiationneeded", { peerId, userId: entry.userId || null });
+      negotiatePeer(entry).catch((error) => {
+        handleSessionError(error);
       });
     };
 
