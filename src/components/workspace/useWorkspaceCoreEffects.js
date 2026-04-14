@@ -207,6 +207,7 @@ export function useWorkspaceCoreEffects({
   topbarActionsRef,
   uiNotice,
   voiceInputSessionRef,
+  voiceInputSpeaking,
   voiceInputStream,
   voiceMenu,
   voicePeerMedia,

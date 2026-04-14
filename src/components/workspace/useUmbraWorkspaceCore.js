@@ -392,6 +392,7 @@ export function useUmbraWorkspaceCore({
     topbarActionsRef,
     uiNotice,
     voiceInputSessionRef,
+    voiceInputSpeaking,
     voiceInputStream,
     voiceMenu,
     voicePeerMedia,
