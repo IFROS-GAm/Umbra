@@ -102,7 +102,7 @@ export function UmbraWorkspace({
     showUiNotice, submittingMessage, toggleHeaderPanel, toggleVoiceMenu, toggleVoiceState, topbarActionsRef,
     screenShareStream, setScreenShareStream,
     typingUsers, uiNotice, updateVoiceSetting, uploadingAttachments, voiceDevices, voiceMenu,
-    voicePeerMedia, voiceSessions, voiceState, voiceUserIds, voiceInputLevel, voiceInputSpeaking, voiceInputStatus, workspace,
+    voicePeerMedia, voicePresenceUsers, voiceSessions, voiceState, voiceUserIds, voiceInputLevel, voiceInputSpeaking, voiceInputStatus, workspace,
     updateComposerAttachment,
     cycleVoiceDevice, getSelectedDeviceLabel, selectedVoiceDevices
   } = useUmbraWorkspaceCore({ accessToken, initialSelection, onSignOut });
@@ -844,6 +844,7 @@ export function UmbraWorkspace({
         const userPrefs = getVoiceParticipantPref(user.id);
         const isCurrentVoiceUser = user.id === currentUserId;
         const remoteMedia = !isCurrentVoiceUser ? voicePeerMedia?.[user.id] || null : null;
+        const remotePresence = !isCurrentVoiceUser ? voicePresenceUsers?.[user.id] || null : null;
         const remoteCameraStream =
           remoteMedia?.cameraStream && !userPrefs.videoHidden ? remoteMedia.cameraStream : null;
         const remoteScreenShareStream =
@@ -857,17 +858,21 @@ export function UmbraWorkspace({
           isCurrentUser: isCurrentVoiceUser,
           isCameraOn: isCurrentVoiceUser
             ? voiceState.cameraEnabled
-            : Boolean(remoteCameraStream),
-          isDeafened: isCurrentVoiceUser ? Boolean(voiceState.deafen) : Boolean(remoteMedia?.deafened),
+            : Boolean(remoteCameraStream || remotePresence?.cameraEnabled),
+          isDeafened: isCurrentVoiceUser
+            ? Boolean(voiceState.deafen)
+            : Boolean(remoteMedia?.deafened || remotePresence?.deafened),
           isLocallyMuted: userPrefs.muted,
-          isMuted: isCurrentVoiceUser ? Boolean(voiceState.micMuted) : Boolean(remoteMedia?.micMuted),
+          isMuted: isCurrentVoiceUser
+            ? Boolean(voiceState.micMuted)
+            : Boolean(remoteMedia?.micMuted || remotePresence?.micMuted),
           isSpeaking:
             isCurrentVoiceUser
               ? !voiceState.micMuted && !voiceState.deafen && voiceInputSpeaking
-              : Boolean(remoteMedia?.speaking),
+              : Boolean(remoteMedia?.speaking || remotePresence?.speaking),
           isStreaming: isCurrentVoiceUser
             ? voiceState.screenShareEnabled
-            : Boolean(remoteScreenShareStream),
+            : Boolean(remoteScreenShareStream || remotePresence?.screenShareEnabled),
           isVideoHiddenForMe: userPrefs.videoHidden,
           localCameraStream:
             isCurrentVoiceUser
@@ -897,6 +902,7 @@ export function UmbraWorkspace({
       t,
       voiceInputSpeaking,
       voicePeerMedia,
+      voicePresenceUsers,
       voiceParticipantPrefs,
       voiceState.cameraEnabled,
       voiceState.deafen,

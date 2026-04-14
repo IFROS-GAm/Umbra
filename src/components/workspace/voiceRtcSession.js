@@ -1,13 +1,110 @@
 import { supabase } from "../../supabase-browser.js";
 import { buildVoicePeersFromPresenceState } from "./voiceRealtimeHelpers.js";
 
-const DEFAULT_RTC_CONFIGURATION = {
-  iceServers: [
-    {
-      urls: ["stun:stun.l.google.com:19302"]
+const DEFAULT_ICE_SERVERS = [
+  {
+    urls: [
+      "stun:stun.l.google.com:19302",
+      "stun:stun1.l.google.com:19302",
+      "stun:stun2.l.google.com:19302",
+      "stun:openrelay.metered.ca:80"
+    ]
+  },
+  {
+    credential: "openrelayproject",
+    urls: [
+      "turn:openrelay.metered.ca:80",
+      "turn:openrelay.metered.ca:443",
+      "turn:openrelay.metered.ca:443?transport=tcp"
+    ],
+    username: "openrelayproject"
+  }
+];
+
+function normalizeIceUrls(urls) {
+  if (Array.isArray(urls)) {
+    return urls.map((value) => String(value || "").trim()).filter(Boolean);
+  }
+
+  return String(urls || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function normalizeIceServer(server = {}) {
+  const urls = normalizeIceUrls(server.urls);
+  if (!urls.length) {
+    return null;
+  }
+
+  return {
+    ...("credential" in server ? { credential: server.credential } : {}),
+    urls,
+    ...("username" in server ? { username: server.username } : {})
+  };
+}
+
+function parseIceServersFromEnv() {
+  const rawJson = String(import.meta.env.VITE_WEBRTC_ICE_SERVERS_JSON || "").trim();
+  const envTurnUrls = normalizeIceUrls(import.meta.env.VITE_WEBRTC_TURN_URLS || "");
+  const envTurnUsername = String(import.meta.env.VITE_WEBRTC_TURN_USERNAME || "").trim();
+  const envTurnCredential = String(import.meta.env.VITE_WEBRTC_TURN_CREDENTIAL || "").trim();
+  const parsedServers = [];
+
+  if (rawJson) {
+    try {
+      const decoded = JSON.parse(rawJson);
+      const list = Array.isArray(decoded) ? decoded : [decoded];
+      list
+        .map((entry) => normalizeIceServer(entry))
+        .filter(Boolean)
+        .forEach((entry) => {
+          parsedServers.push(entry);
+        });
+    } catch (error) {
+      console.warn("[voice/client] ice:config:invalid-json", {
+        message: error?.message || "No se pudo leer VITE_WEBRTC_ICE_SERVERS_JSON."
+      });
     }
-  ]
-};
+  }
+
+  if (envTurnUrls.length && envTurnUsername && envTurnCredential) {
+    parsedServers.push({
+      credential: envTurnCredential,
+      urls: envTurnUrls,
+      username: envTurnUsername
+    });
+  }
+
+  return parsedServers;
+}
+
+const ENV_ICE_SERVERS = parseIceServersFromEnv();
+const SHOULD_FORCE_RELAY =
+  String(import.meta.env.VITE_WEBRTC_FORCE_RELAY || "").trim().toLowerCase() === "true";
+
+function buildRtcConfiguration() {
+  const dedupedServers = new Map();
+  const sourceServers = ENV_ICE_SERVERS.length ? ENV_ICE_SERVERS : DEFAULT_ICE_SERVERS;
+
+  sourceServers
+    .map((entry) => normalizeIceServer(entry))
+    .filter(Boolean)
+    .forEach((entry) => {
+      const key = JSON.stringify(entry);
+      if (!dedupedServers.has(key)) {
+        dedupedServers.set(key, entry);
+      }
+    });
+
+  return {
+    bundlePolicy: "max-bundle",
+    iceCandidatePoolSize: 4,
+    iceServers: [...dedupedServers.values()],
+    iceTransportPolicy: SHOULD_FORCE_RELAY ? "relay" : "all"
+  };
+}
 
 function clampUnitVolume(value, fallback = 1) {
   const numeric = Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -446,10 +543,11 @@ export function createVoiceRtcSession({
       deafened: Boolean(deafened),
       destroyed: false,
       ignoreOffer: false,
+      iceRestartAttempts: 0,
       isSettingRemoteAnswerPending: false,
       makingOffer: false,
       micMuted: Boolean(micMuted),
-      peerConnection: new RTCPeerConnection(DEFAULT_RTC_CONFIGURATION),
+      peerConnection: new RTCPeerConnection(buildRtcConfiguration()),
       peerId,
       pendingNegotiation: false,
       remoteAudioStream: createRemoteStream(),
@@ -513,9 +611,36 @@ export function createVoiceRtcSession({
     entry.peerConnection.onconnectionstatechange = () => {
       const { connectionState } = entry.peerConnection;
       log("rtc:state", { connectionState, peerId, userId: entry.userId || null });
+      if (connectionState === "failed" && entry.iceRestartAttempts < 1) {
+        entry.iceRestartAttempts += 1;
+        log("rtc:restart-ice", { peerId, userId: entry.userId || null }, "warn");
+        entry.peerConnection.restartIce?.();
+        queueMicrotask(() => {
+          negotiatePeer(entry);
+        });
+        return;
+      }
+
       if (connectionState === "failed" || connectionState === "closed") {
         cleanupPeer(peerId);
       }
+    };
+
+    entry.peerConnection.oniceconnectionstatechange = () => {
+      const { iceConnectionState } = entry.peerConnection;
+      log("ice:state", {
+        iceConnectionState,
+        peerId,
+        userId: entry.userId || null
+      });
+    };
+
+    entry.peerConnection.onicegatheringstatechange = () => {
+      log("ice:gathering", {
+        iceGatheringState: entry.peerConnection.iceGatheringState,
+        peerId,
+        userId: entry.userId || null
+      });
     };
 
     await syncLocalAudioToPeer(entry, {

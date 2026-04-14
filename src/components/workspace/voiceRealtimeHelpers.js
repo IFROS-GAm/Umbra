@@ -43,6 +43,57 @@ export function buildVoiceSessionsFromPresenceState(state = {}) {
   );
 }
 
+export function buildVoicePresenceUsersFromState(state = {}) {
+  const users = new Map();
+
+  flattenRealtimePresenceState(state).forEach((entry) => {
+    if (!entry.userId) {
+      return;
+    }
+
+    const updatedAt = Date.parse(entry.updatedAt || entry.joinedAt || "") || 0;
+    const existing = users.get(entry.userId) || null;
+
+    if (!existing) {
+      users.set(entry.userId, {
+        cameraEnabled: Boolean(entry.cameraEnabled),
+        channelId: entry.channelId || "",
+        deafened: Boolean(entry.deafened),
+        micMuted: Boolean(entry.micMuted),
+        peerId: entry.peerId || "",
+        screenShareEnabled: Boolean(entry.screenShareEnabled),
+        speaking: Boolean(entry.speaking),
+        updatedAt,
+        userId: entry.userId,
+        videoMode: entry.videoMode || ""
+      });
+      return;
+    }
+
+    users.set(entry.userId, {
+      cameraEnabled: existing.cameraEnabled || Boolean(entry.cameraEnabled),
+      channelId:
+        updatedAt >= existing.updatedAt ? entry.channelId || existing.channelId : existing.channelId,
+      deafened: existing.deafened || Boolean(entry.deafened),
+      micMuted: existing.micMuted || Boolean(entry.micMuted),
+      peerId: updatedAt >= existing.updatedAt ? entry.peerId || existing.peerId : existing.peerId,
+      screenShareEnabled: existing.screenShareEnabled || Boolean(entry.screenShareEnabled),
+      speaking: existing.speaking || Boolean(entry.speaking),
+      updatedAt: Math.max(existing.updatedAt || 0, updatedAt),
+      userId: entry.userId,
+      videoMode:
+        updatedAt >= existing.updatedAt ? entry.videoMode || existing.videoMode : existing.videoMode
+    });
+  });
+
+  return Object.fromEntries(
+    [...users.entries()].map(([userId, entry]) => {
+      const { updatedAt, ...safeEntry } = entry;
+      return [userId, safeEntry];
+    })
+  );
+}
+
 export function buildVoicePeersFromPresenceState(
   state = {},
   { channelId, currentUserId = "", localPeerId = "" } = {}

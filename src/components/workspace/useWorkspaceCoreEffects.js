@@ -15,6 +15,7 @@ import { BACKGROUND_PREFETCH_COOLDOWN_MS } from "./workspaceCoreMessageStore.js"
 import { createVoiceCameraSession } from "./voiceCameraSession.js";
 import { createVoiceInputProcessingSession } from "./voiceInputProcessing.js";
 import {
+  buildVoicePresenceUsersFromState,
   buildVoiceSessionsFromPresenceState
 } from "./voiceRealtimeHelpers.js";
 import { createVoiceRtcSession } from "./voiceRtcSession.js";
@@ -200,6 +201,7 @@ export function useWorkspaceCoreEffects({
   setVoiceJoinReadyChannelId,
   setVoiceMenu,
   setVoicePeerMedia,
+  setVoicePresenceUsers,
   setVoiceSessions,
   setVoiceState,
   setWorkspace,
@@ -319,12 +321,14 @@ export function useWorkspaceCoreEffects({
       }
 
       const nextSessions = buildVoiceSessionsFromPresenceState(channel.presenceState());
+      const nextPresenceUsers = buildVoicePresenceUsersFromState(channel.presenceState());
       console.info("[voice/client] realtime:presence:sync", {
         channelIds: Object.keys(nextSessions),
         peerId: localVoicePeerIdRef.current,
         userId: workspaceRef.current?.current_user?.id || null
       });
       applyVoiceSessions(nextSessions);
+      setVoicePresenceUsers(nextPresenceUsers);
     };
 
     const syncTrackedPresence = async () => {
@@ -372,11 +376,13 @@ export function useWorkspaceCoreEffects({
 
       channel.untrack().catch(() => {});
       supabase.removeChannel(channel).catch(() => {});
+      setVoicePresenceUsers({});
     };
   }, [accessToken, workspace?.mode, workspace?.current_user?.id]);
 
   useEffect(() => {
     if (!supabase || workspace?.mode !== "supabase") {
+      setVoicePresenceUsers({});
       return undefined;
     }
 

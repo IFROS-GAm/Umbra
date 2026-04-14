@@ -81,6 +81,7 @@ export function useUmbraWorkspaceCore({
     shareAudio: true
   });
   const [voiceSessions, setVoiceSessions] = useState({});
+  const [voicePresenceUsers, setVoicePresenceUsers] = useState({});
   const [voiceJoinReadyChannelId, setVoiceJoinReadyChannelId] = useState(null);
   const [voiceDevices, setVoiceDevices] = useState({
     audioinput: [],
@@ -384,6 +385,7 @@ export function useUmbraWorkspaceCore({
     setVoiceJoinReadyChannelId,
     setVoiceMenu,
     setVoicePeerMedia,
+    setVoicePresenceUsers,
     setVoiceSessions,
     setVoiceState,
     setVoiceJoinReadyChannelId,
@@ -509,9 +511,9 @@ export function useUmbraWorkspaceCore({
     setComposerPicker, setDialog, setEditingMessage, setHeaderPanel, setHoveredVoiceChannelId, setInboxTab,
     setJoinedVoiceChannelId, setMembersPanelVisible, setMessageMenuFor, setProfileCard, setWorkspace,
     setReactionPickerFor, setReplyMentionEnabled, setReplyTarget, setSettingsOpen, setTheme, setTypingEvents,
-      setScreenShareStream, setSubmittingMessage, setUiNotice, setVoiceDevices, setVoiceMenu, setVoicePeerMedia, setVoiceSessions, setVoiceState, setVoiceJoinReadyChannelId, settingsOpen, showUiNotice,
+      setScreenShareStream, setSubmittingMessage, setUiNotice, setVoiceDevices, setVoiceMenu, setVoicePeerMedia, setVoicePresenceUsers, setVoiceSessions, setVoiceState, setVoiceJoinReadyChannelId, settingsOpen, showUiNotice,
     submittingMessage, theme, toggleHeaderPanel, toggleVoiceMenu, toggleVoiceState, topbarActionsRef, typingEvents, typingUsers,
     uiNotice, updateVoiceSetting, uploadingAttachments, voiceDevices, voiceInputLevel, voiceInputStatus,
-    voiceInputSpeaking, voiceJoinReadyChannelId, voiceJoinReadyChannelIdRef, voiceMenu, voicePeerMedia, voiceSessions, voiceState, voiceUserIds, screenShareStream, workspace
+    voiceInputSpeaking, voiceJoinReadyChannelId, voiceJoinReadyChannelIdRef, voiceMenu, voicePeerMedia, voicePresenceUsers, voiceSessions, voiceState, voiceUserIds, screenShareStream, workspace
   };
 }

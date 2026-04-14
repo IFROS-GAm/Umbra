@@ -14,6 +14,7 @@ function VoiceStageVideo({ muted = true, stream, user, volume = 1 }) {
     videoRef.current.srcObject = stream || null;
     videoRef.current.muted = Boolean(muted);
     videoRef.current.volume = Math.max(0, Math.min(1, Number(volume) || 0));
+    videoRef.current.play?.().catch(() => {});
 
     return () => {
       if (videoRef.current) {
@@ -71,6 +72,27 @@ export function VoiceRoomStage({
   }, [expandedStreamOpen, featuredStreamUser]);
 
   const currentUserId = workspace?.current_user?.id || null;
+  function renderParticipantMediaBadges(user, { compact = false } = {}) {
+    const badgeClass = compact
+      ? "direct-call-stage-mini-chip"
+      : "direct-call-stage-state-chip";
+
+    return (
+      <>
+        {user?.isStreaming ? (
+          <span className={badgeClass}>
+            <Icon name="screenShare" size={12} />
+          </span>
+        ) : null}
+        {user?.isCameraOn && !user?.localCameraStream ? (
+          <span className={badgeClass}>
+            <Icon name="camera" size={12} />
+          </span>
+        ) : null}
+      </>
+    );
+  }
+
   function renderParticipantAudioIndicator(user, { allowInputLevel = false } = {}) {
     if (user?.isDeafened) {
       return <Icon name="deafen" size={14} />;
@@ -348,11 +370,7 @@ export function VoiceRoomStage({
                       )}
 
                       <div className="direct-call-stage-avatar-icons">
-                        {user.isStreaming ? (
-                          <span className="direct-call-stage-mini-chip">
-                            <Icon name="screenShare" size={12} />
-                          </span>
-                        ) : null}
+                        {renderParticipantMediaBadges(user, { compact: true })}
                         {user.isMuted || user.isDeafened ? (
                           <span className="direct-call-stage-mini-chip danger">
                             <Icon name={user.isDeafened ? "deafen" : "micOff"} size={12} />
@@ -441,11 +459,7 @@ export function VoiceRoomStage({
                   </div>
 
                   <div className="direct-call-stage-member-flags">
-                    {user.isStreaming ? (
-                      <span className="direct-call-stage-state-chip">
-                        <Icon name="screenShare" size={12} />
-                      </span>
-                    ) : null}
+                    {renderParticipantMediaBadges(user)}
                     {user.isMuted || user.isDeafened ? (
                       <span className="direct-call-stage-state-chip danger">
                         <Icon name={user.isDeafened ? "deafen" : "micOff"} size={12} />
@@ -684,6 +698,9 @@ export function VoiceRoomStage({
                       {user.custom_status || "Umbra voice"}
                     </span>
                   )}
+                  <div className="direct-call-stage-member-flags">
+                    {renderParticipantMediaBadges(user)}
+                  </div>
                 </div>
 
                 <div className="voice-stage-center">
