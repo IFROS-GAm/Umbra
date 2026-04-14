@@ -8,6 +8,7 @@ export function createVoiceRtcSessionControls({
   getParticipantState,
   getPlaybackState,
   getPeers,
+  getRealtimePresenceSync,
   getRealtimeChannel,
   handlePeerLeft,
   handlePeersSnapshot,
@@ -104,12 +105,19 @@ export function createVoiceRtcSessionControls({
 
       if (realtimeEnabled) {
         const realtimeChannel = getRealtimeChannel();
+        const realtimePresenceSync = getRealtimePresenceSync?.() || null;
         if (realtimeChannel) {
           try {
-            await realtimeChannel.untrack();
+            if (realtimePresenceSync) {
+              await realtimePresenceSync.schedule(null);
+            } else {
+              await realtimeChannel.untrack();
+            }
           } catch {
             // Ignore untrack races during teardown.
           }
+
+          realtimePresenceSync?.dispose?.();
 
           try {
             await supabase.removeChannel(realtimeChannel);

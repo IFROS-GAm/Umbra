@@ -1,5 +1,13 @@
 import { buildVoiceStageTone } from "../../shared/workspaceHelpers.js";
 
+function resolveRemoteBoolean(remoteMedia, key, fallbackValue) {
+  if (remoteMedia && typeof remoteMedia[key] === "boolean") {
+    return remoteMedia[key];
+  }
+
+  return Boolean(fallbackValue);
+}
+
 export function buildVoiceStageParticipants({
   activeChannel,
   activeGuild,
@@ -84,6 +92,17 @@ export function buildVoiceStageParticipants({
       remoteMedia?.screenShareStream && !userPrefs.videoHidden
         ? remoteMedia.screenShareStream
         : null;
+    const remoteVideoMode = String(remoteMedia?.videoMode || peerEntry.videoMode || "").trim();
+    const remoteCameraEnabled = resolveRemoteBoolean(
+      remoteMedia,
+      "cameraEnabled",
+      peerEntry.cameraEnabled
+    );
+    const remoteStreamingEnabled = resolveRemoteBoolean(
+      remoteMedia,
+      "screenShareEnabled",
+      peerEntry.screenShareEnabled
+    );
 
     return {
       ...user,
@@ -91,20 +110,22 @@ export function buildVoiceStageParticipants({
       isCurrentUser: isCurrentVoicePeer,
       isCameraOn: isCurrentVoicePeer
         ? voiceState.cameraEnabled
-        : Boolean(remoteCameraStream || peerEntry.cameraEnabled),
+        : Boolean(remoteCameraStream || remoteVideoMode === "camera" || remoteCameraEnabled),
       isDeafened: isCurrentVoicePeer
         ? Boolean(voiceState.deafen)
-        : Boolean(remoteMedia?.deafened || peerEntry.deafened),
+        : resolveRemoteBoolean(remoteMedia, "deafened", peerEntry.deafened),
       isLocallyMuted: userPrefs.muted,
       isMuted: isCurrentVoicePeer
         ? Boolean(voiceState.micMuted)
-        : Boolean(remoteMedia?.micMuted || peerEntry.micMuted),
+        : resolveRemoteBoolean(remoteMedia, "micMuted", peerEntry.micMuted),
       isSpeaking: isCurrentVoicePeer
         ? !voiceState.micMuted && !voiceState.deafen && voiceInputSpeaking
-        : Boolean(remoteMedia?.speaking || peerEntry.speaking),
+        : resolveRemoteBoolean(remoteMedia, "speaking", peerEntry.speaking),
       isStreaming: isCurrentVoicePeer
         ? voiceState.screenShareEnabled
-        : Boolean(remoteScreenShareStream || peerEntry.screenShareEnabled),
+        : Boolean(
+            remoteScreenShareStream || remoteVideoMode === "screen" || remoteStreamingEnabled
+          ),
       isVideoHiddenForMe: userPrefs.videoHidden,
       localCameraStream: isCurrentVoicePeer
         ? userPrefs.videoHidden

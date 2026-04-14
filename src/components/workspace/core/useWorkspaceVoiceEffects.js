@@ -10,6 +10,7 @@ import {
   buildVoicePresenceUsersFromState,
   buildVoiceSessionsFromPresenceState
 } from "../voiceRealtimeHelpers.js";
+import { createRealtimePresenceSync } from "../voice/presence/createRealtimePresenceSync.js";
 import { createVoiceRtcSession } from "../voiceRtcSession.js";
 
 export function useWorkspaceVoiceEffects({
@@ -48,6 +49,8 @@ export function useWorkspaceVoiceEffects({
 }) {
   const voiceRtcSessionRef = useRef(null);
   const voicePresenceChannelRef = useRef(null);
+  const voicePresenceRevisionRef = useRef(0);
+  const voicePresenceSyncRef = useRef(null);
 
   function buildCurrentVoicePresencePayload() {
     const currentUserId = String(workspaceRef.current?.current_user?.id || "").trim();
@@ -80,6 +83,20 @@ export function useWorkspaceVoiceEffects({
     };
   }
 
+  function buildNextVoicePresencePayload() {
+    const payload = buildCurrentVoicePresencePayload();
+    if (!payload) {
+      return null;
+    }
+
+    voicePresenceRevisionRef.current += 1;
+
+    return {
+      ...payload,
+      revision: voicePresenceRevisionRef.current
+    };
+  }
+
   useEffect(() => {
     if (!supabase || !accessToken) {
       return;
@@ -101,7 +118,24 @@ export function useWorkspaceVoiceEffects({
         }
       }
     });
+    const presenceSync = createRealtimePresenceSync({
+      getChannel: () => (voicePresenceChannelRef.current === channel ? channel : null),
+      log: (event, details = {}, level = "info") => {
+        const logger = typeof console[level] === "function" ? console[level] : console.info;
+        logger(`[voice/client] realtime:presence:${event}`, {
+          peerId: voiceLocalPeerIdRef.current,
+          ...details
+        });
+      },
+      onError: (error) => {
+        console.warn("[voice/client] realtime:presence:error", {
+          error: error?.message || String(error),
+          peerId: voiceLocalPeerIdRef.current
+        });
+      }
+    });
     voicePresenceChannelRef.current = channel;
+    voicePresenceSyncRef.current = presenceSync;
 
     const syncPresenceState = () => {
       if (cancelled) {
@@ -123,24 +157,8 @@ export function useWorkspaceVoiceEffects({
     };
 
     const syncTrackedPresence = async () => {
-      const payload = buildCurrentVoicePresencePayload();
-
-      try {
-        if (payload) {
-          console.info("[voice/client] realtime:presence:track", payload);
-          await channel.track(payload);
-        } else {
-          console.info("[voice/client] realtime:presence:untrack", {
-            peerId: voiceLocalPeerIdRef.current
-          });
-          await channel.untrack();
-        }
-      } catch (error) {
-        console.warn("[voice/client] realtime:presence:error", {
-          error: error?.message || String(error),
-          peerId: voiceLocalPeerIdRef.current
-        });
-      }
+      const payload = buildNextVoicePresencePayload();
+      await presenceSync.schedule(payload);
     };
 
     channel.on("presence", { event: "sync" }, syncPresenceState);
@@ -164,7 +182,11 @@ export function useWorkspaceVoiceEffects({
       if (voicePresenceChannelRef.current === channel) {
         voicePresenceChannelRef.current = null;
       }
+      if (voicePresenceSyncRef.current === presenceSync) {
+        voicePresenceSyncRef.current = null;
+      }
 
+      presenceSync.dispose();
       channel.untrack().catch(() => {});
       supabase.removeChannel(channel).catch(() => {});
       setVoicePresencePeers({});
@@ -185,12 +207,17 @@ export function useWorkspaceVoiceEffects({
     }
 
     const payload = buildCurrentVoicePresencePayload();
-
+    const nextPayload = payload
+      ? {
+          ...payload,
+          revision: voicePresenceRevisionRef.current + 1
+        }
+      : null;
     if (payload) {
-      channel.track(payload).catch(() => {});
-    } else {
-      channel.untrack().catch(() => {});
+      voicePresenceRevisionRef.current += 1;
     }
+
+    voicePresenceSyncRef.current?.schedule(nextPayload).catch(() => {});
 
     return undefined;
   }, [
@@ -422,11 +449,13 @@ export function useWorkspaceVoiceEffects({
             }
 
             nextState[entryKey] = {
+              cameraEnabled: Boolean(payload.cameraEnabled),
               cameraStream: payload.cameraStream || null,
               deafened: Boolean(payload.deafened),
               hasAudio: Boolean(payload.hasAudio),
               micMuted: Boolean(payload.micMuted),
               peerId: payload.peerId || "",
+              screenShareEnabled: Boolean(payload.screenShareEnabled),
               screenShareStream: payload.screenShareStream || null,
               speaking: Boolean(payload.speaking),
               userId: payload.userId || "",

@@ -1,6 +1,7 @@
 function normalizeVoicePresenceEntry(entry = {}) {
   const channelId = String(entry.channelId || "").trim();
   const peerId = String(entry.peerId || entry.presence_ref || "").trim();
+  const revision = Number(entry.revision || 0);
   const userId = String(entry.userId || "").trim();
   const videoMode = String(entry.videoMode || "").trim().toLowerCase();
 
@@ -11,6 +12,7 @@ function normalizeVoicePresenceEntry(entry = {}) {
     deafened: Boolean(entry.deafened),
     micMuted: Boolean(entry.micMuted),
     peerId,
+    revision: Number.isFinite(revision) ? revision : 0,
     screenShareEnabled: Boolean(entry.screenShareEnabled),
     speaking: Boolean(entry.speaking),
     userId,
@@ -25,6 +27,28 @@ function getVoicePresenceTimestamp(entry = {}) {
   );
 }
 
+function getVoicePresenceKey(entry = {}) {
+  return (
+    String(entry.peerId || "").trim() ||
+    `${String(entry.userId || "").trim()}:${String(entry.channelId || "").trim()}`
+  );
+}
+
+function shouldReplaceVoicePresenceEntry(nextEntry = {}, currentEntry = null) {
+  if (!currentEntry) {
+    return true;
+  }
+
+  const nextRevision = Number(nextEntry.revision || 0);
+  const currentRevision = Number(currentEntry.revision || 0);
+
+  if (nextRevision !== currentRevision) {
+    return nextRevision > currentRevision;
+  }
+
+  return getVoicePresenceTimestamp(nextEntry) >= getVoicePresenceTimestamp(currentEntry);
+}
+
 export function flattenRealtimePresenceState(state = {}) {
   return Object.values(state || {})
     .flatMap((entries) => (Array.isArray(entries) ? entries : []))
@@ -32,10 +56,28 @@ export function flattenRealtimePresenceState(state = {}) {
     .filter((entry) => entry.channelId || entry.peerId || entry.userId);
 }
 
+function getLatestVoicePresenceEntries(state = {}) {
+  const latestEntries = new Map();
+
+  flattenRealtimePresenceState(state).forEach((entry) => {
+    const key = getVoicePresenceKey(entry);
+    if (!key) {
+      return;
+    }
+
+    const existing = latestEntries.get(key) || null;
+    if (shouldReplaceVoicePresenceEntry(entry, existing)) {
+      latestEntries.set(key, entry);
+    }
+  });
+
+  return [...latestEntries.values()];
+}
+
 export function buildVoiceSessionsFromPresenceState(state = {}) {
   const sessions = new Map();
 
-  flattenRealtimePresenceState(state).forEach((entry) => {
+  getLatestVoicePresenceEntries(state).forEach((entry) => {
     if (!entry.channelId || !entry.userId) {
       return;
     }
@@ -53,12 +95,13 @@ export function buildVoiceSessionsFromPresenceState(state = {}) {
 export function buildVoicePresenceUsersFromState(state = {}) {
   const users = new Map();
 
-  flattenRealtimePresenceState(state).forEach((entry) => {
+  getLatestVoicePresenceEntries(state).forEach((entry) => {
     if (!entry.userId) {
       return;
     }
 
-    const updatedAt = Date.parse(entry.updatedAt || entry.joinedAt || "") || 0;
+    const updatedAt = getVoicePresenceTimestamp(entry);
+    const revision = Number(entry.revision || 0);
     const existing = users.get(entry.userId) || null;
 
     if (!existing) {
@@ -68,6 +111,7 @@ export function buildVoicePresenceUsersFromState(state = {}) {
         deafened: Boolean(entry.deafened),
         micMuted: Boolean(entry.micMuted),
         peerId: entry.peerId || "",
+        revision,
         screenShareEnabled: Boolean(entry.screenShareEnabled),
         speaking: Boolean(entry.speaking),
         updatedAt,
@@ -77,13 +121,17 @@ export function buildVoicePresenceUsersFromState(state = {}) {
       return;
     }
 
-    if (updatedAt >= (existing.updatedAt || 0)) {
+    if (
+      revision > Number(existing.revision || 0) ||
+      (revision === Number(existing.revision || 0) && updatedAt >= (existing.updatedAt || 0))
+    ) {
       users.set(entry.userId, {
         cameraEnabled: Boolean(entry.cameraEnabled),
         channelId: entry.channelId || existing.channelId || "",
         deafened: Boolean(entry.deafened),
         micMuted: Boolean(entry.micMuted),
         peerId: entry.peerId || existing.peerId || "",
+        revision,
         screenShareEnabled: Boolean(entry.screenShareEnabled),
         speaking: Boolean(entry.speaking),
         updatedAt,
@@ -95,7 +143,7 @@ export function buildVoicePresenceUsersFromState(state = {}) {
 
   return Object.fromEntries(
     [...users.entries()].map(([userId, entry]) => {
-      const { updatedAt, ...safeEntry } = entry;
+      const { revision: _revision, updatedAt, ...safeEntry } = entry;
       return [userId, safeEntry];
     })
   );
@@ -104,21 +152,27 @@ export function buildVoicePresenceUsersFromState(state = {}) {
 export function buildVoicePresencePeersFromState(state = {}) {
   const peers = new Map();
 
-  flattenRealtimePresenceState(state).forEach((entry) => {
+  getLatestVoicePresenceEntries(state).forEach((entry) => {
     if (!entry.peerId) {
       return;
     }
 
     const updatedAt = getVoicePresenceTimestamp(entry);
+    const revision = Number(entry.revision || 0);
     const existing = peers.get(entry.peerId) || null;
 
-    if (!existing || updatedAt >= (existing.updatedAt || 0)) {
+    if (
+      !existing ||
+      revision > Number(existing.revision || 0) ||
+      (revision === Number(existing.revision || 0) && updatedAt >= (existing.updatedAt || 0))
+    ) {
       peers.set(entry.peerId, {
         cameraEnabled: Boolean(entry.cameraEnabled),
         channelId: entry.channelId || existing?.channelId || "",
         deafened: Boolean(entry.deafened),
         micMuted: Boolean(entry.micMuted),
         peerId: entry.peerId,
+        revision,
         screenShareEnabled: Boolean(entry.screenShareEnabled),
         speaking: Boolean(entry.speaking),
         updatedAt,
@@ -130,7 +184,7 @@ export function buildVoicePresencePeersFromState(state = {}) {
 
   return Object.fromEntries(
     [...peers.entries()].map(([peerId, entry]) => {
-      const { updatedAt, ...safeEntry } = entry;
+      const { revision: _revision, updatedAt, ...safeEntry } = entry;
       return [peerId, safeEntry];
     })
   );

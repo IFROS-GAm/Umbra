@@ -1,6 +1,7 @@
 import { supabase } from "../../../../supabase-browser.js";
 import { createVoiceRtcPeerSession } from "./createVoiceRtcPeerSession.js";
 import { createVoiceRtcSessionControls } from "./createVoiceRtcSessionControls.js";
+import { createRealtimePresenceSync } from "../presence/createRealtimePresenceSync.js";
 import { buildVoicePeersFromPresenceState } from "../presence/voiceRealtimeHelpers.js";
 import { clampUnitVolume, hasTrack } from "./voiceRtcSessionConfig.js";
 
@@ -33,6 +34,7 @@ export function createVoiceRtcSession({
   let localCameraStream = null;
   let localScreenShareStream = null;
   let realtimeChannel = null;
+  let realtimePresenceSync = null;
   let playbackState = {
     deafened: Boolean(deafened),
     outputDeviceId,
@@ -50,6 +52,8 @@ export function createVoiceRtcSession({
       globalThis.crypto?.randomUUID?.() ||
       `voice-peer-${Date.now()}-${Math.random().toString(16).slice(2)}`
   ).trim();
+  const joinedAt = new Date().toISOString();
+  let realtimePresenceRevision = 0;
 
   const log = (event, details = {}, level = "info") => {
     const logger = typeof console[level] === "function" ? console[level] : console.info;
@@ -108,9 +112,10 @@ export function createVoiceRtcSession({
       cameraEnabled: hasTrack(localCameraStream, "video"),
       channelId,
       deafened: Boolean(participantState.deafened),
-      joinedAt: new Date().toISOString(),
+      joinedAt,
       micMuted: Boolean(participantState.micMuted),
       peerId: selfPeerId,
+      revision: realtimePresenceRevision,
       screenShareEnabled: hasTrack(localScreenShareStream, "video"),
       speaking: Boolean(participantState.speaking),
       updatedAt: new Date().toISOString(),
@@ -120,11 +125,12 @@ export function createVoiceRtcSession({
   }
 
   function syncRealtimePresence() {
-    if (!realtimeEnabled || !realtimeChannel) {
+    if (!realtimeEnabled || !realtimeChannel || !realtimePresenceSync) {
       return Promise.resolve();
     }
 
-    return realtimeChannel.track(buildRealtimePresencePayload());
+    realtimePresenceRevision += 1;
+    return realtimePresenceSync.schedule(buildRealtimePresencePayload());
   }
 
   const {
@@ -206,6 +212,15 @@ export function createVoiceRtcSession({
         }
       }
     });
+    realtimePresenceSync = createRealtimePresenceSync({
+      getChannel: () => realtimeChannel,
+      log: (event, details = {}, level = "info") => {
+        log(`realtime:${event}`, details, level);
+      },
+      onError: (error) => {
+        handleSessionError(error);
+      }
+    });
 
     realtimeChannel.on("presence", { event: "sync" }, () => {
       handleRealtimePresenceSync();
@@ -281,6 +296,7 @@ export function createVoiceRtcSession({
     getParticipantState: () => participantState,
     getPlaybackState: () => playbackState,
     getPeers: () => peers,
+    getRealtimePresenceSync: () => realtimePresenceSync,
     getRealtimeChannel: () => realtimeChannel,
     handlePeerLeft,
     handlePeersSnapshot,
@@ -299,6 +315,9 @@ export function createVoiceRtcSession({
     },
     setRealtimeChannel: (nextRealtimeChannel) => {
       realtimeChannel = nextRealtimeChannel;
+      if (!nextRealtimeChannel) {
+        realtimePresenceSync = null;
+      }
     },
     socket,
     syncLocalAudioToPeer,

@@ -35,6 +35,7 @@ export function createVoiceRtcPeerSession({
       (entry.screenShareEnabled ? "screen" : entry.cameraEnabled ? "camera" : "");
 
     onPeerMediaChange({
+      cameraEnabled: Boolean(entry.cameraEnabled),
       cameraStream:
         videoMode === "camera" && hasTrack(entry.remoteVideoStream, "video")
           ? entry.remoteVideoStream
@@ -44,6 +45,7 @@ export function createVoiceRtcPeerSession({
       micMuted: Boolean(entry.micMuted),
       peerId: entry.peerId,
       removed: false,
+      screenShareEnabled: Boolean(entry.screenShareEnabled),
       screenShareStream:
         videoMode === "screen" && hasTrack(entry.remoteVideoStream, "video")
           ? entry.remoteVideoStream
@@ -291,7 +293,12 @@ export function createVoiceRtcPeerSession({
       existing.screenShareEnabled = Boolean(screenShareEnabled);
       existing.speaking = Boolean(speaking);
       existing.userId = userId || existing.userId;
-      existing.videoMode = videoMode || existing.videoMode;
+      existing.videoMode = videoMode;
+      if (!existing.videoMode && !existing.cameraEnabled && !existing.screenShareEnabled) {
+        existing.remoteVideoStream.getTracks().forEach((track) => {
+          existing.remoteVideoStream.removeTrack(track);
+        });
+      }
       emitPeerMedia(existing);
       return existing;
     }
