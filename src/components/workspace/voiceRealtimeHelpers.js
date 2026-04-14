@@ -94,12 +94,35 @@ export function buildVoicePresenceUsersFromState(state = {}) {
   );
 }
 
+export function buildVoicePresencePeersFromState(state = {}) {
+  const peers = new Map();
+
+  flattenRealtimePresenceState(state).forEach((entry) => {
+    if (!entry.peerId) {
+      return;
+    }
+
+    peers.set(entry.peerId, {
+      cameraEnabled: Boolean(entry.cameraEnabled),
+      channelId: entry.channelId || "",
+      deafened: Boolean(entry.deafened),
+      micMuted: Boolean(entry.micMuted),
+      peerId: entry.peerId,
+      screenShareEnabled: Boolean(entry.screenShareEnabled),
+      speaking: Boolean(entry.speaking),
+      userId: entry.userId || "",
+      videoMode: entry.videoMode || ""
+    });
+  });
+
+  return Object.fromEntries(peers);
+}
+
 export function buildVoicePeersFromPresenceState(
   state = {},
-  { channelId, currentUserId = "", localPeerId = "" } = {}
+  { channelId, localPeerId = "" } = {}
 ) {
   const normalizedChannelId = String(channelId || "").trim();
-  const normalizedCurrentUserId = String(currentUserId || "").trim();
   const normalizedLocalPeerId = String(localPeerId || "").trim();
   const peers = [];
   const seenPeerIds = new Set();
@@ -111,7 +134,6 @@ export function buildVoicePeersFromPresenceState(
 
     if (
       entry.peerId === normalizedLocalPeerId ||
-      (normalizedCurrentUserId && entry.userId === normalizedCurrentUserId) ||
       seenPeerIds.has(entry.peerId)
     ) {
       return;

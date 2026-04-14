@@ -81,6 +81,7 @@ export function useUmbraWorkspaceCore({
     shareAudio: true
   });
   const [voiceSessions, setVoiceSessions] = useState({});
+  const [voicePresencePeers, setVoicePresencePeers] = useState({});
   const [voicePresenceUsers, setVoicePresenceUsers] = useState({});
   const [voiceJoinReadyChannelId, setVoiceJoinReadyChannelId] = useState(null);
   const [voiceDevices, setVoiceDevices] = useState({
@@ -111,6 +112,10 @@ export function useUmbraWorkspaceCore({
   const accessTokenRef = useRef(accessToken);
   const joinedVoiceChannelIdRef = useRef(joinedVoiceChannelId);
   const voiceJoinReadyChannelIdRef = useRef(voiceJoinReadyChannelId);
+  const voiceLocalPeerIdRef = useRef(
+    globalThis.crypto?.randomUUID?.() ||
+      `voice-peer-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  );
   const workspaceRef = useRef(workspace);
   const voiceInputSessionRef = useRef(null);
   const cameraSessionRef = useRef(null);
@@ -385,6 +390,7 @@ export function useUmbraWorkspaceCore({
     setVoiceJoinReadyChannelId,
     setVoiceMenu,
     setVoicePeerMedia,
+    setVoicePresencePeers,
     setVoicePresenceUsers,
     setVoiceSessions,
     setVoiceState,
@@ -395,9 +401,11 @@ export function useUmbraWorkspaceCore({
     uiNotice,
     voiceInputSessionRef,
     voiceInputSpeaking,
+    voiceLocalPeerIdRef,
     voiceInputStream,
     voiceMenu,
     voicePeerMedia,
+    voicePresencePeers,
     voiceState,
     workspaceRef,
     workspace
@@ -511,9 +519,9 @@ export function useUmbraWorkspaceCore({
     setComposerPicker, setDialog, setEditingMessage, setHeaderPanel, setHoveredVoiceChannelId, setInboxTab,
     setJoinedVoiceChannelId, setMembersPanelVisible, setMessageMenuFor, setProfileCard, setWorkspace,
     setReactionPickerFor, setReplyMentionEnabled, setReplyTarget, setSettingsOpen, setTheme, setTypingEvents,
-      setScreenShareStream, setSubmittingMessage, setUiNotice, setVoiceDevices, setVoiceMenu, setVoicePeerMedia, setVoicePresenceUsers, setVoiceSessions, setVoiceState, setVoiceJoinReadyChannelId, settingsOpen, showUiNotice,
+      setScreenShareStream, setSubmittingMessage, setUiNotice, setVoiceDevices, setVoiceMenu, setVoicePeerMedia, setVoicePresencePeers, setVoicePresenceUsers, setVoiceSessions, setVoiceState, setVoiceJoinReadyChannelId, settingsOpen, showUiNotice,
     submittingMessage, theme, toggleHeaderPanel, toggleVoiceMenu, toggleVoiceState, topbarActionsRef, typingEvents, typingUsers,
     uiNotice, updateVoiceSetting, uploadingAttachments, voiceDevices, voiceInputLevel, voiceInputStatus,
-    voiceInputSpeaking, voiceJoinReadyChannelId, voiceJoinReadyChannelIdRef, voiceMenu, voicePeerMedia, voicePresenceUsers, voiceSessions, voiceState, voiceUserIds, screenShareStream, workspace
+    voiceInputSpeaking, voiceJoinReadyChannelId, voiceJoinReadyChannelIdRef, voiceLocalPeerIdRef, voiceMenu, voicePeerMedia, voicePresencePeers, voicePresenceUsers, voiceSessions, voiceState, voiceUserIds, screenShareStream, workspace
   };
 }

@@ -15,6 +15,7 @@ import { BACKGROUND_PREFETCH_COOLDOWN_MS } from "./workspaceCoreMessageStore.js"
 import { createVoiceCameraSession } from "./voiceCameraSession.js";
 import { createVoiceInputProcessingSession } from "./voiceInputProcessing.js";
 import {
+  buildVoicePresencePeersFromState,
   buildVoicePresenceUsersFromState,
   buildVoiceSessionsFromPresenceState
 } from "./voiceRealtimeHelpers.js";
@@ -201,6 +202,7 @@ export function useWorkspaceCoreEffects({
   setVoiceJoinReadyChannelId,
   setVoiceMenu,
   setVoicePeerMedia,
+  setVoicePresencePeers,
   setVoicePresenceUsers,
   setVoiceSessions,
   setVoiceState,
@@ -210,9 +212,11 @@ export function useWorkspaceCoreEffects({
   uiNotice,
   voiceInputSessionRef,
   voiceInputSpeaking,
+  voiceLocalPeerIdRef,
   voiceInputStream,
   voiceMenu,
   voicePeerMedia,
+  voicePresencePeers,
   voiceState,
   workspaceRef,
   workspace,
@@ -225,10 +229,6 @@ export function useWorkspaceCoreEffects({
   const voiceFallbackSyncRef = useRef(false);
   const voiceRtcSessionRef = useRef(null);
   const voicePresenceChannelRef = useRef(null);
-  const localVoicePeerIdRef = useRef(
-    globalThis.crypto?.randomUUID?.() ||
-      `voice-peer-${Date.now()}-${Math.random().toString(16).slice(2)}`
-  );
 
   function applyVoiceSessions(payload = {}) {
     const normalizedSessions = normalizeVoiceSessions(payload);
@@ -321,6 +321,7 @@ export function useWorkspaceCoreEffects({
       }
 
       const nextSessions = buildVoiceSessionsFromPresenceState(channel.presenceState());
+      const nextPresencePeers = buildVoicePresencePeersFromState(channel.presenceState());
       const nextPresenceUsers = buildVoicePresenceUsersFromState(channel.presenceState());
       console.info("[voice/client] realtime:presence:sync", {
         channelIds: Object.keys(nextSessions),
@@ -328,6 +329,7 @@ export function useWorkspaceCoreEffects({
         userId: workspaceRef.current?.current_user?.id || null
       });
       applyVoiceSessions(nextSessions);
+      setVoicePresencePeers(nextPresencePeers);
       setVoicePresenceUsers(nextPresenceUsers);
     };
 
@@ -376,12 +378,14 @@ export function useWorkspaceCoreEffects({
 
       channel.untrack().catch(() => {});
       supabase.removeChannel(channel).catch(() => {});
+      setVoicePresencePeers({});
       setVoicePresenceUsers({});
     };
   }, [accessToken, workspace?.mode, workspace?.current_user?.id]);
 
   useEffect(() => {
     if (!supabase || workspace?.mode !== "supabase") {
+      setVoicePresencePeers({});
       setVoicePresenceUsers({});
       return undefined;
     }
@@ -1303,7 +1307,7 @@ export function useWorkspaceCoreEffects({
           }
         },
         onPeerMediaChange: (payload) => {
-          const entryKey = String(payload?.userId || payload?.peerId || "").trim();
+          const entryKey = String(payload?.peerId || "").trim();
           if (!entryKey) {
             return;
           }

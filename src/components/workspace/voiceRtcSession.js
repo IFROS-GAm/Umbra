@@ -335,8 +335,8 @@ export function createVoiceRtcSession({
     return peers.get(peerId) || null;
   }
 
-  function shouldIgnorePeer({ peerId, userId }) {
-    return !peerId || peerId === selfPeerId || (currentUserId && userId === currentUserId);
+  function shouldIgnorePeer({ peerId }) {
+    return !peerId || peerId === selfPeerId;
   }
 
   function sendSignal(targetPeerId, signal) {
@@ -809,7 +809,6 @@ export function createVoiceRtcSession({
 
     const nextPeers = buildVoicePeersFromPresenceState(realtimeChannel.presenceState(), {
       channelId,
-      currentUserId,
       localPeerId: selfPeerId
     });
 

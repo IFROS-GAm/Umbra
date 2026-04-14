@@ -610,7 +610,7 @@ export function VoiceRoomStage({
               secondaryParticipants.map((user) => (
                 <button
                   className={`voice-stage-thumbnail ${user.isSpeaking ? "speaking" : ""}`.trim()}
-                  key={user.id}
+                  key={user.voicePeerId || user.id}
                   onClick={(event) => {
                     if (user.isStreaming && user.localScreenShareStream) {
                       setExpandedStreamOpen(true);
@@ -674,7 +674,7 @@ export function VoiceRoomStage({
             voiceStageParticipants.map((user) => (
               <button
                 className={`voice-stage-tile ${user.isStreaming ? "streaming" : ""} ${user.isSpeaking ? "speaking" : ""}`.trim()}
-                key={user.id}
+                key={user.voicePeerId || user.id}
                 onClick={(event) => {
                   if (user.isStreaming && user.localScreenShareStream) {
                     setExpandedStreamOpen(true);
