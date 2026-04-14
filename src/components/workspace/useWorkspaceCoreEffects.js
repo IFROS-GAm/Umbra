@@ -239,6 +239,9 @@ export function useWorkspaceCoreEffects({
     const currentChannelId = String(joinedVoiceChannelIdRef.current || "").trim();
     const hasCameraTrack = Boolean(cameraStream?.getVideoTracks?.().length);
     const hasScreenTrack = Boolean(screenShareStream?.getVideoTracks?.().length);
+    const isMicMuted = Boolean(voiceState.micMuted);
+    const isDeafened = Boolean(voiceState.deafen);
+    const isSpeaking = !isMicMuted && !isDeafened && Boolean(voiceInputSpeaking);
 
     if (!currentUserId || !currentChannelId) {
       return null;
@@ -249,10 +252,13 @@ export function useWorkspaceCoreEffects({
     return {
       channelId: currentChannelId,
       cameraEnabled: hasCameraTrack,
+      deafened: isDeafened,
       guildId: lookup?.guild?.id || null,
       kind: lookup?.kind || lookup?.channel?.type || "",
+      micMuted: isMicMuted,
       peerId: localVoicePeerIdRef.current,
       screenShareEnabled: hasScreenTrack,
+      speaking: isSpeaking,
       updatedAt: new Date().toISOString(),
       userId: currentUserId,
       videoMode: hasScreenTrack ? "screen" : hasCameraTrack ? "camera" : ""
@@ -387,7 +393,16 @@ export function useWorkspaceCoreEffects({
     }
 
     return undefined;
-  }, [cameraStream, joinedVoiceChannelId, screenShareStream, workspace?.mode, workspace?.current_user?.id]);
+  }, [
+    cameraStream,
+    joinedVoiceChannelId,
+    screenShareStream,
+    voiceInputSpeaking,
+    voiceState.deafen,
+    voiceState.micMuted,
+    workspace?.mode,
+    workspace?.current_user?.id
+  ]);
 
   useEffect(() => {
     setComposer("");
@@ -1274,6 +1289,7 @@ export function useWorkspaceCoreEffects({
         currentUserId: workspaceRef.current.current_user.id,
         deafened: Boolean(voiceState.deafen),
         localPeerId: localVoicePeerIdRef.current,
+        micMuted: Boolean(voiceState.micMuted),
         onError: (error) => {
           if (error?.message) {
             setUiNotice(error.message);
@@ -1297,9 +1313,12 @@ export function useWorkspaceCoreEffects({
 
             nextState[entryKey] = {
               cameraStream: payload.cameraStream || null,
+              deafened: Boolean(payload.deafened),
               hasAudio: Boolean(payload.hasAudio),
+              micMuted: Boolean(payload.micMuted),
               peerId: payload.peerId || "",
               screenShareStream: payload.screenShareStream || null,
+              speaking: Boolean(payload.speaking),
               userId: payload.userId || "",
               videoMode: payload.videoMode || ""
             };
@@ -1309,6 +1328,8 @@ export function useWorkspaceCoreEffects({
         },
         outputDeviceId: selectedVoiceDevices.audiooutput,
         outputVolume: (Number(voiceState.outputVolume) || 0) / 100,
+        speaking:
+          !voiceState.micMuted && !voiceState.deafen && Boolean(voiceInputSpeaking),
         socket,
         useSharedRealtime: useSharedVoiceRealtime
       });
@@ -1363,6 +1384,15 @@ export function useWorkspaceCoreEffects({
   useEffect(() => {
     voiceRtcSessionRef.current?.setLocalTrackEnabled(!voiceState.micMuted);
   }, [voiceState.micMuted]);
+
+  useEffect(() => {
+    voiceRtcSessionRef.current?.updateParticipantState({
+      deafened: Boolean(voiceState.deafen),
+      micMuted: Boolean(voiceState.micMuted),
+      speaking:
+        !voiceState.micMuted && !voiceState.deafen && Boolean(voiceInputSpeaking)
+    });
+  }, [voiceInputSpeaking, voiceState.deafen, voiceState.micMuted]);
 
   useEffect(() => {
     voiceRtcSessionRef.current?.updatePlayback({

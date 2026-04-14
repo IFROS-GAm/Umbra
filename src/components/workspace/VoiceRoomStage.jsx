@@ -71,6 +71,22 @@ export function VoiceRoomStage({
   }, [expandedStreamOpen, featuredStreamUser]);
 
   const currentUserId = workspace?.current_user?.id || null;
+  function renderParticipantAudioIndicator(user, { allowInputLevel = false } = {}) {
+    if (user?.isDeafened) {
+      return <Icon name="deafen" size={14} />;
+    }
+
+    if (user?.isMuted) {
+      return <Icon name="micOff" size={14} />;
+    }
+
+    if (allowInputLevel && user?.isCurrentUser) {
+      return <span className="voice-stage-level-chip">{Math.round(voiceInputLevel)}%</span>;
+    }
+
+    return null;
+  }
+
   const directCallMembers = useMemo(() => {
     if (!isDirectCall) {
       return [];
@@ -337,9 +353,9 @@ export function VoiceRoomStage({
                             <Icon name="screenShare" size={12} />
                           </span>
                         ) : null}
-                        {user.id === currentUserId && voiceState.micMuted ? (
+                        {user.isMuted || user.isDeafened ? (
                           <span className="direct-call-stage-mini-chip danger">
-                            <Icon name="micOff" size={12} />
+                            <Icon name={user.isDeafened ? "deafen" : "micOff"} size={12} />
                           </span>
                         ) : null}
                       </div>
@@ -430,9 +446,9 @@ export function VoiceRoomStage({
                         <Icon name="screenShare" size={12} />
                       </span>
                     ) : null}
-                    {user.isCurrentUser && voiceState.micMuted ? (
+                    {user.isMuted || user.isDeafened ? (
                       <span className="direct-call-stage-state-chip danger">
-                        <Icon name="micOff" size={12} />
+                        <Icon name={user.isDeafened ? "deafen" : "micOff"} size={12} />
                       </span>
                     ) : null}
                     <span className={`direct-call-stage-state-chip ${user.inCall ? "active" : ""}`.trim()}>
@@ -569,6 +585,9 @@ export function VoiceRoomStage({
 
             <div className="voice-stage-nameplate featured">
               <strong>{featuredStreamUser.display_name || featuredStreamUser.username}</strong>
+              {renderParticipantAudioIndicator(featuredStreamUser, {
+                allowInputLevel: true
+              })}
             </div>
           </button>
 
@@ -622,6 +641,9 @@ export function VoiceRoomStage({
 
                   <div className="voice-stage-nameplate thumbnail">
                     <strong>{user.display_name || user.username}</strong>
+                    {renderParticipantAudioIndicator(user, {
+                      allowInputLevel: true
+                    })}
                   </div>
                 </button>
               ))
@@ -707,12 +729,9 @@ export function VoiceRoomStage({
 
                 <div className="voice-stage-nameplate">
                   <strong>{user.display_name || user.username}</strong>
-                  {user.id === workspace.current_user.id && voiceState.micMuted ? (
-                    <Icon name="micOff" size={14} />
-                  ) : null}
-                  {user.id === workspace.current_user.id && !voiceState.micMuted ? (
-                    <span className="voice-stage-level-chip">{Math.round(voiceInputLevel)}%</span>
-                  ) : null}
+                  {renderParticipantAudioIndicator(user, {
+                    allowInputLevel: true
+                  })}
                 </div>
               </button>
             ))

@@ -59,11 +59,13 @@ export function createVoiceRtcSession({
   channelId,
   currentUserId,
   deafened = false,
+  micMuted = false,
   localPeerId = "",
   onError = null,
   onPeerMediaChange = null,
   outputDeviceId = "default",
   outputVolume = 1,
+  speaking = false,
   socket,
   useSharedRealtime = false
 }) {
@@ -101,6 +103,11 @@ export function createVoiceRtcSession({
     deafened: Boolean(deafened),
     outputDeviceId,
     outputVolume: clampUnitVolume(outputVolume)
+  };
+  let participantState = {
+    deafened: Boolean(deafened),
+    micMuted: Boolean(micMuted),
+    speaking: Boolean(speaking)
   };
 
   function handleSessionError(error) {
@@ -141,6 +148,29 @@ export function createVoiceRtcSession({
     return getCurrentLocalVideoStream()?.getVideoTracks?.()?.[0] || null;
   }
 
+  function buildRealtimePresencePayload() {
+    return {
+      cameraEnabled: hasTrack(localCameraStream, "video"),
+      channelId,
+      deafened: Boolean(participantState.deafened),
+      joinedAt: new Date().toISOString(),
+      micMuted: Boolean(participantState.micMuted),
+      peerId: selfPeerId,
+      screenShareEnabled: hasTrack(localScreenShareStream, "video"),
+      speaking: Boolean(participantState.speaking),
+      userId: currentUserId || null,
+      videoMode: getCurrentLocalVideoMode()
+    };
+  }
+
+  function syncRealtimePresence() {
+    if (!realtimeEnabled || !realtimeChannel) {
+      return Promise.resolve();
+    }
+
+    return realtimeChannel.track(buildRealtimePresencePayload());
+  }
+
   function emitPeerMedia(entry) {
     if (typeof onPeerMediaChange !== "function" || !entry) {
       return;
@@ -155,13 +185,16 @@ export function createVoiceRtcSession({
         videoMode === "camera" && hasTrack(entry.remoteVideoStream, "video")
           ? entry.remoteVideoStream
           : null,
+      deafened: Boolean(entry.deafened),
       hasAudio: hasTrack(entry.remoteAudioStream, "audio"),
+      micMuted: Boolean(entry.micMuted),
       peerId: entry.peerId,
       removed: false,
       screenShareStream:
         videoMode === "screen" && hasTrack(entry.remoteVideoStream, "video")
           ? entry.remoteVideoStream
           : null,
+      speaking: Boolean(entry.speaking),
       userId: entry.userId || "",
       videoMode
     });
@@ -379,8 +412,11 @@ export function createVoiceRtcSession({
   async function ensurePeer(peer) {
     const {
       cameraEnabled = false,
+      deafened = false,
+      micMuted = false,
       peerId,
       screenShareEnabled = false,
+      speaking = false,
       userId = null,
       videoMode = ""
     } = peer || {};
@@ -391,7 +427,10 @@ export function createVoiceRtcSession({
     const existing = getPeerEntry(peerId);
     if (existing) {
       existing.cameraEnabled = Boolean(cameraEnabled);
+      existing.deafened = Boolean(deafened);
+      existing.micMuted = Boolean(micMuted);
       existing.screenShareEnabled = Boolean(screenShareEnabled);
+      existing.speaking = Boolean(speaking);
       existing.userId = userId || existing.userId;
       existing.videoMode = videoMode || existing.videoMode;
       emitPeerMedia(existing);
@@ -404,16 +443,19 @@ export function createVoiceRtcSession({
       audioElement,
       audioSender: null,
       cameraEnabled: Boolean(cameraEnabled),
+      deafened: Boolean(deafened),
       destroyed: false,
       ignoreOffer: false,
       isSettingRemoteAnswerPending: false,
       makingOffer: false,
+      micMuted: Boolean(micMuted),
       peerConnection: new RTCPeerConnection(DEFAULT_RTC_CONFIGURATION),
       peerId,
       pendingNegotiation: false,
       remoteAudioStream: createRemoteStream(),
       remoteVideoStream: createRemoteStream(),
       screenShareEnabled: Boolean(screenShareEnabled),
+      speaking: Boolean(speaking),
       userId,
       videoMode
     };
@@ -709,15 +751,7 @@ export function createVoiceRtcSession({
       }
 
       try {
-        await realtimeChannel.track({
-          cameraEnabled: hasTrack(localCameraStream, "video"),
-          channelId,
-          joinedAt: new Date().toISOString(),
-          peerId: selfPeerId,
-          screenShareEnabled: hasTrack(localScreenShareStream, "video"),
-          userId: currentUserId || null,
-          videoMode: getCurrentLocalVideoMode()
-        });
+        await syncRealtimePresence();
         await handleRealtimePresenceSync();
       } catch (error) {
         handleSessionError(error);
@@ -754,17 +788,7 @@ export function createVoiceRtcSession({
       localScreenShareStream = screenShareStream;
 
       if (realtimeEnabled && realtimeChannel) {
-        realtimeChannel
-          .track({
-            cameraEnabled: hasTrack(localCameraStream, "video"),
-            channelId,
-            joinedAt: new Date().toISOString(),
-            peerId: selfPeerId,
-            screenShareEnabled: hasTrack(localScreenShareStream, "video"),
-            userId: currentUserId || null,
-            videoMode: getCurrentLocalVideoMode()
-          })
-          .catch((error) => {
+        syncRealtimePresence().catch((error) => {
             handleSessionError(error);
           });
       }
@@ -782,6 +806,28 @@ export function createVoiceRtcSession({
       localAudioStream?.getAudioTracks?.().forEach((track) => {
         track.enabled = Boolean(nextEnabled);
       });
+    },
+    updateParticipantState(nextState = {}) {
+      participantState = {
+        deafened:
+          typeof nextState.deafened === "boolean"
+            ? nextState.deafened
+            : participantState.deafened,
+        micMuted:
+          typeof nextState.micMuted === "boolean"
+            ? nextState.micMuted
+            : participantState.micMuted,
+        speaking:
+          typeof nextState.speaking === "boolean"
+            ? nextState.speaking
+            : participantState.speaking
+      };
+
+      if (realtimeEnabled && realtimeChannel) {
+        syncRealtimePresence().catch((error) => {
+          handleSessionError(error);
+        });
+      }
     },
     updatePlayback(nextPlayback = {}) {
       playbackState = {

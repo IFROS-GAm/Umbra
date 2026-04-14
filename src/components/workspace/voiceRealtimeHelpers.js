@@ -8,8 +8,11 @@ function normalizeVoicePresenceEntry(entry = {}) {
     ...entry,
     cameraEnabled: Boolean(entry.cameraEnabled),
     channelId,
+    deafened: Boolean(entry.deafened),
+    micMuted: Boolean(entry.micMuted),
     peerId,
     screenShareEnabled: Boolean(entry.screenShareEnabled),
+    speaking: Boolean(entry.speaking),
     userId,
     videoMode: ["camera", "screen"].includes(videoMode) ? videoMode : ""
   };
@@ -66,8 +69,11 @@ export function buildVoicePeersFromPresenceState(
     seenPeerIds.add(entry.peerId);
     peers.push({
       cameraEnabled: Boolean(entry.cameraEnabled),
+      deafened: Boolean(entry.deafened),
+      micMuted: Boolean(entry.micMuted),
       peerId: entry.peerId,
       screenShareEnabled: Boolean(entry.screenShareEnabled),
+      speaking: Boolean(entry.speaking),
       videoMode: entry.videoMode || "",
       userId: entry.userId || null
     });

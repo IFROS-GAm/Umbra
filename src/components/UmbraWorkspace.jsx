@@ -854,15 +854,17 @@ export function UmbraWorkspace({
         return {
           ...user,
           hiddenVideoLabel: t("voice.participant.hiddenVideo", "Video oculto"),
+          isCurrentUser: isCurrentVoiceUser,
           isCameraOn: isCurrentVoiceUser
             ? voiceState.cameraEnabled
             : Boolean(remoteCameraStream),
+          isDeafened: isCurrentVoiceUser ? Boolean(voiceState.deafen) : Boolean(remoteMedia?.deafened),
           isLocallyMuted: userPrefs.muted,
+          isMuted: isCurrentVoiceUser ? Boolean(voiceState.micMuted) : Boolean(remoteMedia?.micMuted),
           isSpeaking:
-            isCurrentVoiceUser &&
-            !voiceState.micMuted &&
-            !voiceState.deafen &&
-            voiceInputSpeaking,
+            isCurrentVoiceUser
+              ? !voiceState.micMuted && !voiceState.deafen && voiceInputSpeaking
+              : Boolean(remoteMedia?.speaking),
           isStreaming: isCurrentVoiceUser
             ? voiceState.screenShareEnabled
             : Boolean(remoteScreenShareStream),
