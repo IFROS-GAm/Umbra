@@ -51,12 +51,17 @@ function getVoiceSignalType(signal = {}) {
   return "unknown";
 }
 
+function hasTrack(stream, kind) {
+  return Boolean(stream?.getTracks?.().some((track) => track.kind === kind));
+}
+
 export function createVoiceRtcSession({
   channelId,
   currentUserId,
   deafened = false,
   localPeerId = "",
   onError = null,
+  onPeerMediaChange = null,
   outputDeviceId = "default",
   outputVolume = 1,
   socket,
@@ -74,7 +79,8 @@ export function createVoiceRtcSession({
   const peers = new Map();
   let destroyed = false;
   let localAudioStream = null;
-  let localAudioTrack = null;
+  let localCameraStream = null;
+  let localScreenShareStream = null;
   let realtimeChannel = null;
   const selfPeerId = String(
     localPeerId ||
@@ -103,6 +109,76 @@ export function createVoiceRtcSession({
     }
   }
 
+  function getCurrentLocalAudioTrack() {
+    return localAudioStream?.getAudioTracks?.()?.[0] || null;
+  }
+
+  function getCurrentLocalVideoMode() {
+    if (hasTrack(localScreenShareStream, "video")) {
+      return "screen";
+    }
+
+    if (hasTrack(localCameraStream, "video")) {
+      return "camera";
+    }
+
+    return "";
+  }
+
+  function getCurrentLocalVideoStream() {
+    if (getCurrentLocalVideoMode() === "screen") {
+      return localScreenShareStream;
+    }
+
+    if (getCurrentLocalVideoMode() === "camera") {
+      return localCameraStream;
+    }
+
+    return null;
+  }
+
+  function getCurrentLocalVideoTrack() {
+    return getCurrentLocalVideoStream()?.getVideoTracks?.()?.[0] || null;
+  }
+
+  function emitPeerMedia(entry) {
+    if (typeof onPeerMediaChange !== "function" || !entry) {
+      return;
+    }
+
+    const videoMode =
+      entry.videoMode ||
+      (entry.screenShareEnabled ? "screen" : entry.cameraEnabled ? "camera" : "");
+
+    onPeerMediaChange({
+      cameraStream:
+        videoMode === "camera" && hasTrack(entry.remoteVideoStream, "video")
+          ? entry.remoteVideoStream
+          : null,
+      hasAudio: hasTrack(entry.remoteAudioStream, "audio"),
+      peerId: entry.peerId,
+      removed: false,
+      screenShareStream:
+        videoMode === "screen" && hasTrack(entry.remoteVideoStream, "video")
+          ? entry.remoteVideoStream
+          : null,
+      userId: entry.userId || "",
+      videoMode
+    });
+  }
+
+  function clearPeerMedia(entry) {
+    if (typeof onPeerMediaChange !== "function" || !entry) {
+      return;
+    }
+
+    onPeerMediaChange({
+      peerId: entry.peerId,
+      removed: true,
+      userId: entry.userId || ""
+    });
+  }
+
   function applyPlaybackToPeer(entry) {
     if (!entry?.audioElement) {
       return;
@@ -114,8 +190,14 @@ export function createVoiceRtcSession({
   }
 
   function safePlayAudio(entry) {
-    entry?.audioElement?.play?.().catch(() => {
-      // User interaction usually unlocks playback before joining voice.
+    entry?.audioElement?.play?.().catch((error) => {
+      log(
+        "audio:play-blocked",
+        {
+          message: error?.message || "Autoplay bloqueado."
+        },
+        "warn"
+      );
     });
   }
 
@@ -199,31 +281,69 @@ export function createVoiceRtcSession({
     }
   }
 
-  async function syncLocalAudioToPeer(entry, { renegotiate = false } = {}) {
+  async function syncSenderTrack({
+    addStream,
+    entry,
+    nextTrack,
+    senderKey
+  }) {
     if (!entry || destroyed || entry.destroyed) {
-      return;
+      return false;
     }
 
-    const nextTrack = localAudioTrack;
-    if (entry.audioSender) {
-      if (entry.audioSender.track === nextTrack) {
-        return;
-      }
+    const sender = entry[senderKey] || null;
+    const currentTrack = sender?.track || null;
 
+    if (currentTrack === nextTrack) {
+      return false;
+    }
+
+    if (sender) {
       try {
-        await entry.audioSender.replaceTrack(nextTrack);
+        await sender.replaceTrack(nextTrack);
+        return true;
       } catch (error) {
         handleSessionError(error);
+        return false;
       }
-      return;
     }
 
-    if (!nextTrack || !localAudioStream) {
-      return;
+    if (!nextTrack || !addStream) {
+      return false;
     }
 
-    entry.audioSender = entry.peerConnection.addTrack(nextTrack, localAudioStream);
-    if (renegotiate) {
+    entry[senderKey] = entry.peerConnection.addTrack(nextTrack, addStream);
+    return true;
+  }
+
+  async function syncLocalAudioToPeer(entry, { renegotiate = false } = {}) {
+    const changed = await syncSenderTrack({
+      addStream: localAudioStream,
+      entry,
+      nextTrack: getCurrentLocalAudioTrack(),
+      senderKey: "audioSender"
+    });
+
+    if (changed && renegotiate) {
+      await negotiatePeer(entry);
+    }
+  }
+
+  async function syncLocalVideoToPeer(entry, { renegotiate = false } = {}) {
+    const localVideoStream = getCurrentLocalVideoStream();
+    const nextTrack = getCurrentLocalVideoTrack();
+    const changed = await syncSenderTrack({
+      addStream: localVideoStream,
+      entry,
+      nextTrack,
+      senderKey: "videoSender"
+    });
+
+    if (changed) {
+      entry.videoMode = getCurrentLocalVideoMode();
+    }
+
+    if (changed && renegotiate) {
       await negotiatePeer(entry);
     }
   }
@@ -236,6 +356,7 @@ export function createVoiceRtcSession({
 
     entry.destroyed = true;
     peers.delete(peerId);
+    clearPeerMedia(entry);
 
     try {
       entry.peerConnection.onicecandidate = null;
@@ -256,24 +377,33 @@ export function createVoiceRtcSession({
   }
 
   async function ensurePeer(peer) {
-    const { peerId, userId = null } = peer || {};
+    const {
+      cameraEnabled = false,
+      peerId,
+      screenShareEnabled = false,
+      userId = null,
+      videoMode = ""
+    } = peer || {};
     if (shouldIgnorePeer({ peerId, userId })) {
       return null;
     }
 
     const existing = getPeerEntry(peerId);
     if (existing) {
+      existing.cameraEnabled = Boolean(cameraEnabled);
+      existing.screenShareEnabled = Boolean(screenShareEnabled);
       existing.userId = userId || existing.userId;
+      existing.videoMode = videoMode || existing.videoMode;
+      emitPeerMedia(existing);
       return existing;
     }
 
     const audioElement = createHiddenAudioElement();
-    const remoteStream = createRemoteStream();
-    audioElement.srcObject = remoteStream;
 
     const entry = {
       audioElement,
       audioSender: null,
+      cameraEnabled: Boolean(cameraEnabled),
       destroyed: false,
       ignoreOffer: false,
       isSettingRemoteAnswerPending: false,
@@ -281,10 +411,14 @@ export function createVoiceRtcSession({
       peerConnection: new RTCPeerConnection(DEFAULT_RTC_CONFIGURATION),
       peerId,
       pendingNegotiation: false,
-      remoteStream,
-      userId
+      remoteAudioStream: createRemoteStream(),
+      remoteVideoStream: createRemoteStream(),
+      screenShareEnabled: Boolean(screenShareEnabled),
+      userId,
+      videoMode
     };
 
+    audioElement.srcObject = entry.remoteAudioStream;
     peers.set(peerId, entry);
     applyPlaybackToPeer(entry);
 
@@ -307,22 +441,31 @@ export function createVoiceRtcSession({
     entry.peerConnection.ontrack = (event) => {
       log("track", {
         hasStreams: Boolean(event.streams?.length),
+        kind: event.track?.kind || "",
         peerId,
         userId: entry.userId || null
       });
-      const nextStream = event.streams?.[0] || null;
-      if (nextStream) {
-        entry.audioElement.srcObject = nextStream;
-      } else if (
-        event.track &&
-        !entry.remoteStream.getTracks().some((track) => track.id === event.track.id)
-      ) {
-        entry.remoteStream.addTrack(event.track);
-        entry.audioElement.srcObject = entry.remoteStream;
+
+      if (event.track?.kind === "audio") {
+        if (
+          !entry.remoteAudioStream.getTracks().some((track) => track.id === event.track.id)
+        ) {
+          entry.remoteAudioStream.addTrack(event.track);
+        }
+        entry.audioElement.srcObject = entry.remoteAudioStream;
+        applyPlaybackToPeer(entry);
+        safePlayAudio(entry);
+        emitPeerMedia(entry);
+        return;
       }
 
-      applyPlaybackToPeer(entry);
-      safePlayAudio(entry);
+      if (event.track?.kind === "video") {
+        entry.remoteVideoStream.getTracks().forEach((track) => {
+          entry.remoteVideoStream.removeTrack(track);
+        });
+        entry.remoteVideoStream.addTrack(event.track);
+        emitPeerMedia(entry);
+      }
     };
 
     entry.peerConnection.onconnectionstatechange = () => {
@@ -336,7 +479,11 @@ export function createVoiceRtcSession({
     await syncLocalAudioToPeer(entry, {
       renegotiate: false
     });
+    await syncLocalVideoToPeer(entry, {
+      renegotiate: false
+    });
 
+    emitPeerMedia(entry);
     return entry;
   }
 
@@ -424,6 +571,9 @@ export function createVoiceRtcSession({
         if (description.type === "offer") {
           log("offer:received", { fromPeerId, userId: entry.userId || null });
           await syncLocalAudioToPeer(entry, {
+            renegotiate: false
+          });
+          await syncLocalVideoToPeer(entry, {
             renegotiate: false
           });
           await entry.peerConnection.setLocalDescription(
@@ -560,10 +710,13 @@ export function createVoiceRtcSession({
 
       try {
         await realtimeChannel.track({
+          cameraEnabled: hasTrack(localCameraStream, "video"),
           channelId,
           joinedAt: new Date().toISOString(),
           peerId: selfPeerId,
-          userId: currentUserId || null
+          screenShareEnabled: hasTrack(localScreenShareStream, "video"),
+          userId: currentUserId || null,
+          videoMode: getCurrentLocalVideoMode()
         });
         await handleRealtimePresenceSync();
       } catch (error) {
@@ -591,22 +744,44 @@ export function createVoiceRtcSession({
   }
 
   return {
-    async updateLocalAudioStream(nextStream) {
-      localAudioStream = nextStream || null;
-      localAudioTrack = nextStream?.getAudioTracks?.()?.[0] || null;
+    async updateLocalMediaStreams({
+      audioStream = null,
+      cameraStream = null,
+      screenShareStream = null
+    } = {}) {
+      localAudioStream = audioStream;
+      localCameraStream = cameraStream;
+      localScreenShareStream = screenShareStream;
+
+      if (realtimeEnabled && realtimeChannel) {
+        realtimeChannel
+          .track({
+            cameraEnabled: hasTrack(localCameraStream, "video"),
+            channelId,
+            joinedAt: new Date().toISOString(),
+            peerId: selfPeerId,
+            screenShareEnabled: hasTrack(localScreenShareStream, "video"),
+            userId: currentUserId || null,
+            videoMode: getCurrentLocalVideoMode()
+          })
+          .catch((error) => {
+            handleSessionError(error);
+          });
+      }
 
       for (const entry of peers.values()) {
         await syncLocalAudioToPeer(entry, {
-          renegotiate: Boolean(localAudioTrack)
+          renegotiate: true
+        });
+        await syncLocalVideoToPeer(entry, {
+          renegotiate: true
         });
       }
     },
     setLocalTrackEnabled(nextEnabled) {
-      if (!localAudioTrack) {
-        return;
-      }
-
-      localAudioTrack.enabled = Boolean(nextEnabled);
+      localAudioStream?.getAudioTracks?.().forEach((track) => {
+        track.enabled = Boolean(nextEnabled);
+      });
     },
     updatePlayback(nextPlayback = {}) {
       playbackState = {

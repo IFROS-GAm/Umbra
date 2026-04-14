@@ -2,12 +2,16 @@ function normalizeVoicePresenceEntry(entry = {}) {
   const channelId = String(entry.channelId || "").trim();
   const peerId = String(entry.peerId || entry.presence_ref || "").trim();
   const userId = String(entry.userId || "").trim();
+  const videoMode = String(entry.videoMode || "").trim().toLowerCase();
 
   return {
     ...entry,
+    cameraEnabled: Boolean(entry.cameraEnabled),
     channelId,
     peerId,
-    userId
+    screenShareEnabled: Boolean(entry.screenShareEnabled),
+    userId,
+    videoMode: ["camera", "screen"].includes(videoMode) ? videoMode : ""
   };
 }
 
@@ -61,7 +65,10 @@ export function buildVoicePeersFromPresenceState(
 
     seenPeerIds.add(entry.peerId);
     peers.push({
+      cameraEnabled: Boolean(entry.cameraEnabled),
       peerId: entry.peerId,
+      screenShareEnabled: Boolean(entry.screenShareEnabled),
+      videoMode: entry.videoMode || "",
       userId: entry.userId || null
     });
   });

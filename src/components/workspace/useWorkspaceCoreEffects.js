@@ -144,6 +144,7 @@ export function useWorkspaceCoreEffects({
   activeSelection,
   activeSelectionRef,
   backgroundPrefetchRef,
+  cameraStream,
   headerActionsRef,
   headerPanel,
   headerPanelRef,
@@ -165,6 +166,7 @@ export function useWorkspaceCoreEffects({
   readChannelCache,
   readReceiptTimeoutRef,
   selectedVoiceDevices,
+  screenShareStream,
   setAppError,
   setCameraStatus,
   setCameraStream,
@@ -197,6 +199,7 @@ export function useWorkspaceCoreEffects({
   setVoiceInputStatus,
   setVoiceJoinReadyChannelId,
   setVoiceMenu,
+  setVoicePeerMedia,
   setVoiceSessions,
   setVoiceState,
   setWorkspace,
@@ -206,6 +209,7 @@ export function useWorkspaceCoreEffects({
   voiceInputSessionRef,
   voiceInputStream,
   voiceMenu,
+  voicePeerMedia,
   voiceState,
   workspaceRef,
   workspace,
@@ -233,6 +237,8 @@ export function useWorkspaceCoreEffects({
   function buildCurrentVoicePresencePayload() {
     const currentUserId = String(workspaceRef.current?.current_user?.id || "").trim();
     const currentChannelId = String(joinedVoiceChannelIdRef.current || "").trim();
+    const hasCameraTrack = Boolean(cameraStream?.getVideoTracks?.().length);
+    const hasScreenTrack = Boolean(screenShareStream?.getVideoTracks?.().length);
 
     if (!currentUserId || !currentChannelId) {
       return null;
@@ -242,11 +248,14 @@ export function useWorkspaceCoreEffects({
 
     return {
       channelId: currentChannelId,
+      cameraEnabled: hasCameraTrack,
       guildId: lookup?.guild?.id || null,
       kind: lookup?.kind || lookup?.channel?.type || "",
       peerId: localVoicePeerIdRef.current,
+      screenShareEnabled: hasScreenTrack,
       updatedAt: new Date().toISOString(),
-      userId: currentUserId
+      userId: currentUserId,
+      videoMode: hasScreenTrack ? "screen" : hasCameraTrack ? "camera" : ""
     };
   }
 
@@ -378,7 +387,7 @@ export function useWorkspaceCoreEffects({
     }
 
     return undefined;
-  }, [joinedVoiceChannelId, workspace?.mode, workspace?.current_user?.id]);
+  }, [cameraStream, joinedVoiceChannelId, screenShareStream, workspace?.mode, workspace?.current_user?.id]);
 
   useEffect(() => {
     setComposer("");
@@ -1270,6 +1279,34 @@ export function useWorkspaceCoreEffects({
             setUiNotice(error.message);
           }
         },
+        onPeerMediaChange: (payload) => {
+          const entryKey = String(payload?.userId || payload?.peerId || "").trim();
+          if (!entryKey) {
+            return;
+          }
+
+          setVoicePeerMedia((previous) => {
+            const nextState = {
+              ...(previous || {})
+            };
+
+            if (payload?.removed) {
+              delete nextState[entryKey];
+              return nextState;
+            }
+
+            nextState[entryKey] = {
+              cameraStream: payload.cameraStream || null,
+              hasAudio: Boolean(payload.hasAudio),
+              peerId: payload.peerId || "",
+              screenShareStream: payload.screenShareStream || null,
+              userId: payload.userId || "",
+              videoMode: payload.videoMode || ""
+            };
+
+            return nextState;
+          });
+        },
         outputDeviceId: selectedVoiceDevices.audiooutput,
         outputVolume: (Number(voiceState.outputVolume) || 0) / 100,
         socket,
@@ -1277,7 +1314,14 @@ export function useWorkspaceCoreEffects({
       });
 
       voiceRtcSessionRef.current = session;
-      session.updateLocalAudioStream(voiceInputStream).catch(() => {});
+      setVoicePeerMedia({});
+      session
+        .updateLocalMediaStreams({
+          audioStream: voiceInputStream,
+          cameraStream,
+          screenShareStream
+        })
+        .catch(() => {});
       session.setLocalTrackEnabled(!voiceState.micMuted);
 
       return () => {
@@ -1285,6 +1329,7 @@ export function useWorkspaceCoreEffects({
           voiceRtcSessionRef.current = null;
         }
 
+        setVoicePeerMedia({});
         session.destroy().catch(() => {});
       };
     } catch (error) {
@@ -1306,8 +1351,14 @@ export function useWorkspaceCoreEffects({
       return;
     }
 
-    session.updateLocalAudioStream(voiceInputStream).catch(() => {});
-  }, [voiceInputStream]);
+    session
+      .updateLocalMediaStreams({
+        audioStream: voiceInputStream,
+        cameraStream,
+        screenShareStream
+      })
+      .catch(() => {});
+  }, [cameraStream, screenShareStream, voiceInputStream]);
 
   useEffect(() => {
     voiceRtcSessionRef.current?.setLocalTrackEnabled(!voiceState.micMuted);

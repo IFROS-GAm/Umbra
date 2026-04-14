@@ -58,11 +58,13 @@ export function useUmbraWorkspaceCore({
     ready: false
   });
   const [cameraStream, setCameraStream] = useState(null);
+  const [screenShareStream, setScreenShareStream] = useState(null);
   const [cameraStatus, setCameraStatus] = useState({
     error: "",
     label: "",
     ready: false
   });
+  const [voicePeerMedia, setVoicePeerMedia] = useState({});
   const [voiceState, setVoiceState] = useState({
     cameraEnabled: false,
     deafen: false,
@@ -326,6 +328,7 @@ export function useUmbraWorkspaceCore({
     activeSelectionRef,
     backgroundPrefetchRef,
     cameraSessionRef,
+    cameraStream,
     headerActionsRef,
     headerPanel,
     headerPanelRef,
@@ -347,6 +350,7 @@ export function useUmbraWorkspaceCore({
     readChannelCache,
     readReceiptTimeoutRef,
     selectedVoiceDevices,
+    screenShareStream,
     setAppError,
     setCameraStatus,
     setCameraStream,
@@ -379,6 +383,7 @@ export function useUmbraWorkspaceCore({
     setVoiceInputStatus,
     setVoiceJoinReadyChannelId,
     setVoiceMenu,
+    setVoicePeerMedia,
     setVoiceSessions,
     setVoiceState,
     setVoiceJoinReadyChannelId,
@@ -389,6 +394,7 @@ export function useUmbraWorkspaceCore({
     voiceInputSessionRef,
     voiceInputStream,
     voiceMenu,
+    voicePeerMedia,
     voiceState,
     workspaceRef,
     workspace
@@ -502,9 +508,9 @@ export function useUmbraWorkspaceCore({
     setComposerPicker, setDialog, setEditingMessage, setHeaderPanel, setHoveredVoiceChannelId, setInboxTab,
     setJoinedVoiceChannelId, setMembersPanelVisible, setMessageMenuFor, setProfileCard, setWorkspace,
     setReactionPickerFor, setReplyMentionEnabled, setReplyTarget, setSettingsOpen, setTheme, setTypingEvents,
-    setSubmittingMessage, setUiNotice, setVoiceDevices, setVoiceMenu, setVoiceSessions, setVoiceState, setVoiceJoinReadyChannelId, settingsOpen, showUiNotice,
+      setScreenShareStream, setSubmittingMessage, setUiNotice, setVoiceDevices, setVoiceMenu, setVoicePeerMedia, setVoiceSessions, setVoiceState, setVoiceJoinReadyChannelId, settingsOpen, showUiNotice,
     submittingMessage, theme, toggleHeaderPanel, toggleVoiceMenu, toggleVoiceState, topbarActionsRef, typingEvents, typingUsers,
     uiNotice, updateVoiceSetting, uploadingAttachments, voiceDevices, voiceInputLevel, voiceInputStatus,
-    voiceInputSpeaking, voiceJoinReadyChannelId, voiceJoinReadyChannelIdRef, voiceMenu, voiceSessions, voiceState, voiceUserIds, workspace
+    voiceInputSpeaking, voiceJoinReadyChannelId, voiceJoinReadyChannelIdRef, voiceMenu, voicePeerMedia, voiceSessions, voiceState, voiceUserIds, screenShareStream, workspace
   };
 }

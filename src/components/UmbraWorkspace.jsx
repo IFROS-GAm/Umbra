@@ -100,15 +100,15 @@ export function UmbraWorkspace({
     setMessageMenuFor, setProfileCard, setReactionPickerFor, setAppError, setWorkspace,
     setReplyMentionEnabled, setReplyTarget, setSettingsOpen, setTheme, setVoiceMenu, theme, settingsOpen,
     showUiNotice, submittingMessage, toggleHeaderPanel, toggleVoiceMenu, toggleVoiceState, topbarActionsRef,
+    screenShareStream, setScreenShareStream,
     typingUsers, uiNotice, updateVoiceSetting, uploadingAttachments, voiceDevices, voiceMenu,
-    voiceSessions, voiceState, voiceUserIds, voiceInputLevel, voiceInputSpeaking, voiceInputStatus, workspace,
+    voicePeerMedia, voiceSessions, voiceState, voiceUserIds, voiceInputLevel, voiceInputSpeaking, voiceInputStatus, workspace,
     updateComposerAttachment,
     cycleVoiceDevice, getSelectedDeviceLabel, selectedVoiceDevices
   } = useUmbraWorkspaceCore({ accessToken, initialSelection, onSignOut });
   const openingDmRequestsRef = useRef(new Map());
   const screenShareSessionRef = useRef(null);
   const statusResetTimeoutRef = useRef(null);
-  const [screenShareStream, setScreenShareStream] = useState(null);
   const [currentUserMenuAnchorRect, setCurrentUserMenuAnchorRect] = useState(null);
   const [accountManagerOpen, setAccountManagerOpen] = useState(false);
   const [settingsView, setSettingsView] = useState({
@@ -843,24 +843,43 @@ export function UmbraWorkspace({
       voiceUsers.map((user) => {
         const userPrefs = getVoiceParticipantPref(user.id);
         const isCurrentVoiceUser = user.id === currentUserId;
+        const remoteMedia = !isCurrentVoiceUser ? voicePeerMedia?.[user.id] || null : null;
+        const remoteCameraStream =
+          remoteMedia?.cameraStream && !userPrefs.videoHidden ? remoteMedia.cameraStream : null;
+        const remoteScreenShareStream =
+          remoteMedia?.screenShareStream && !userPrefs.videoHidden
+            ? remoteMedia.screenShareStream
+            : null;
 
         return {
           ...user,
           hiddenVideoLabel: t("voice.participant.hiddenVideo", "Video oculto"),
-          isCameraOn: isCurrentVoiceUser && voiceState.cameraEnabled,
+          isCameraOn: isCurrentVoiceUser
+            ? voiceState.cameraEnabled
+            : Boolean(remoteCameraStream),
           isLocallyMuted: userPrefs.muted,
           isSpeaking:
             isCurrentVoiceUser &&
             !voiceState.micMuted &&
             !voiceState.deafen &&
             voiceInputSpeaking,
-          isStreaming: isCurrentVoiceUser && voiceState.screenShareEnabled,
+          isStreaming: isCurrentVoiceUser
+            ? voiceState.screenShareEnabled
+            : Boolean(remoteScreenShareStream),
           isVideoHiddenForMe: userPrefs.videoHidden,
           localCameraStream:
-            userPrefs.videoHidden || !isCurrentVoiceUser ? null : cameraStream,
+            isCurrentVoiceUser
+              ? userPrefs.videoHidden
+                ? null
+                : cameraStream
+              : remoteCameraStream,
           localScreenShareStream:
-            userPrefs.videoHidden || !isCurrentVoiceUser ? null : screenShareStream,
-          mediaMuted: isCurrentVoiceUser || userPrefs.muted,
+            isCurrentVoiceUser
+              ? userPrefs.videoHidden
+                ? null
+                : screenShareStream
+              : remoteScreenShareStream,
+          mediaMuted: isCurrentVoiceUser ? true : userPrefs.muted,
           mediaVolume: Math.max(0, Math.min(1, userPrefs.volume / 100)),
           screenShareQualityLabel:
             isCurrentVoiceUser ? screenShareQualityLabel : "720P 30 FPS",
@@ -875,6 +894,7 @@ export function UmbraWorkspace({
       screenShareStream,
       t,
       voiceInputSpeaking,
+      voicePeerMedia,
       voiceParticipantPrefs,
       voiceState.cameraEnabled,
       voiceState.deafen,
