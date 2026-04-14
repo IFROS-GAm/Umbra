@@ -255,6 +255,7 @@ export function createVoiceRtcSession({
       peerId: selfPeerId,
       screenShareEnabled: hasTrack(localScreenShareStream, "video"),
       speaking: Boolean(participantState.speaking),
+      updatedAt: new Date().toISOString(),
       userId: currentUserId || null,
       videoMode: getCurrentLocalVideoMode()
     };

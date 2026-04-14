@@ -18,6 +18,13 @@ function normalizeVoicePresenceEntry(entry = {}) {
   };
 }
 
+function getVoicePresenceTimestamp(entry = {}) {
+  return (
+    Date.parse(entry.updatedAt || entry.joinedAt || entry.trackedAt || "") ||
+    0
+  );
+}
+
 export function flattenRealtimePresenceState(state = {}) {
   return Object.values(state || {})
     .flatMap((entries) => (Array.isArray(entries) ? entries : []))
@@ -70,20 +77,20 @@ export function buildVoicePresenceUsersFromState(state = {}) {
       return;
     }
 
-    users.set(entry.userId, {
-      cameraEnabled: existing.cameraEnabled || Boolean(entry.cameraEnabled),
-      channelId:
-        updatedAt >= existing.updatedAt ? entry.channelId || existing.channelId : existing.channelId,
-      deafened: existing.deafened || Boolean(entry.deafened),
-      micMuted: existing.micMuted || Boolean(entry.micMuted),
-      peerId: updatedAt >= existing.updatedAt ? entry.peerId || existing.peerId : existing.peerId,
-      screenShareEnabled: existing.screenShareEnabled || Boolean(entry.screenShareEnabled),
-      speaking: existing.speaking || Boolean(entry.speaking),
-      updatedAt: Math.max(existing.updatedAt || 0, updatedAt),
-      userId: entry.userId,
-      videoMode:
-        updatedAt >= existing.updatedAt ? entry.videoMode || existing.videoMode : existing.videoMode
-    });
+    if (updatedAt >= (existing.updatedAt || 0)) {
+      users.set(entry.userId, {
+        cameraEnabled: Boolean(entry.cameraEnabled),
+        channelId: entry.channelId || existing.channelId || "",
+        deafened: Boolean(entry.deafened),
+        micMuted: Boolean(entry.micMuted),
+        peerId: entry.peerId || existing.peerId || "",
+        screenShareEnabled: Boolean(entry.screenShareEnabled),
+        speaking: Boolean(entry.speaking),
+        updatedAt,
+        userId: entry.userId,
+        videoMode: entry.videoMode || existing.videoMode || ""
+      });
+    }
   });
 
   return Object.fromEntries(
@@ -102,20 +109,31 @@ export function buildVoicePresencePeersFromState(state = {}) {
       return;
     }
 
-    peers.set(entry.peerId, {
-      cameraEnabled: Boolean(entry.cameraEnabled),
-      channelId: entry.channelId || "",
-      deafened: Boolean(entry.deafened),
-      micMuted: Boolean(entry.micMuted),
-      peerId: entry.peerId,
-      screenShareEnabled: Boolean(entry.screenShareEnabled),
-      speaking: Boolean(entry.speaking),
-      userId: entry.userId || "",
-      videoMode: entry.videoMode || ""
-    });
+    const updatedAt = getVoicePresenceTimestamp(entry);
+    const existing = peers.get(entry.peerId) || null;
+
+    if (!existing || updatedAt >= (existing.updatedAt || 0)) {
+      peers.set(entry.peerId, {
+        cameraEnabled: Boolean(entry.cameraEnabled),
+        channelId: entry.channelId || existing?.channelId || "",
+        deafened: Boolean(entry.deafened),
+        micMuted: Boolean(entry.micMuted),
+        peerId: entry.peerId,
+        screenShareEnabled: Boolean(entry.screenShareEnabled),
+        speaking: Boolean(entry.speaking),
+        updatedAt,
+        userId: entry.userId || existing?.userId || "",
+        videoMode: entry.videoMode || existing?.videoMode || ""
+      });
+    }
   });
 
-  return Object.fromEntries(peers);
+  return Object.fromEntries(
+    [...peers.entries()].map(([peerId, entry]) => {
+      const { updatedAt, ...safeEntry } = entry;
+      return [peerId, safeEntry];
+    })
+  );
 }
 
 export function buildVoicePeersFromPresenceState(
@@ -124,33 +142,11 @@ export function buildVoicePeersFromPresenceState(
 ) {
   const normalizedChannelId = String(channelId || "").trim();
   const normalizedLocalPeerId = String(localPeerId || "").trim();
-  const peers = [];
-  const seenPeerIds = new Set();
-
-  flattenRealtimePresenceState(state).forEach((entry) => {
-    if (entry.channelId !== normalizedChannelId || !entry.peerId) {
-      return;
-    }
-
-    if (
-      entry.peerId === normalizedLocalPeerId ||
-      seenPeerIds.has(entry.peerId)
-    ) {
-      return;
-    }
-
-    seenPeerIds.add(entry.peerId);
-    peers.push({
-      cameraEnabled: Boolean(entry.cameraEnabled),
-      deafened: Boolean(entry.deafened),
-      micMuted: Boolean(entry.micMuted),
-      peerId: entry.peerId,
-      screenShareEnabled: Boolean(entry.screenShareEnabled),
-      speaking: Boolean(entry.speaking),
-      videoMode: entry.videoMode || "",
-      userId: entry.userId || null
-    });
+  return Object.values(buildVoicePresencePeersFromState(state)).filter((entry) => {
+    return (
+      entry.channelId === normalizedChannelId &&
+      entry.peerId &&
+      entry.peerId !== normalizedLocalPeerId
+    );
   });
-
-  return peers;
 }
