@@ -38,6 +38,25 @@ function pushRoute(path, { replace = false } = {}) {
   return readInviteCodeFromLocation();
 }
 
+const TRANSIENT_AUTH_ERROR_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+
+function isTransientAuthError(error) {
+  const status = Number(error?.status || error?.code || 0);
+  const message = String(error?.message || "").toLowerCase();
+
+  if (TRANSIENT_AUTH_ERROR_STATUSES.has(status)) {
+    return true;
+  }
+
+  return (
+    message.includes("gateway timeout") ||
+    message.includes("failed to fetch") ||
+    message.includes("networkerror") ||
+    message.includes("network request failed") ||
+    message.includes("timed out")
+  );
+}
+
 class RootErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -113,13 +132,41 @@ function AppContent() {
       return undefined;
     }
 
-    supabase.auth.getSession().then(({ data, error: sessionError }) => {
+    let cancelled = false;
+    let retryTimer = null;
+
+    async function bootstrapSession(attempt = 0) {
+      const { data, error: sessionError } = await supabase.auth.getSession();
+
+      if (cancelled) {
+        return;
+      }
+
+      if (sessionError && isTransientAuthError(sessionError) && attempt < 2) {
+        setMessage("Reconectando tu sesion con Umbra...");
+        retryTimer = window.setTimeout(() => {
+          bootstrapSession(attempt + 1);
+        }, 1200 * (attempt + 1));
+        return;
+      }
+
       if (sessionError) {
         setError(sessionError.message);
       } else {
         setSession(data.session);
+        setError("");
+        setMessage("");
       }
 
+      setReady(true);
+    }
+
+    bootstrapSession().catch((sessionError) => {
+      if (cancelled) {
+        return;
+      }
+
+      setError(sessionError?.message || "No se pudo restaurar la sesion.");
       setReady(true);
     });
 
@@ -139,7 +186,13 @@ function AppContent() {
       setSession(nextSession);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      cancelled = true;
+      if (retryTimer) {
+        window.clearTimeout(retryTimer);
+      }
+      subscription.unsubscribe();
+    };
   }, [passwordRecoveryMode]);
 
   useEffect(() => {
