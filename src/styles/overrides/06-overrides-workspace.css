@@ -1,0 +1,305 @@
+.navigator-footer {
+  margin-top: auto;
+  background:
+    linear-gradient(180deg, rgba(15, 16, 20, 0.98), rgba(11, 12, 17, 0.98)),
+    radial-gradient(circle at left center, rgba(107, 124, 255, 0.08), transparent 42%);
+  border-top: 1px solid rgba(174, 194, 255, 0.08);
+  margin-bottom: -12px;
+  margin-left: -12px;
+  margin-right: -12px;
+  overflow-x: hidden;
+  overflow-y: visible;
+  padding: 8px 8px 10px 12px;
+  position: relative;
+  z-index: 70;
+}
+
+.floating-tooltip-layer {
+  inset: 0;
+  pointer-events: none;
+  position: fixed;
+  z-index: 4000;
+}
+
+.floating-tooltip-bubble {
+  background: rgba(23, 24, 28, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  box-shadow:
+    0 14px 28px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  color: var(--text-0);
+  font-size: 0.85rem;
+  font-weight: 700;
+  left: 0;
+  max-width: min(320px, calc(100vw - 24px));
+  padding: 8px 12px;
+  position: fixed;
+  top: 0;
+  white-space: nowrap;
+}
+
+.user-dock {
+  align-items: center;
+  background: rgba(16, 17, 22, 0.96);
+  border: 1px solid rgba(174, 194, 255, 0.1);
+  border-radius: 10px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 54px;
+  padding: 7px 8px;
+  width: 100%;
+  z-index: 2;
+}
+
+.profile-card.user-dock-profile {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-start;
+  min-width: 0;
+  padding: 2px 4px;
+  width: auto;
+}
+
+.profile-card.user-dock-profile:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.user-dock-profile .profile-meta strong {
+  font-size: 0.98rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-dock-profile .profile-meta span {
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-dock-profile .profile-meta {
+  min-width: 0;
+}
+
+.footer-actions.footer-voice-actions {
+  align-items: center;
+  flex-shrink: 0;
+  gap: 3px;
+}
+
+.footer-actions.footer-voice-actions .ghost-button.icon-only {
+  background: transparent;
+  min-height: 30px;
+  min-width: 30px;
+  padding: 6px;
+}
+
+.dock-split-control {
+  align-items: stretch;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  display: inline-flex;
+  min-height: 30px;
+  overflow: hidden;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.dock-split-control:hover,
+.dock-split-control.active {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+.dock-split-control.danger.active {
+  background: rgba(237, 66, 69, 0.2);
+  border-color: rgba(237, 66, 69, 0.24);
+}
+
+.dock-split-main,
+.dock-split-caret {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--text-0);
+  display: inline-flex;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.dock-split-main {
+  min-width: 30px;
+  padding: 0 8px;
+}
+
+.dock-split-caret {
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  min-width: 18px;
+  padding: 0 4px;
+}
+
+.dock-split-main:hover,
+.dock-split-caret:hover,
+.dock-split-main.active,
+.dock-split-caret.active {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.dock-split-main.danger.active {
+  background: rgba(237, 66, 69, 0.16);
+  color: #ff8a91;
+}
+
+.dock-split-caret.active {
+  color: var(--text-0);
+}
+
+.voice-panel {
+  margin-bottom: 10px;
+  padding: 12px;
+}
+
+.voice-panel-status-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.voice-status-chip {
+  background: #1b1d22;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  color: var(--text-2);
+  padding: 8px 12px;
+}
+
+.voice-status-chip.active,
+.voice-status-chip:hover {
+  background: rgba(88, 101, 242, 0.16);
+  border-color: rgba(88, 101, 242, 0.28);
+  color: var(--text-0);
+}
+
+.voice-panel-utility-row {
+  display: flex;
+  gap: 8px;
+}
+
+.voice-panel-utility-row .ghost-button {
+  flex: 1;
+}
+
+.channel-category-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.panel-section-label.category {
+  align-items: center;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  margin-top: 10px;
+  text-transform: uppercase;
+}
+
+.category-toggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--text-2);
+  display: inline-flex;
+  flex: 1;
+  gap: 6px;
+  min-height: 22px;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.category-toggle span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.category-toggle .umbra-icon {
+  color: rgba(185, 192, 203, 0.76);
+  flex-shrink: 0;
+  transition: color 160ms ease, transform 160ms ease;
+}
+
+.category-toggle:hover,
+.category-toggle:focus-visible {
+  color: var(--text-1);
+}
+
+.category-toggle:hover .umbra-icon,
+.category-toggle:focus-visible .umbra-icon {
+  color: var(--text-1);
+}
+
+.panel-section-label.category .category-action {
+  flex-shrink: 0;
+  min-height: 22px;
+  min-width: 22px;
+  padding: 0;
+}
+
+.panel-section-label.drop-target {
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 1px rgba(108, 124, 255, 0.28);
+  color: var(--text-0);
+}
+
+.channel-row.nested,
+.channel-row.voice.nested {
+  margin-left: 12px;
+  width: calc(100% - 12px);
+}
+
+.channel-row.dragging {
+  opacity: 0.52;
+}
+
+.channel-row.drop-before::before,
+.channel-row.drop-after::after {
+  background: linear-gradient(90deg, rgba(108, 124, 255, 0.98), rgba(158, 183, 255, 0.8));
+  border-radius: 999px;
+  content: "";
+  height: 3px;
+  left: 10px;
+  position: absolute;
+  right: 10px;
+  z-index: 2;
+}
+
+.channel-row.drop-before::before {
+  top: -2px;
+}
+
+.channel-row.drop-after::after {
+  bottom: -2px;
+}
+
+.voice-channel-block.nested .voice-channel-occupants {
+  margin-left: 38px;
+}
+
+.category-empty {
+  color: var(--text-2);
+  font-size: 0.78rem;
+  margin-left: 12px;
+  padding: 4px 12px 8px;
+}
+

@@ -1,0 +1,219 @@
+.message-invite-card {
+  background: #17191f;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.22);
+  margin-top: 10px;
+  max-width: 420px;
+  overflow: hidden;
+}
+
+.message-invite-card.loading {
+  pointer-events: none;
+}
+
+.message-invite-card-banner {
+  background: linear-gradient(135deg, #f3f7fb, #e4edf7);
+  height: 74px;
+}
+
+.message-invite-card-banner.image {
+  background-position: center;
+  background-size: cover;
+}
+
+.message-invite-card-body {
+  display: flex;
+  gap: 14px;
+  padding: 0 16px 16px;
+  position: relative;
+}
+
+.message-invite-card-icon-wrap {
+  flex-shrink: 0;
+  margin-top: -34px;
+}
+
+.message-invite-card-icon,
+.message-invite-card-icon.fallback,
+.message-invite-card-icon.skeleton {
+  background: #f7fbff;
+  border: 4px solid #17191f;
+  border-radius: 22px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+  height: 72px;
+  width: 72px;
+}
+
+.message-invite-card-icon {
+  display: block;
+  object-fit: cover;
+}
+
+.message-invite-card-icon.fallback {
+  align-items: center;
+  color: #232833;
+  display: flex;
+  font-size: 1.15rem;
+  font-weight: 800;
+  justify-content: center;
+}
+
+.message-invite-card-icon.skeleton,
+.message-invite-card-line {
+  animation: workspacePulse 1.4s ease-in-out infinite;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.06),
+    rgba(255, 255, 255, 0.14),
+    rgba(255, 255, 255, 0.06)
+  );
+  background-size: 200% 100%;
+}
+
+.message-invite-card-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding-top: 14px;
+}
+
+.message-invite-card-copy strong {
+  color: #f5f7fb;
+  font-size: 1.12rem;
+  line-height: 1.1;
+}
+
+.message-invite-card-stats {
+  align-items: center;
+  color: #c7d0dc;
+  display: inline-flex;
+  flex-wrap: wrap;
+  font-size: 0.92rem;
+  gap: 8px;
+}
+
+.message-invite-card-copy small {
+  color: #9aa6b8;
+  font-size: 0.9rem;
+}
+
+.message-invite-card-copy p {
+  color: #cfd6df;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.message-invite-card-copy em {
+  color: #ffadb8;
+  font-size: 0.86rem;
+  font-style: normal;
+}
+
+.message-invite-card-button {
+  align-items: center;
+  background: linear-gradient(180deg, #1bb65f, #14924a);
+  border: 0;
+  border-radius: 10px;
+  color: #f8fffb;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-weight: 800;
+  justify-content: center;
+  margin-top: 6px;
+  min-height: 40px;
+  padding: 0 14px;
+  transition: filter 150ms ease, opacity 150ms ease, transform 150ms ease;
+}
+
+.message-invite-card-button:hover:not(:disabled) {
+  filter: brightness(1.04);
+  transform: translateY(-1px);
+}
+
+.message-invite-card-button:disabled {
+  cursor: progress;
+  opacity: 0.72;
+}
+
+.message-invite-card-line {
+  border-radius: 999px;
+  height: 12px;
+}
+
+.message-invite-card-line.wide {
+  width: min(220px, 86%);
+}
+
+.message-invite-card-line.medium {
+  width: min(180px, 70%);
+}
+
+.message-invite-card-line.short {
+  width: min(120px, 46%);
+}
+
+.reactions-row {
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.reaction-chip {
+  background: #23252c;
+  border-color: rgba(255, 255, 255, 0.04);
+}
+
+.reaction-picker-inline {
+  background: #1e1f22;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px;
+  width: fit-content;
+}
+
+.composer-shell {
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0), rgba(17, 18, 20, 0.15));
+}
+
+.composer-banner {
+  align-items: center;
+  background: #23252c;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
+.composer-banner > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-banner-actions {
+  align-items: center;
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.reply-mention-toggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: rgba(219, 222, 225, 0.56);
+  display: inline-flex;
+  gap: 4px;
+  padding: 0;
+}
+

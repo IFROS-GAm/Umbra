@@ -1,0 +1,124 @@
+@media (max-width: 1180px) {
+  .direct-call-stage-layout,
+  .voice-room-grid,
+  .voice-stage-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .direct-call-stage-sidebar {
+    max-height: 320px;
+  }
+
+  .voice-stage-featured-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .voice-stage-stream-modal {
+    max-width: min(94vw, 1100px);
+    width: min(94vw, 1100px);
+  }
+
+  .voice-channel-preview {
+    display: none;
+  }
+
+  .server-settings-body {
+    grid-template-columns: 1fr;
+  }
+
+  .server-settings-preview {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 960px) {
+  .direct-call-stage-main {
+    padding: 18px;
+  }
+
+  .direct-call-stage-hero {
+    flex-direction: column;
+  }
+
+  .direct-call-stage-badges {
+    justify-content: flex-start;
+  }
+
+  .direct-call-stage-avatar-visual,
+  .direct-call-stage-avatar-video,
+  .direct-call-stage-avatar-overflow {
+    height: 96px;
+    width: 96px;
+  }
+
+  .server-settings-shell {
+    grid-template-columns: 1fr;
+    height: min(94vh, 900px);
+  }
+
+  .server-settings-sidebar {
+    border-bottom: 1px solid var(--line);
+    border-right: 0;
+  }
+
+  .server-settings-body {
+    padding: 22px 18px 24px;
+  }
+
+  .server-banner-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .server-asset-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .invite-actions {
+    flex-direction: column-reverse;
+  }
+
+  .invite-link-copy-row,
+  .invite-link-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .invite-copy-button {
+    width: 100%;
+  }
+
+  .screen-share-picker-options-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .screen-share-source-grid.applications-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .screen-share-source-card.list-layout {
+    flex-direction: column;
+  }
+
+  .screen-share-source-card.list-layout .screen-share-source-preview {
+    flex-basis: auto;
+    height: 220px;
+  }
+
+  .screen-share-source-card.applications-card {
+    min-height: 0;
+  }
+
+  .screen-share-source-card.applications-card .screen-share-source-preview {
+    min-height: 210px;
+  }
+
+  .screen-share-quality-inline {
+    width: 100%;
+  }
+
+  .screen-share-quality-inline button {
+    flex: 1 1 0;
+  }
+}

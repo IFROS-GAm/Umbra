@@ -1,0 +1,579 @@
+.invite-modal-card {
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  max-width: 612px;
+  padding: 22px 0 0;
+  width: min(92vw, 612px);
+}
+
+.invite-modal-card.discordish {
+  overflow: hidden;
+}
+
+.invite-modal-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 0 22px 18px;
+}
+
+.invite-modal-header h3 {
+  font-size: 1.1rem;
+  letter-spacing: -0.03em;
+  margin: 0 0 8px;
+}
+
+.invite-modal-header p {
+  color: var(--text-2);
+  margin: 0;
+}
+
+.invite-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.invite-code-block,
+.invite-empty-state {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+}
+
+.invite-code-block small,
+.invite-empty-state span {
+  color: var(--text-2);
+}
+
+.invite-code-block strong {
+  font-size: 2rem;
+  letter-spacing: 0.08em;
+}
+
+.invite-empty-state.error strong {
+  color: #ff9aa5;
+}
+
+.invite-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.invite-search-bar {
+  margin: 0 22px;
+}
+
+.invite-friend-list {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  max-height: 396px;
+  overflow: auto;
+  padding: 8px 0;
+}
+
+.invite-friend-row {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 8px 22px;
+}
+
+.invite-friend-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.invite-friend-main {
+  align-items: center;
+  display: flex;
+  flex: 1;
+  gap: 12px;
+  min-width: 0;
+}
+
+.invite-friend-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.invite-friend-copy strong,
+.invite-friend-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.invite-friend-copy strong {
+  color: var(--text-0);
+  font-size: 0.98rem;
+}
+
+.invite-friend-copy small {
+  color: var(--text-2);
+  font-size: 0.8rem;
+}
+
+.invite-row-action {
+  flex-shrink: 0;
+  min-width: 78px;
+}
+
+.invite-row-action.active {
+  background: rgba(88, 101, 242, 0.16);
+  border-color: rgba(88, 101, 242, 0.3);
+  color: #cfd5ff;
+}
+
+.invite-friends-empty-state {
+  align-items: center;
+  color: var(--text-2);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  justify-content: center;
+  min-height: 180px;
+  padding: 20px 22px;
+  text-align: center;
+}
+
+.invite-friends-empty-state strong {
+  color: var(--text-0);
+}
+
+.invite-link-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 10px 22px 18px;
+}
+
+.invite-link-panel strong {
+  color: var(--text-1);
+  font-size: 0.98rem;
+}
+
+.invite-link-copy-row {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.invite-link-field {
+  align-items: center;
+  background: #111318;
+  border: 1px solid rgba(174, 194, 255, 0.12);
+  border-radius: 10px;
+  color: var(--text-1);
+  display: flex;
+  flex: 1;
+  min-height: 42px;
+  overflow: hidden;
+  padding: 0 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.invite-copy-button {
+  flex-shrink: 0;
+  min-height: 42px;
+  min-width: 92px;
+  padding: 0 16px;
+}
+
+.invite-link-footer {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.invite-link-footer span {
+  color: var(--text-2);
+  font-size: 0.8rem;
+}
+
+.confirm-action-modal {
+  background: linear-gradient(180deg, rgba(22, 24, 31, 0.98), rgba(17, 19, 24, 0.98));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  box-shadow: 0 28px 60px rgba(0, 0, 0, 0.42);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px;
+  width: min(92vw, 420px);
+}
+
+.confirm-action-header {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.confirm-action-header strong {
+  color: var(--text-0);
+  font-size: 1.02rem;
+  letter-spacing: -0.02em;
+}
+
+.confirm-action-modal p {
+  color: var(--text-2);
+  line-height: 1.55;
+  margin: 0;
+}
+
+.confirm-action-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.confirm-action-buttons .ghost-button,
+.confirm-action-confirm {
+  border-radius: 10px;
+  min-height: 40px;
+  min-width: 110px;
+  padding: 0 16px;
+}
+
+.confirm-action-confirm {
+  background: linear-gradient(180deg, #f05d5e, #d9474b);
+  color: white;
+}
+
+.confirm-action-confirm:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.avatar-crop-modal {
+  background: linear-gradient(180deg, rgba(22, 24, 31, 0.99), rgba(17, 19, 24, 0.99));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  box-shadow: 0 28px 60px rgba(0, 0, 0, 0.42);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px;
+  width: min(92vw, 500px);
+}
+
+.avatar-crop-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.avatar-crop-header h3 {
+  font-size: 1.05rem;
+  margin: 0;
+}
+
+.avatar-crop-stage {
+  align-items: center;
+  background: #17191f;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  display: flex;
+  height: 360px;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+}
+
+.avatar-crop-stage::before,
+.avatar-crop-stage::after {
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.avatar-crop-stage::before {
+  background:
+    linear-gradient(to right, rgba(8, 9, 13, 0.72) 0, rgba(8, 9, 13, 0.72) calc(50% - 160px), transparent calc(50% - 160px), transparent calc(50% + 160px), rgba(8, 9, 13, 0.72) calc(50% + 160px), rgba(8, 9, 13, 0.72) 100%),
+    linear-gradient(to bottom, rgba(8, 9, 13, 0.72) 0, rgba(8, 9, 13, 0.72) calc(50% - 160px), transparent calc(50% - 160px), transparent calc(50% + 160px), rgba(8, 9, 13, 0.72) calc(50% + 160px), rgba(8, 9, 13, 0.72) 100%);
+}
+
+.avatar-crop-image {
+  left: 50%;
+  max-width: none;
+  position: absolute;
+  top: 50%;
+  transform-origin: center center;
+  user-select: none;
+}
+
+.avatar-crop-ring {
+  border: 5px solid rgba(255, 255, 255, 0.96);
+  border-radius: 999px;
+  box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.08);
+  height: 260px;
+  pointer-events: none;
+  position: relative;
+  width: 260px;
+  z-index: 1;
+}
+
+.avatar-crop-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.avatar-crop-control {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.avatar-crop-control span {
+  align-items: center;
+  color: var(--text-1);
+  display: inline-flex;
+  gap: 8px;
+}
+
+.avatar-crop-actions {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.avatar-crop-actions-right {
+  display: flex;
+  gap: 10px;
+}
+
+::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+}
+
+@media (max-width: 1280px) {
+  .auth-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-highlights {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell {
+    grid-template-columns: 82px 260px 1fr;
+  }
+
+  .members-panel {
+    display: none;
+  }
+
+  .settings-shell {
+    grid-template-columns: 220px 1fr;
+    width: min(1040px, 96vw);
+  }
+}
+
+@media (max-width: 900px) {
+  .auth-shell {
+    padding: 14px;
+  }
+
+  .auth-brand {
+    padding: 24px;
+  }
+
+  .app-shell {
+    gap: 0;
+    grid-template-columns: 72px 1fr;
+    padding: 0;
+  }
+
+  .navigator-panel {
+    display: none;
+  }
+
+  .chat-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .friends-header,
+  .friend-row {
+    align-items: flex-start;
+    grid-template-columns: 1fr;
+  }
+
+  .friends-header {
+    flex-direction: column;
+  }
+
+  .friends-tabs,
+  .friend-actions {
+    width: 100%;
+  }
+
+  .friend-actions {
+    justify-content: flex-start;
+  }
+
+  .chat-header-tools {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .chat-search {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .message-main {
+    padding-right: 0;
+  }
+
+  .message-toolbar {
+    margin-top: 10px;
+    opacity: 1;
+    pointer-events: auto;
+    position: static;
+    transform: none;
+  }
+
+  .composer-frame {
+    grid-template-columns: 1fr;
+  }
+
+  .composer {
+    grid-template-columns: 1fr;
+  }
+
+  .composer-side {
+    order: 2;
+  }
+
+  .shortcut-menu,
+  .picker-panel {
+    bottom: auto;
+    left: 0;
+    position: relative;
+    right: auto;
+    width: 100%;
+  }
+
+  .picker-grid.emoji {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .settings-shell {
+    grid-template-columns: 1fr;
+    height: min(94vh, 900px);
+  }
+
+  .user-profile-card {
+    left: 16px !important;
+    right: 16px;
+    top: auto !important;
+    width: auto;
+  }
+
+  .settings-sidebar {
+    border-bottom: 1px solid var(--line);
+    border-right: 0;
+    gap: 16px;
+  }
+
+  .settings-shell.discordish .settings-panel-header,
+  .settings-shell.discordish .settings-stack {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  .settings-hero-body {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-social-row,
+  .settings-social-row.compact,
+  .settings-device-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-avatar-editor {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .settings-banner-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-color-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-form-actions,
+  .dialog-actions {
+    flex-direction: column-reverse;
+  }
+}
+
+.hidden-file-input {
+  display: none;
+}
+
+.dialog-segmented-control {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dialog-segmented-control button {
+  align-items: center;
+  background: var(--bg-2);
+  border: 1px solid transparent;
+  border-radius: 14px;
+  color: var(--text-1);
+  display: inline-flex;
+  gap: 8px;
+  justify-content: center;
+  min-height: 42px;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.dialog-segmented-control button.active,
+.dialog-segmented-control button:hover {
+  background: rgba(88, 101, 242, 0.16);
+  border-color: rgba(88, 101, 242, 0.32);
+  color: var(--text-0);
+}
+
+.panel-section-label.voice {
+  margin-top: 18px;
+}
