@@ -139,6 +139,7 @@ export function createVoiceRtcSession({
     handlePeerLeft,
     handlePeersSnapshot,
     handleSignal,
+    negotiatePeer,
     syncLocalAudioToPeer,
     syncLocalVideoToPeer
   } = createVoiceRtcPeerSession({
@@ -304,6 +305,7 @@ export function createVoiceRtcSession({
     handleSessionError,
     handleSocketConnect,
     realtimeEnabled,
+    requestPeerRenegotiation: negotiatePeer,
     setDestroyed: (nextDestroyed) => {
       destroyed = nextDestroyed;
     },

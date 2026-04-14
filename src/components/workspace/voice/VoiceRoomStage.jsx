@@ -27,7 +27,7 @@ function VoiceStageVideo({ muted = true, stream, user, volume = 1 }) {
     <video
       autoPlay
       className="voice-stage-video"
-      muted
+      muted={Boolean(muted)}
       playsInline
       ref={videoRef}
       title={user.display_name || user.username}

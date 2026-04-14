@@ -3,8 +3,7 @@ import {
   buildRtcConfiguration,
   createHiddenAudioElement,
   createRemoteStream,
-  getVoiceSignalType,
-  hasTrack
+  getVoiceSignalType
 } from "./voiceRtcSessionConfig.js";
 
 export function createVoiceRtcPeerSession({
@@ -25,6 +24,51 @@ export function createVoiceRtcPeerSession({
   selfPeerId,
   socket
 }) {
+  const pendingAudioUnlockEntries = new Set();
+  let removeAudioUnlockListeners = null;
+
+  function hasLiveRemoteTrack(stream, kind) {
+    const track = stream?.getTracks?.().find((candidate) => candidate.kind === kind) || null;
+    return Boolean(track && track.readyState !== "ended" && !track.muted);
+  }
+
+  function updateAudioUnlockListeners() {
+    if (pendingAudioUnlockEntries.size === 0) {
+      removeAudioUnlockListeners?.();
+      removeAudioUnlockListeners = null;
+      return;
+    }
+
+    if (removeAudioUnlockListeners || typeof window === "undefined") {
+      return;
+    }
+
+    const unlockPlayback = () => {
+      for (const entry of [...pendingAudioUnlockEntries]) {
+        entry?.audioElement?.play?.().then?.(() => {
+          pendingAudioUnlockEntries.delete(entry);
+          updateAudioUnlockListeners();
+        }).catch(() => {});
+      }
+    };
+
+    const listenerOptions = {
+      capture: true,
+      passive: true
+    };
+    const eventNames = ["pointerdown", "keydown", "touchstart"];
+
+    eventNames.forEach((eventName) => {
+      window.addEventListener(eventName, unlockPlayback, listenerOptions);
+    });
+
+    removeAudioUnlockListeners = () => {
+      eventNames.forEach((eventName) => {
+        window.removeEventListener(eventName, unlockPlayback, listenerOptions);
+      });
+    };
+  }
+
   function emitPeerMedia(entry) {
     if (typeof onPeerMediaChange !== "function" || !entry) {
       return;
@@ -37,17 +81,17 @@ export function createVoiceRtcPeerSession({
     onPeerMediaChange({
       cameraEnabled: Boolean(entry.cameraEnabled),
       cameraStream:
-        videoMode === "camera" && hasTrack(entry.remoteVideoStream, "video")
+        videoMode === "camera" && hasLiveRemoteTrack(entry.remoteVideoStream, "video")
           ? entry.remoteVideoStream
           : null,
       deafened: Boolean(entry.deafened),
-      hasAudio: hasTrack(entry.remoteAudioStream, "audio"),
+      hasAudio: hasLiveRemoteTrack(entry.remoteAudioStream, "audio"),
       micMuted: Boolean(entry.micMuted),
       peerId: entry.peerId,
       removed: false,
       screenShareEnabled: Boolean(entry.screenShareEnabled),
       screenShareStream:
-        videoMode === "screen" && hasTrack(entry.remoteVideoStream, "video")
+        videoMode === "screen" && hasLiveRemoteTrack(entry.remoteVideoStream, "video")
           ? entry.remoteVideoStream
           : null,
       speaking: Boolean(entry.speaking),
@@ -80,15 +124,29 @@ export function createVoiceRtcPeerSession({
   }
 
   function safePlayAudio(entry) {
-    entry?.audioElement?.play?.().catch((error) => {
-      log(
-        "audio:play-blocked",
-        {
-          message: error?.message || "Autoplay bloqueado."
-        },
-        "warn"
-      );
-    });
+    const playResult = entry?.audioElement?.play?.();
+    if (!playResult?.catch) {
+      pendingAudioUnlockEntries.delete(entry);
+      updateAudioUnlockListeners();
+      return;
+    }
+
+    playResult
+      .then(() => {
+        pendingAudioUnlockEntries.delete(entry);
+        updateAudioUnlockListeners();
+      })
+      .catch((error) => {
+        pendingAudioUnlockEntries.add(entry);
+        updateAudioUnlockListeners();
+        log(
+          "audio:play-blocked",
+          {
+            message: error?.message || "Autoplay bloqueado."
+          },
+          "warn"
+        );
+      });
   }
 
   function getPeerEntry(peerId) {
@@ -223,6 +281,8 @@ export function createVoiceRtcPeerSession({
     if (changed && renegotiate) {
       await negotiatePeer(entry);
     }
+
+    return changed;
   }
 
   async function syncLocalVideoToPeer(entry, { renegotiate = false } = {}) {
@@ -240,6 +300,8 @@ export function createVoiceRtcPeerSession({
     if (changed && renegotiate) {
       await negotiatePeer(entry);
     }
+
+    return changed;
   }
 
   function cleanupPeer(peerId) {
@@ -250,7 +312,14 @@ export function createVoiceRtcPeerSession({
 
     entry.destroyed = true;
     peers.delete(peerId);
+    pendingAudioUnlockEntries.delete(entry);
+    updateAudioUnlockListeners();
     clearPeerMedia(entry);
+
+    entry.remoteTrackListeners?.forEach(({ cleanup }) => {
+      cleanup?.();
+    });
+    entry.remoteTrackListeners?.clear?.();
 
     try {
       entry.peerConnection.onicecandidate = null;
@@ -268,6 +337,57 @@ export function createVoiceRtcPeerSession({
     } catch {
       // Ignore DOM cleanup edge cases.
     }
+  }
+
+  function attachRemoteTrackLifecycle(entry, track, kind) {
+    if (!entry || !track) {
+      return;
+    }
+
+    const listenerKey = `${kind}:${track.id}`;
+    if (entry.remoteTrackListeners?.has(listenerKey)) {
+      return;
+    }
+
+    const refreshRemoteMedia = () => {
+      if (entry.destroyed) {
+        return;
+      }
+
+      if (kind === "audio") {
+        entry.audioElement.srcObject = entry.remoteAudioStream;
+        applyPlaybackToPeer(entry);
+        if (!track.muted && track.readyState !== "ended") {
+          safePlayAudio(entry);
+        }
+      }
+
+      emitPeerMedia(entry);
+    };
+
+    const handleEnded = () => {
+      if (kind === "audio") {
+        entry.remoteAudioStream.removeTrack(track);
+      } else {
+        entry.remoteVideoStream.removeTrack(track);
+      }
+
+      entry.remoteTrackListeners.get(listenerKey)?.cleanup?.();
+      entry.remoteTrackListeners.delete(listenerKey);
+      emitPeerMedia(entry);
+    };
+
+    track.addEventListener("mute", refreshRemoteMedia);
+    track.addEventListener("unmute", refreshRemoteMedia);
+    track.addEventListener("ended", handleEnded);
+
+    entry.remoteTrackListeners.set(listenerKey, {
+      cleanup() {
+        track.removeEventListener("mute", refreshRemoteMedia);
+        track.removeEventListener("unmute", refreshRemoteMedia);
+        track.removeEventListener("ended", handleEnded);
+      }
+    });
   }
 
   async function ensurePeer(peer) {
@@ -327,6 +447,7 @@ export function createVoiceRtcPeerSession({
       peerId,
       pendingNegotiation: false,
       remoteAudioStream: createRemoteStream(),
+      remoteTrackListeners: new Map(),
       remoteVideoStream: createRemoteStream(),
       screenShareEnabled: Boolean(screenShareEnabled),
       speaking: Boolean(speaking),
@@ -369,6 +490,7 @@ export function createVoiceRtcPeerSession({
         ) {
           entry.remoteAudioStream.addTrack(event.track);
         }
+        attachRemoteTrackLifecycle(entry, event.track, "audio");
         entry.audioElement.srcObject = entry.remoteAudioStream;
         applyPlaybackToPeer(entry);
         safePlayAudio(entry);
@@ -378,9 +500,16 @@ export function createVoiceRtcPeerSession({
 
       if (event.track?.kind === "video") {
         entry.remoteVideoStream.getTracks().forEach((track) => {
-          entry.remoteVideoStream.removeTrack(track);
+          if (track.id !== event.track.id) {
+            entry.remoteVideoStream.removeTrack(track);
+          }
         });
-        entry.remoteVideoStream.addTrack(event.track);
+        if (
+          !entry.remoteVideoStream.getTracks().some((track) => track.id === event.track.id)
+        ) {
+          entry.remoteVideoStream.addTrack(event.track);
+        }
+        attachRemoteTrackLifecycle(entry, event.track, "video");
         emitPeerMedia(entry);
       }
     };
@@ -580,6 +709,7 @@ export function createVoiceRtcPeerSession({
     handlePeerLeft,
     handlePeersSnapshot,
     handleSignal,
+    negotiatePeer,
     syncLocalAudioToPeer,
     syncLocalVideoToPeer
   };
