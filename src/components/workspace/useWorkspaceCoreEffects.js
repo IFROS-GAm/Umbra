@@ -259,7 +259,7 @@ export function useWorkspaceCoreEffects({
       guildId: lookup?.guild?.id || null,
       kind: lookup?.kind || lookup?.channel?.type || "",
       micMuted: isMicMuted,
-      peerId: localVoicePeerIdRef.current,
+      peerId: voiceLocalPeerIdRef.current,
       screenShareEnabled: hasScreenTrack,
       speaking: isSpeaking,
       updatedAt: new Date().toISOString(),
@@ -309,7 +309,7 @@ export function useWorkspaceCoreEffects({
     const channel = supabase.channel("umbra-voice-presence", {
       config: {
         presence: {
-          key: localVoicePeerIdRef.current
+          key: voiceLocalPeerIdRef.current
         }
       }
     });
@@ -325,7 +325,7 @@ export function useWorkspaceCoreEffects({
       const nextPresenceUsers = buildVoicePresenceUsersFromState(channel.presenceState());
       console.info("[voice/client] realtime:presence:sync", {
         channelIds: Object.keys(nextSessions),
-        peerId: localVoicePeerIdRef.current,
+        peerId: voiceLocalPeerIdRef.current,
         userId: workspaceRef.current?.current_user?.id || null
       });
       applyVoiceSessions(nextSessions);
@@ -342,14 +342,14 @@ export function useWorkspaceCoreEffects({
           await channel.track(payload);
         } else {
           console.info("[voice/client] realtime:presence:untrack", {
-            peerId: localVoicePeerIdRef.current
+            peerId: voiceLocalPeerIdRef.current
           });
           await channel.untrack();
         }
       } catch (error) {
         console.warn("[voice/client] realtime:presence:error", {
           error: error?.message || String(error),
-          peerId: localVoicePeerIdRef.current
+          peerId: voiceLocalPeerIdRef.current
         });
       }
     };
@@ -359,7 +359,7 @@ export function useWorkspaceCoreEffects({
     channel.on("presence", { event: "leave" }, syncPresenceState);
     channel.subscribe(async (status) => {
       console.info("[voice/client] realtime:presence:status", {
-        peerId: localVoicePeerIdRef.current,
+        peerId: voiceLocalPeerIdRef.current,
         status
       });
       if (status !== "SUBSCRIBED" || cancelled) {
@@ -1299,7 +1299,7 @@ export function useWorkspaceCoreEffects({
         channelId: joinedVoiceChannelId,
         currentUserId: workspaceRef.current.current_user.id,
         deafened: Boolean(voiceState.deafen),
-        localPeerId: localVoicePeerIdRef.current,
+        localPeerId: voiceLocalPeerIdRef.current,
         micMuted: Boolean(voiceState.micMuted),
         onError: (error) => {
           if (error?.message) {
