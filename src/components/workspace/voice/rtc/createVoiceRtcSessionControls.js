@@ -16,7 +16,7 @@ export function createVoiceRtcSessionControls({
   handleSocketConnect,
   handleSessionError,
   realtimeEnabled,
-  requestPeerRenegotiation,
+  requestPeerOffer,
   setDestroyed,
   setParticipantState,
   setPlaybackState,
@@ -46,15 +46,13 @@ export function createVoiceRtcSessionControls({
       }
 
       for (const entry of getPeers().values()) {
-        const audioChanged = await syncLocalAudioToPeer(entry, {
-          renegotiate: false
-        });
-        const videoChanged = await syncLocalVideoToPeer(entry, {
-          renegotiate: false
-        });
-
-        if (audioChanged || videoChanged) {
-          await requestPeerRenegotiation?.(entry);
+        await syncLocalAudioToPeer(entry);
+        await syncLocalVideoToPeer(entry);
+        if (
+          !entry?.peerConnection?.localDescription &&
+          !entry?.peerConnection?.remoteDescription
+        ) {
+          await requestPeerOffer?.(entry);
         }
       }
     },

@@ -69,6 +69,18 @@ export function createVoiceRtcPeerSession({
     };
   }
 
+  function getPeerEntry(peerId) {
+    return peers.get(peerId) || null;
+  }
+
+  function shouldIgnorePeer({ peerId }) {
+    return !peerId || peerId === selfPeerId;
+  }
+
+  function shouldInitiatePeer(peerId) {
+    return selfPeerId.localeCompare(String(peerId || "")) < 0;
+  }
+
   function emitPeerMedia(entry) {
     if (typeof onPeerMediaChange !== "function" || !entry) {
       return;
@@ -149,14 +161,6 @@ export function createVoiceRtcPeerSession({
       });
   }
 
-  function getPeerEntry(peerId) {
-    return peers.get(peerId) || null;
-  }
-
-  function shouldIgnorePeer({ peerId }) {
-    return !peerId || peerId === selfPeerId;
-  }
-
   function sendSignal(targetPeerId, signal) {
     if (!targetPeerId || !signal) {
       return;
@@ -192,50 +196,28 @@ export function createVoiceRtcPeerSession({
     });
   }
 
-  async function negotiatePeer(entry) {
-    if (!entry || entry.destroyed) {
+  async function flushQueuedIceCandidates(entry) {
+    if (!entry?.pendingRemoteCandidates?.length || !entry.peerConnection.remoteDescription) {
       return;
     }
 
-    if (entry.makingOffer || entry.peerConnection.signalingState !== "stable") {
-      entry.pendingNegotiation = true;
-      return;
-    }
+    const queuedCandidates = [...entry.pendingRemoteCandidates];
+    entry.pendingRemoteCandidates.length = 0;
 
-    try {
-      entry.makingOffer = true;
-      log("offer:create", { peerId: entry.peerId, userId: entry.userId || null });
-      await entry.peerConnection.setLocalDescription(
-        await entry.peerConnection.createOffer()
-      );
-      log("offer:emit", {
-        peerId: entry.peerId,
-        transport: realtimeEnabled ? "supabase" : "socket",
-        userId: entry.userId || null
-      });
-      sendSignal(entry.peerId, {
-        description: entry.peerConnection.localDescription
-      });
-    } catch (error) {
-      handleSessionError(error);
-    } finally {
-      entry.makingOffer = false;
-      if (!entry.pendingNegotiation || entry.destroyed) {
-        return;
+    for (const candidate of queuedCandidates) {
+      try {
+        await entry.peerConnection.addIceCandidate(candidate);
+        log("ice:queued:applied", {
+          peerId: entry.peerId,
+          userId: entry.userId || null
+        });
+      } catch (error) {
+        handleSessionError(error);
       }
-
-      entry.pendingNegotiation = false;
-      queueMicrotask(() => {
-        negotiatePeer(entry);
-      });
     }
   }
 
-  async function syncSenderTrack({
-    entry,
-    nextTrack,
-    senderKey
-  }) {
+  async function syncSenderTrack({ entry, nextTrack, senderKey }) {
     if (!entry || entry.destroyed) {
       return false;
     }
@@ -246,46 +228,24 @@ export function createVoiceRtcPeerSession({
       return false;
     }
 
-    if (sender) {
-      try {
-        await sender.replaceTrack(nextTrack);
-        return true;
-      } catch (error) {
-        handleSessionError(error);
-        return false;
-      }
-    }
-
-    if (!nextTrack) {
+    try {
+      await sender?.replaceTrack?.(nextTrack || null);
+      return true;
+    } catch (error) {
+      handleSessionError(error);
       return false;
     }
-
-    const streamForAddTrack =
-      senderKey === "audioSender" ? getLocalAudioStream() : getCurrentLocalVideoStream();
-
-    if (!streamForAddTrack) {
-      return false;
-    }
-
-    entry[senderKey] = entry.peerConnection.addTrack(nextTrack, streamForAddTrack);
-    return true;
   }
 
-  async function syncLocalAudioToPeer(entry, { renegotiate = false } = {}) {
-    const changed = await syncSenderTrack({
+  async function syncLocalAudioToPeer(entry) {
+    return syncSenderTrack({
       entry,
       nextTrack: getCurrentLocalAudioTrack(),
       senderKey: "audioSender"
     });
-
-    if (changed && renegotiate) {
-      await negotiatePeer(entry);
-    }
-
-    return changed;
   }
 
-  async function syncLocalVideoToPeer(entry, { renegotiate = false } = {}) {
+  async function syncLocalVideoToPeer(entry) {
     const nextTrack = getCurrentLocalVideoTrack();
     const changed = await syncSenderTrack({
       entry,
@@ -297,46 +257,7 @@ export function createVoiceRtcPeerSession({
       entry.videoMode = getCurrentLocalVideoMode();
     }
 
-    if (changed && renegotiate) {
-      await negotiatePeer(entry);
-    }
-
     return changed;
-  }
-
-  function cleanupPeer(peerId) {
-    const entry = peers.get(peerId);
-    if (!entry) {
-      return;
-    }
-
-    entry.destroyed = true;
-    peers.delete(peerId);
-    pendingAudioUnlockEntries.delete(entry);
-    updateAudioUnlockListeners();
-    clearPeerMedia(entry);
-
-    entry.remoteTrackListeners?.forEach(({ cleanup }) => {
-      cleanup?.();
-    });
-    entry.remoteTrackListeners?.clear?.();
-
-    try {
-      entry.peerConnection.onicecandidate = null;
-      entry.peerConnection.ontrack = null;
-      entry.peerConnection.onconnectionstatechange = null;
-      entry.peerConnection.close();
-    } catch {
-      // Ignore peer teardown errors.
-    }
-
-    try {
-      entry.audioElement.pause();
-      entry.audioElement.srcObject = null;
-      entry.audioElement.remove();
-    } catch {
-      // Ignore DOM cleanup edge cases.
-    }
   }
 
   function attachRemoteTrackLifecycle(entry, track, kind) {
@@ -345,7 +266,7 @@ export function createVoiceRtcPeerSession({
     }
 
     const listenerKey = `${kind}:${track.id}`;
-    if (entry.remoteTrackListeners?.has(listenerKey)) {
+    if (entry.remoteTrackListeners.has(listenerKey)) {
       return;
     }
 
@@ -366,12 +287,9 @@ export function createVoiceRtcPeerSession({
     };
 
     const handleEnded = () => {
-      if (kind === "audio") {
-        entry.remoteAudioStream.removeTrack(track);
-      } else {
-        entry.remoteVideoStream.removeTrack(track);
-      }
-
+      const stream =
+        kind === "audio" ? entry.remoteAudioStream : entry.remoteVideoStream;
+      stream.removeTrack(track);
       entry.remoteTrackListeners.get(listenerKey)?.cleanup?.();
       entry.remoteTrackListeners.delete(listenerKey);
       emitPeerMedia(entry);
@@ -390,39 +308,101 @@ export function createVoiceRtcPeerSession({
     });
   }
 
-  async function ensurePeer(peer) {
-    const {
-      cameraEnabled = false,
-      deafened = false,
-      micMuted = false,
-      peerId,
-      screenShareEnabled = false,
-      speaking = false,
-      userId = null,
-      videoMode = ""
-    } = peer || {};
-    if (shouldIgnorePeer({ peerId, userId })) {
-      return null;
+  async function startPeerOffer(entry, { force = false } = {}) {
+    if (!entry || entry.destroyed || !shouldInitiatePeer(entry.peerId)) {
+      return false;
     }
 
-    const existing = getPeerEntry(peerId);
-    if (existing) {
-      existing.cameraEnabled = Boolean(cameraEnabled);
-      existing.deafened = Boolean(deafened);
-      existing.micMuted = Boolean(micMuted);
-      existing.screenShareEnabled = Boolean(screenShareEnabled);
-      existing.speaking = Boolean(speaking);
-      existing.userId = userId || existing.userId;
-      existing.videoMode = videoMode;
-      if (!existing.videoMode && !existing.cameraEnabled && !existing.screenShareEnabled) {
-        existing.remoteVideoStream.getTracks().forEach((track) => {
-          existing.remoteVideoStream.removeTrack(track);
+    if (entry.offerInFlight) {
+      entry.offerQueued = true;
+      return false;
+    }
+
+    if (entry.peerConnection.signalingState !== "stable") {
+      entry.offerQueued = true;
+      return false;
+    }
+
+    if (
+      !force &&
+      (entry.peerConnection.localDescription || entry.peerConnection.remoteDescription)
+    ) {
+      return false;
+    }
+
+    entry.offerInFlight = true;
+
+    try {
+      await syncLocalAudioToPeer(entry);
+      await syncLocalVideoToPeer(entry);
+      const offer = await entry.peerConnection.createOffer();
+      await entry.peerConnection.setLocalDescription(offer);
+      log("offer:emit", {
+        peerId: entry.peerId,
+        transport: realtimeEnabled ? "supabase" : "socket",
+        userId: entry.userId || null
+      });
+      sendSignal(entry.peerId, {
+        description: entry.peerConnection.localDescription
+      });
+      return true;
+    } catch (error) {
+      handleSessionError(error);
+      return false;
+    } finally {
+      entry.offerInFlight = false;
+      if (entry.offerQueued && !entry.destroyed) {
+        entry.offerQueued = false;
+        queueMicrotask(() => {
+          startPeerOffer(entry, {
+            force: true
+          }).catch((error) => {
+            handleSessionError(error);
+          });
         });
       }
-      emitPeerMedia(existing);
-      return existing;
+    }
+  }
+
+  function cleanupPeer(peerId) {
+    const entry = peers.get(peerId);
+    if (!entry) {
+      return;
     }
 
+    entry.destroyed = true;
+    peers.delete(peerId);
+    pendingAudioUnlockEntries.delete(entry);
+    updateAudioUnlockListeners();
+    clearPeerMedia(entry);
+
+    entry.remoteTrackListeners.forEach(({ cleanup }) => {
+      cleanup?.();
+    });
+    entry.remoteTrackListeners.clear();
+    entry.pendingRemoteCandidates.length = 0;
+
+    try {
+      entry.peerConnection.onicecandidate = null;
+      entry.peerConnection.ontrack = null;
+      entry.peerConnection.onconnectionstatechange = null;
+      entry.peerConnection.oniceconnectionstatechange = null;
+      entry.peerConnection.onicegatheringstatechange = null;
+      entry.peerConnection.close();
+    } catch {
+      // Ignore teardown edge cases.
+    }
+
+    try {
+      entry.audioElement.pause();
+      entry.audioElement.srcObject = null;
+      entry.audioElement.remove();
+    } catch {
+      // Ignore DOM cleanup issues.
+    }
+  }
+
+  async function createPeerEntry(peer) {
     const audioElement = createHiddenAudioElement();
     const peerConnection = new RTCPeerConnection(buildRtcConfiguration());
     const audioTransceiver = peerConnection.addTransceiver("audio", {
@@ -435,52 +415,51 @@ export function createVoiceRtcPeerSession({
     const entry = {
       audioElement,
       audioSender: audioTransceiver.sender,
-      cameraEnabled: Boolean(cameraEnabled),
-      deafened: Boolean(deafened),
+      cameraEnabled: Boolean(peer.cameraEnabled),
+      deafened: Boolean(peer.deafened),
       destroyed: false,
-      ignoreOffer: false,
       iceRestartAttempts: 0,
-      isSettingRemoteAnswerPending: false,
-      makingOffer: false,
-      micMuted: Boolean(micMuted),
+      micMuted: Boolean(peer.micMuted),
+      offerInFlight: false,
+      offerQueued: false,
       peerConnection,
-      peerId,
-      pendingNegotiation: false,
+      peerId: peer.peerId,
+      pendingRemoteCandidates: [],
       remoteAudioStream: createRemoteStream(),
       remoteTrackListeners: new Map(),
       remoteVideoStream: createRemoteStream(),
-      screenShareEnabled: Boolean(screenShareEnabled),
-      speaking: Boolean(speaking),
-      userId,
-      videoMode,
+      screenShareEnabled: Boolean(peer.screenShareEnabled),
+      speaking: Boolean(peer.speaking),
+      userId: peer.userId || "",
+      videoMode: peer.videoMode || "",
       videoSender: videoTransceiver.sender
     };
 
     audioElement.srcObject = entry.remoteAudioStream;
-    peers.set(peerId, entry);
+    peers.set(entry.peerId, entry);
     applyPlaybackToPeer(entry);
 
-    entry.peerConnection.onicecandidate = (event) => {
+    peerConnection.onicecandidate = (event) => {
       if (entry.destroyed || !event.candidate) {
         return;
       }
 
       log("ice:emit", {
-        peerId,
-        targetPeerId: peerId,
+        peerId: entry.peerId,
+        targetPeerId: entry.peerId,
         transport: realtimeEnabled ? "supabase" : "socket",
         userId: entry.userId || null
       });
-      sendSignal(peerId, {
+      sendSignal(entry.peerId, {
         candidate: event.candidate
       });
     };
 
-    entry.peerConnection.ontrack = (event) => {
+    peerConnection.ontrack = (event) => {
       log("track", {
         hasStreams: Boolean(event.streams?.length),
         kind: event.track?.kind || "",
-        peerId,
+        peerId: entry.peerId,
         userId: entry.userId || null
       });
 
@@ -514,61 +493,104 @@ export function createVoiceRtcPeerSession({
       }
     };
 
-    entry.peerConnection.onconnectionstatechange = () => {
-      const { connectionState } = entry.peerConnection;
-      log("rtc:state", { connectionState, peerId, userId: entry.userId || null });
+    peerConnection.onconnectionstatechange = () => {
+      const { connectionState } = peerConnection;
+      log("rtc:state", {
+        connectionState,
+        peerId: entry.peerId,
+        userId: entry.userId || null
+      });
+
       if (connectionState === "failed" && entry.iceRestartAttempts < 1) {
         entry.iceRestartAttempts += 1;
-        log("rtc:restart-ice", { peerId, userId: entry.userId || null }, "warn");
-        entry.peerConnection.restartIce?.();
+        log("rtc:restart-ice", {
+          peerId: entry.peerId,
+          userId: entry.userId || null
+        });
+        peerConnection.restartIce?.();
         queueMicrotask(() => {
-          negotiatePeer(entry);
+          startPeerOffer(entry, {
+            force: true
+          }).catch((error) => {
+            handleSessionError(error);
+          });
         });
         return;
       }
 
-      if (connectionState === "failed" || connectionState === "closed") {
-        cleanupPeer(peerId);
+      if (connectionState === "closed") {
+        cleanupPeer(entry.peerId);
       }
     };
 
-    entry.peerConnection.oniceconnectionstatechange = () => {
-      const { iceConnectionState } = entry.peerConnection;
+    peerConnection.oniceconnectionstatechange = () => {
       log("ice:state", {
-        iceConnectionState,
-        peerId,
+        iceConnectionState: peerConnection.iceConnectionState,
+        peerId: entry.peerId,
         userId: entry.userId || null
       });
     };
 
-    entry.peerConnection.onicegatheringstatechange = () => {
+    peerConnection.onicegatheringstatechange = () => {
       log("ice:gathering", {
-        iceGatheringState: entry.peerConnection.iceGatheringState,
-        peerId,
+        iceGatheringState: peerConnection.iceGatheringState,
+        peerId: entry.peerId,
         userId: entry.userId || null
       });
     };
 
-    entry.peerConnection.onnegotiationneeded = () => {
-      if (entry.destroyed) {
-        return;
-      }
-
-      log("rtc:negotiationneeded", { peerId, userId: entry.userId || null });
-      negotiatePeer(entry).catch((error) => {
-        handleSessionError(error);
-      });
-    };
-
-    await syncLocalAudioToPeer(entry, {
-      renegotiate: false
-    });
-    await syncLocalVideoToPeer(entry, {
-      renegotiate: false
-    });
-
+    await syncLocalAudioToPeer(entry);
+    await syncLocalVideoToPeer(entry);
     emitPeerMedia(entry);
     return entry;
+  }
+
+  async function ensurePeer(peer) {
+    const {
+      cameraEnabled = false,
+      deafened = false,
+      micMuted = false,
+      peerId,
+      screenShareEnabled = false,
+      speaking = false,
+      userId = null,
+      videoMode = ""
+    } = peer || {};
+
+    if (shouldIgnorePeer({ peerId, userId })) {
+      return null;
+    }
+
+    const existing = getPeerEntry(peerId);
+    if (existing) {
+      existing.cameraEnabled = Boolean(cameraEnabled);
+      existing.deafened = Boolean(deafened);
+      existing.micMuted = Boolean(micMuted);
+      existing.screenShareEnabled = Boolean(screenShareEnabled);
+      existing.speaking = Boolean(speaking);
+      existing.userId = userId || existing.userId;
+      existing.videoMode = videoMode || existing.videoMode || "";
+
+      if (!existing.videoMode && !existing.cameraEnabled && !existing.screenShareEnabled) {
+        existing.remoteVideoStream.getTracks().forEach((track) => {
+          existing.remoteVideoStream.removeTrack(track);
+        });
+      }
+
+      emitPeerMedia(existing);
+      return existing;
+    }
+
+    return createPeerEntry({
+      cameraEnabled,
+      deafened,
+      micMuted,
+      peerId,
+      screenShareEnabled,
+      speaking,
+      userId,
+      videoMode
+    });
   }
 
   async function handlePeersSnapshot({ channelId: snapshotChannelId, peers: nextPeers = [] }) {
@@ -580,6 +602,7 @@ export function createVoiceRtcPeerSession({
       peerIds: nextPeers.map((peer) => peer.peerId),
       peerUserIds: nextPeers.map((peer) => peer.userId)
     });
+
     const activePeerIds = new Set();
 
     for (const peer of nextPeers) {
@@ -589,13 +612,7 @@ export function createVoiceRtcPeerSession({
 
       activePeerIds.add(peer.peerId);
       const entry = await ensurePeer(peer);
-      if (
-        entry &&
-        !entry.peerConnection.localDescription &&
-        !entry.peerConnection.remoteDescription
-      ) {
-        await negotiatePeer(entry);
-      }
+      await startPeerOffer(entry);
     }
 
     for (const peerId of [...peers.keys()]) {
@@ -621,6 +638,7 @@ export function createVoiceRtcPeerSession({
       hasDescription: Boolean(signal.description),
       signalType: getVoiceSignalType(signal)
     });
+
     const entry = await ensurePeer({
       peerId: fromPeerId,
       userId
@@ -632,37 +650,18 @@ export function createVoiceRtcPeerSession({
     try {
       if (signal.description) {
         const description = signal.description;
-        const readyForOffer =
-          !entry.makingOffer &&
-          (entry.peerConnection.signalingState === "stable" ||
-            entry.isSettingRemoteAnswerPending);
-        const offerCollision = description.type === "offer" && !readyForOffer;
-        const polite = selfPeerId.localeCompare(String(fromPeerId || "")) > 0;
-
-        entry.ignoreOffer = !polite && offerCollision;
-        if (entry.ignoreOffer) {
-          return;
-        }
-
-        if (description.type === "answer") {
-          log("answer:received", { fromPeerId, userId: entry.userId || null });
-        }
-
-        entry.isSettingRemoteAnswerPending = description.type === "answer";
-        await entry.peerConnection.setRemoteDescription(description);
-        entry.isSettingRemoteAnswerPending = false;
 
         if (description.type === "offer") {
-          log("offer:received", { fromPeerId, userId: entry.userId || null });
-          await syncLocalAudioToPeer(entry, {
-            renegotiate: false
+          log("offer:received", {
+            fromPeerId,
+            userId: entry.userId || null
           });
-          await syncLocalVideoToPeer(entry, {
-            renegotiate: false
-          });
-          await entry.peerConnection.setLocalDescription(
-            await entry.peerConnection.createAnswer()
-          );
+          await entry.peerConnection.setRemoteDescription(description);
+          await flushQueuedIceCandidates(entry);
+          await syncLocalAudioToPeer(entry);
+          await syncLocalVideoToPeer(entry);
+          const answer = await entry.peerConnection.createAnswer();
+          await entry.peerConnection.setLocalDescription(answer);
           log("answer:emit", {
             targetPeerId: fromPeerId,
             transport: realtimeEnabled ? "supabase" : "socket",
@@ -673,21 +672,30 @@ export function createVoiceRtcPeerSession({
           });
         }
 
-        if (
-          description.type === "answer" &&
-          entry.pendingNegotiation &&
-          entry.peerConnection.signalingState === "stable"
-        ) {
-          entry.pendingNegotiation = false;
-          queueMicrotask(() => {
-            negotiatePeer(entry);
+        if (description.type === "answer") {
+          log("answer:received", {
+            fromPeerId,
+            userId: entry.userId || null
           });
+          await entry.peerConnection.setRemoteDescription(description);
+          await flushQueuedIceCandidates(entry);
         }
       }
 
-      if (signal.candidate && !entry.ignoreOffer) {
-        log("ice:received", { fromPeerId, userId: entry.userId || null });
-        await entry.peerConnection.addIceCandidate(signal.candidate);
+      if (signal.candidate) {
+        if (entry.peerConnection.remoteDescription?.type) {
+          log("ice:received", {
+            fromPeerId,
+            userId: entry.userId || null
+          });
+          await entry.peerConnection.addIceCandidate(signal.candidate);
+        } else {
+          entry.pendingRemoteCandidates.push(signal.candidate);
+          log("ice:queued", {
+            fromPeerId,
+            userId: entry.userId || null
+          });
+        }
       }
     } catch (error) {
       handleSessionError(error);
@@ -699,7 +707,9 @@ export function createVoiceRtcPeerSession({
       return;
     }
 
-    log("peer:left", { peerId });
+    log("peer:left", {
+      peerId
+    });
     cleanupPeer(peerId);
   }
 
@@ -709,7 +719,7 @@ export function createVoiceRtcPeerSession({
     handlePeerLeft,
     handlePeersSnapshot,
     handleSignal,
-    negotiatePeer,
+    startPeerOffer,
     syncLocalAudioToPeer,
     syncLocalVideoToPeer
   };
