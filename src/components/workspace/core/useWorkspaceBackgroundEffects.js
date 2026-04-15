@@ -78,7 +78,7 @@ export function useWorkspaceBackgroundEffects({
   }, [accessToken, activeChannel?.is_voice, activeSelection.channelId, Boolean(workspace)]);
 
   useEffect(() => {
-    if (!accessToken || !workspace || workspace.mode === "supabase") {
+    if (!accessToken || !workspace) {
       return undefined;
     }
 
@@ -151,7 +151,16 @@ export function useWorkspaceBackgroundEffects({
 
     syncVoiceSessions();
 
-    const interval = window.setInterval(syncVoiceSessions, document.hidden ? 3200 : 1600);
+    const interval = window.setInterval(
+      syncVoiceSessions,
+      workspace.mode === "supabase"
+        ? document.hidden
+          ? 5000
+          : 2500
+        : document.hidden
+          ? 3200
+          : 1600
+    );
 
     return () => {
       cancelled = true;
