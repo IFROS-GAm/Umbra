@@ -2,6 +2,7 @@ import { useEffect } from "react";
 
 import { api } from "../../../api.js";
 import { BACKGROUND_PREFETCH_COOLDOWN_MS } from "../workspaceCoreMessageStore.js";
+import { shouldUseLiveKitVoice } from "../voice/rtc/voiceRtcSessionConfig.js";
 import {
   areVoiceSessionsEqual
 } from "../workspaceCoreEffectHelpers.js";
@@ -13,6 +14,7 @@ import {
 export function useWorkspaceBackgroundEffects({
   accessToken,
   activeChannel,
+  activeGuildVoiceChannels,
   activeSelection,
   activeSelectionRef,
   backgroundPrefetchRef,
@@ -31,6 +33,11 @@ export function useWorkspaceBackgroundEffects({
   uiNotice,
   workspace
 }) {
+  const activeGuildVoiceChannelIdsKey = (activeGuildVoiceChannels || [])
+    .map((channel) => channel.id)
+    .filter(Boolean)
+    .join("|");
+
   useEffect(() => {
     if (!accessToken || !workspace || !activeSelection.channelId || activeChannel?.is_voice) {
       return undefined;
@@ -78,7 +85,7 @@ export function useWorkspaceBackgroundEffects({
   }, [accessToken, activeChannel?.is_voice, activeSelection.channelId, Boolean(workspace)]);
 
   useEffect(() => {
-    if (!accessToken || !workspace) {
+    if (!accessToken || !workspace || workspace.mode === "supabase") {
       return undefined;
     }
 
@@ -117,13 +124,42 @@ export function useWorkspaceBackgroundEffects({
   }, [accessToken, Boolean(workspace)]);
 
   useEffect(() => {
-    if (!accessToken || !workspace || workspace.mode === "supabase") {
+    if (
+      !accessToken ||
+      !workspace ||
+      !shouldUseLiveKitVoice(workspace.mode) ||
+      !(activeGuildVoiceChannels || []).length
+    ) {
       return undefined;
     }
 
     let cancelled = false;
+    const requestedChannelIds = [...new Set(activeGuildVoiceChannels.map((channel) => channel.id).filter(Boolean))];
 
-    async function syncVoiceSessions() {
+    function mergeRequestedVoiceSessions(incomingSessions = {}) {
+      const nextSessions = {
+        ...(voiceSessionsRef.current || {})
+      };
+
+      requestedChannelIds.forEach((channelId) => {
+        delete nextSessions[channelId];
+      });
+
+      Object.entries(incomingSessions || {}).forEach(([channelId, userIds]) => {
+        if (!requestedChannelIds.includes(channelId)) {
+          return;
+        }
+
+        const normalizedUserIds = [...new Set((Array.isArray(userIds) ? userIds : []).filter(Boolean))];
+        if (normalizedUserIds.length) {
+          nextSessions[channelId] = normalizedUserIds;
+        }
+      });
+
+      return nextSessions;
+    }
+
+    async function syncLiveKitOccupancy() {
       if (cancelled || voiceFallbackSyncRef.current) {
         return;
       }
@@ -131,12 +167,14 @@ export function useWorkspaceBackgroundEffects({
       voiceFallbackSyncRef.current = true;
 
       try {
-        const payload = await api.fetchVoiceState();
+        const payload = await api.fetchLiveKitOccupancy({
+          channelIds: requestedChannelIds
+        });
         if (cancelled) {
           return;
         }
 
-        const nextSessions = payload?.sessions || {};
+        const nextSessions = mergeRequestedVoiceSessions(payload?.sessions || {});
         if (areVoiceSessionsEqual(voiceSessionsRef.current, nextSessions)) {
           return;
         }
@@ -149,17 +187,11 @@ export function useWorkspaceBackgroundEffects({
       }
     }
 
-    syncVoiceSessions();
+    syncLiveKitOccupancy();
 
     const interval = window.setInterval(
-      syncVoiceSessions,
-      workspace.mode === "supabase"
-        ? document.hidden
-          ? 5000
-          : 2500
-        : document.hidden
-          ? 3200
-          : 1600
+      syncLiveKitOccupancy,
+      document.hidden ? 4200 : 1800
     );
 
     return () => {
@@ -167,7 +199,13 @@ export function useWorkspaceBackgroundEffects({
       window.clearInterval(interval);
       voiceFallbackSyncRef.current = false;
     };
-  }, [accessToken, workspace?.mode, Boolean(workspace), applyVoiceSessions]);
+  }, [
+    accessToken,
+    activeGuildVoiceChannelIdsKey,
+    workspace?.mode,
+    Boolean(workspace),
+    applyVoiceSessions
+  ]);
 
   useEffect(() => {
     if (!workspace || !accessToken) {

@@ -141,6 +141,18 @@ export const api = {
 
     return request(`/api/livekit/token?${params.toString()}`);
   },
+  fetchLiveKitOccupancy({ channelIds = [] } = {}) {
+    const params = new URLSearchParams();
+
+    (Array.isArray(channelIds) ? channelIds : [])
+      .map((channelId) => String(channelId || "").trim())
+      .filter(Boolean)
+      .forEach((channelId) => {
+        params.append("channelId", channelId);
+      });
+
+    return request(`/api/livekit/occupancy?${params.toString()}`);
+  },
   fetchMessages({ before, channelId, limit = 30, signal } = {}) {
     const params = new URLSearchParams({
       limit: String(limit)

@@ -1,18 +1,13 @@
 import { AccessToken, RoomServiceClient } from "livekit-server-sdk";
 
-let liveKitRoomServiceClient = null;
-let liveKitRoomServiceCacheKey = "";
-
-function normalizeLiveKitServiceUrl(url = "") {
-  const normalized = String(url || "").trim();
-  if (!normalized) {
-    return "";
-  }
-
-  return normalized.replace(/^wss:/i, "https:").replace(/^ws:/i, "http:");
+function toLiveKitServiceUrl(value = "") {
+  return String(value || "")
+    .trim()
+    .replace(/^wss:/i, "https:")
+    .replace(/^ws:/i, "http:");
 }
 
-function parseLiveKitParticipantMetadata(metadata = "") {
+function parseParticipantMetadata(metadata) {
   if (!metadata) {
     return {};
   }
@@ -25,67 +20,23 @@ function parseLiveKitParticipantMetadata(metadata = "") {
   }
 }
 
-function getLiveKitRoomServiceClient() {
-  const liveKitUrl = String(
-    process.env.LIVEKIT_URL || process.env.VITE_LIVEKIT_URL || ""
-  ).trim();
-  const apiKey = String(process.env.LIVEKIT_API_KEY || "").trim();
-  const apiSecret = String(process.env.LIVEKIT_API_SECRET || "").trim();
-  const serviceUrl = normalizeLiveKitServiceUrl(liveKitUrl);
-
-  if (!serviceUrl || !apiKey || !apiSecret) {
-    return null;
-  }
-
-  const cacheKey = `${serviceUrl}::${apiKey}::${apiSecret}`;
-  if (!liveKitRoomServiceClient || liveKitRoomServiceCacheKey !== cacheKey) {
-    liveKitRoomServiceClient = new RoomServiceClient(serviceUrl, apiKey, apiSecret);
-    liveKitRoomServiceCacheKey = cacheKey;
-  }
-
-  return {
-    apiKey,
-    apiSecret,
-    client: liveKitRoomServiceClient,
-    liveKitUrl
-  };
-}
-
-async function listLiveKitVoiceSessions() {
-  const service = getLiveKitRoomServiceClient();
-  if (!service?.client) {
-    return null;
-  }
-
-  const rooms = await service.client.listRooms();
-  const sessions = {};
-
-  await Promise.all(
-    (rooms || []).map(async (room) => {
-      const roomName = String(room?.name || "").trim();
-      if (!roomName) {
-        return;
-      }
-
-      const participants = await service.client.listParticipants(roomName);
+function buildLiveKitOccupancySessions(participantsByRoom = {}) {
+  return Object.fromEntries(
+    Object.entries(participantsByRoom).map(([channelId, participants]) => {
       const userIds = [
         ...new Set(
-          (participants || [])
+          (Array.isArray(participants) ? participants : [])
             .map((participant) => {
-              const metadata = parseLiveKitParticipantMetadata(participant?.metadata || "");
-              return String(metadata?.userId || "").trim();
+              const metadata = parseParticipantMetadata(participant?.metadata);
+              return String(metadata.userId || "").trim();
             })
             .filter(Boolean)
         )
       ];
 
-      if (userIds.length) {
-        sessions[roomName] = userIds;
-      }
+      return [channelId, userIds];
     })
   );
-
-  return sessions;
 }
 
 export function registerSystemRoutes({
@@ -119,16 +70,6 @@ export function registerSystemRoutes({
 
   app.get("/api/voice/state", requireViewer, async (_req, res) => {
     try {
-      if (store.getMode() === "supabase") {
-        const liveKitSessions = await listLiveKitVoiceSessions();
-        if (liveKitSessions) {
-          res.json({
-            sessions: liveKitSessions
-          });
-          return;
-        }
-      }
-
       res.json({
         sessions: serializeVoiceState()
       });
@@ -189,6 +130,71 @@ export function registerSystemRoutes({
       res.json({
         token: await token.toJwt(),
         url: liveKitUrl
+      });
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.get("/api/livekit/occupancy", requireViewer, async (req, res) => {
+    try {
+      const requestedChannelIds = [
+        ...new Set(
+          []
+            .concat(req.query.channelId || [])
+            .map((channelId) => String(channelId || "").trim())
+            .filter(Boolean)
+        )
+      ];
+      const liveKitUrl = String(
+        process.env.LIVEKIT_URL || process.env.VITE_LIVEKIT_URL || ""
+      ).trim();
+      const apiKey = String(process.env.LIVEKIT_API_KEY || "").trim();
+      const apiSecret = String(process.env.LIVEKIT_API_SECRET || "").trim();
+
+      if (!requestedChannelIds.length) {
+        res.json({
+          sessions: {}
+        });
+        return;
+      }
+
+      if (!liveKitUrl || !apiKey || !apiSecret) {
+        throw Object.assign(new Error("LiveKit no esta configurado en este entorno."), {
+          status: 503
+        });
+      }
+
+      const roomService = new RoomServiceClient(
+        toLiveKitServiceUrl(liveKitUrl),
+        apiKey,
+        apiSecret
+      );
+      const participantSnapshots = await Promise.all(
+        requestedChannelIds.map(async (channelId) => {
+          try {
+            const participants = await roomService.listParticipants(channelId);
+            return [channelId, participants || []];
+          } catch (error) {
+            const normalizedMessage = String(error?.message || "").toLowerCase();
+            if (
+              normalizedMessage.includes("room does not exist") ||
+              normalizedMessage.includes("not found")
+            ) {
+              return [channelId, []];
+            }
+
+            console.warn("[voice/livekit] occupancy:error", {
+              channelId,
+              message: error?.message || String(error)
+            });
+            return [channelId, []];
+          }
+        })
+      );
+
+      res.json({
+        sessions: buildLiveKitOccupancySessions(Object.fromEntries(participantSnapshots))
       });
     } catch (error) {
       sendError(res, error);

@@ -148,6 +148,7 @@ export function useWorkspaceVoiceEffects({
         return;
       }
 
+      const useLiveKitVoice = shouldUseLiveKitVoice(workspaceRef.current?.mode);
       const presenceState = channel.presenceState();
       let nextSessions = buildVoiceSessionsFromPresenceState(presenceState);
       let nextPresenceUsers = buildVoicePresenceUsersFromState(presenceState);
@@ -169,7 +170,9 @@ export function useWorkspaceVoiceEffects({
           Object.entries(nextPresenceUsers).filter(([userId]) => userId !== currentUserId)
         );
       }
-      applyVoiceSessions(nextSessions);
+      if (!useLiveKitVoice) {
+        applyVoiceSessions(nextSessions);
+      }
       setVoicePresenceUsers(nextPresenceUsers);
 
       const localEntry = currentUserId ? nextPresenceUsers?.[currentUserId] : null;

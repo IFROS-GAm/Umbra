@@ -10,6 +10,7 @@ import { useWorkspaceVoiceEffects } from "../useWorkspaceVoiceEffects.js";
 export function useWorkspaceCoreEffects({
   accessToken,
   activeChannel,
+  activeGuildVoiceChannels,
   activeSelection,
   activeSelectionRef,
   backgroundPrefetchRef,
@@ -221,6 +222,7 @@ export function useWorkspaceCoreEffects({
   useWorkspaceBackgroundEffects({
     accessToken,
     activeChannel,
+    activeGuildVoiceChannels,
     activeSelection,
     activeSelectionRef,
     applyVoiceSessions,

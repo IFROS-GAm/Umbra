@@ -271,7 +271,10 @@ export function useUmbraWorkspaceCore({
 
   const activeLookup = findChannelInSession(workspace, activeSelection.channelId);
   const activeChannel = activeLookup?.channel || null;
-  const activeGuild = activeLookup?.guild || null;
+  const activeGuild =
+    activeLookup?.guild ||
+    workspace?.guilds?.find((guild) => guild.id === activeSelection.guildId) ||
+    null;
   const isVoiceChannel = Boolean(activeChannel?.is_voice);
   const activeGuildTextChannels =
     activeGuild?.channels.filter((channel) => !channel.is_voice && !channel.is_category) || [];
@@ -330,6 +333,7 @@ export function useUmbraWorkspaceCore({
   useWorkspaceCoreEffects({
     accessToken,
     activeChannel,
+    activeGuildVoiceChannels,
     activeSelection,
     activeSelectionRef,
     backgroundPrefetchRef,
