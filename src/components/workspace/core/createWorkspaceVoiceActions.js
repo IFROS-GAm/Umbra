@@ -1,10 +1,7 @@
 import { findChannelInSession } from "../../../utils.js";
 import { fallbackDeviceLabel } from "../workspaceHelpers.js";
 import { primeSharedVoiceAudioContext } from "../voice/rtc/voiceRtcSessionConfig.js";
-import {
-  DIRECT_CALL_TYPES,
-  logVoiceClient
-} from "../workspaceCoreActionHelpers.js";
+import { DIRECT_CALL_TYPES } from "../workspaceCoreActionHelpers.js";
 
 export function createWorkspaceVoiceActions(context, shared) {
   const {
@@ -27,6 +24,7 @@ export function createWorkspaceVoiceActions(context, shared) {
   const {
     applyLocalVoicePresence,
     getLiveSocket,
+    playSound,
     showUiNotice
   } = shared;
 
@@ -35,10 +33,22 @@ export function createWorkspaceVoiceActions(context, shared) {
   }
 
   function toggleVoiceState(key) {
-    setVoiceState((previous) => ({
-      ...previous,
-      [key]: !previous[key]
-    }));
+    setVoiceState((previous) => {
+      const nextValue = !previous[key];
+
+      if (key === "micMuted") {
+        playSound("voiceMute");
+      } else if (key === "deafen") {
+        playSound("voiceDeafen");
+      } else if (key === "cameraEnabled" && nextValue) {
+        playSound("cameraEnable");
+      }
+
+      return {
+        ...previous,
+        [key]: nextValue
+      };
+    });
   }
 
   function toggleVoiceMenu(name) {
@@ -46,10 +56,20 @@ export function createWorkspaceVoiceActions(context, shared) {
   }
 
   function updateVoiceSetting(key, value) {
-    setVoiceState((previous) => ({
-      ...previous,
-      [key]: value
-    }));
+    setVoiceState((previous) => {
+      if (key === "screenShareEnabled" && previous[key] !== value) {
+        playSound(value ? "screenShareOn" : "screenShareOff");
+      }
+
+      if (key === "cameraEnabled" && !previous[key] && value) {
+        playSound("cameraEnable");
+      }
+
+      return {
+        ...previous,
+        [key]: value
+      };
+    });
   }
 
   function handleVoiceDeviceChange(kind, value) {
@@ -110,6 +130,7 @@ export function createWorkspaceVoiceActions(context, shared) {
         return false;
       }
 
+      const shouldPlayJoinSound = joinedVoiceChannelId !== targetChannel.id;
       setVoiceMenu(null);
       setActiveSelection({
         channelId: targetChannel.id,
@@ -119,25 +140,20 @@ export function createWorkspaceVoiceActions(context, shared) {
       setVoiceJoinReadyChannelId(null);
       applyLocalVoicePresence(targetChannel.id);
       setJoinedVoiceChannelId(targetChannel.id);
-      const socket = workspace?.mode === "supabase" ? null : getLiveSocket();
-      logVoiceClient(socket, "flow:join-click", {
-        channelId: targetChannel.id,
-        selectionKind: "guild",
-        step: 1
-      });
       if (workspace?.mode !== "supabase") {
-        logVoiceClient(socket, "join:emit", {
-          channelId: targetChannel.id,
-          selectionKind: "guild"
-        });
+        const socket = getLiveSocket();
         socket.emit("voice:join", {
           channelId: targetChannel.id
         });
+      }
+      if (shouldPlayJoinSound) {
+        playSound("voiceChannelJoin");
       }
       return true;
     }
 
     if (targetLookup.kind === "dm" && DIRECT_CALL_TYPES.has(targetChannel.type)) {
+      const shouldPlayJoinSound = joinedVoiceChannelId !== targetChannel.id;
       setVoiceMenu(null);
       setActiveSelection({
         channelId: targetChannel.id,
@@ -155,20 +171,17 @@ export function createWorkspaceVoiceActions(context, shared) {
       setVoiceJoinReadyChannelId(null);
       applyLocalVoicePresence(targetChannel.id);
       setJoinedVoiceChannelId(targetChannel.id);
-      const socket = workspace?.mode === "supabase" ? null : getLiveSocket();
-      logVoiceClient(socket, "flow:join-click", {
-        channelId: targetChannel.id,
-        selectionKind: targetChannel.type || "dm",
-        step: 1
-      });
       if (workspace?.mode !== "supabase") {
-        logVoiceClient(socket, "join:emit", {
-          channelId: targetChannel.id,
-          selectionKind: targetChannel.type || "dm"
-        });
+        const socket = getLiveSocket();
         socket.emit("voice:join", {
           channelId: targetChannel.id
         });
+      }
+      if (shouldPlayJoinSound) {
+        playSound("directCallJoin");
+      }
+      if (enableCamera) {
+        playSound("cameraEnable");
       }
       return true;
     }
@@ -225,16 +238,17 @@ export function createWorkspaceVoiceActions(context, shared) {
     }));
     setAppError("");
 
+    if (previousChannelId) {
+      playSound("voiceChannelLeave");
+    }
+
     if (!previousChannelId || !accessToken) {
       return;
     }
 
     try {
-      const socket = workspace?.mode === "supabase" ? null : getLiveSocket();
       if (workspace?.mode !== "supabase") {
-        logVoiceClient(socket, "leave:emit", {
-          channelId: previousChannelId
-        });
+        const socket = getLiveSocket();
         socket.emit("voice:leave", {
           channelId: previousChannelId
         });

@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import {
+  playUmbraSound,
+  startUmbraLoopingSound,
+  stopAllUmbraSounds,
+  stopUmbraSound
+} from "../../../audio/umbraSoundEffects.js";
 import { translate } from "../../../i18n.js";
 import { getSocket } from "../../../socket.js";
 import { findChannelInSession } from "../../../utils.js";
@@ -128,6 +134,7 @@ export function useWorkspaceDesktopNotifications({
       return previous;
     });
     activeIncomingCallRef.current = null;
+    stopUmbraSound("incomingCall");
     desktopBridge?.hideIncomingCallPopup?.().catch?.(() => {});
   }, [desktopBridge]);
 
@@ -269,6 +276,7 @@ export function useWorkspaceDesktopNotifications({
         return;
       }
 
+      playUmbraSound("notification");
       desktopBridge?.showNativeNotification?.({
         body: `${senderName}: ${bodyPreview}`,
         kind: "message",
@@ -312,6 +320,7 @@ export function useWorkspaceDesktopNotifications({
         `${senderName} quiere unirse a tus sombras.`
       );
 
+      playUmbraSound("notification");
       if (desktopBridge?.showNativeNotification) {
         desktopBridge.showNativeNotification({
           body,
@@ -406,6 +415,7 @@ export function useWorkspaceDesktopNotifications({
 
       activeIncomingCallRef.current = popupPayload;
       setIncomingCall(popupPayload);
+      startUmbraLoopingSound("incomingCall");
 
       desktopBridge?.showNativeNotification?.({
         body,
@@ -470,6 +480,13 @@ export function useWorkspaceDesktopNotifications({
       socket.off("voice:update", onVoiceUpdate);
     };
   }, [accessToken, handleIncomingFriendRequest, handleIncomingMessage, handleVoiceUpdateNotification]);
+
+  useEffect(() => {
+    return () => {
+      stopUmbraSound("incomingCall");
+      stopAllUmbraSounds();
+    };
+  }, []);
 
   return {
     acceptIncomingCall,

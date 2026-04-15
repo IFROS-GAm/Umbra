@@ -53,6 +53,7 @@ export function createWorkspaceComposerActions(context, shared) {
     applyPreview,
     currentUserId,
     getLiveSocket,
+    playSound,
     sanitizeAttachmentForMessage,
     scrollToBottom,
     showUiNotice
@@ -346,6 +347,7 @@ export function createWorkspaceComposerActions(context, shared) {
           historyScrollStateRef.current.loadArmed = true;
         }
         scrollToBottom();
+        playSound("messageSend");
 
         setComposer("");
         setReplyTarget(null);

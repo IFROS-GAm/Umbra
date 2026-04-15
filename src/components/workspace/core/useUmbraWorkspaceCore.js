@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { initializeUmbraSoundEffects } from "../../../audio/umbraSoundEffects.js";
 import { findChannelInSession } from "../../../utils.js";
 import {
   attachmentKey,
@@ -141,6 +142,10 @@ export function useUmbraWorkspaceCore({
   });
   const attachmentUploadCounterRef = useRef(0);
   const previousComposerAttachmentsRef = useRef([]);
+
+  useEffect(() => {
+    initializeUmbraSoundEffects();
+  }, []);
 
   function areSelectionsEqual(left, right) {
     return (

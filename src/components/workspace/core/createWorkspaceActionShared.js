@@ -1,4 +1,9 @@
 import { getSocket } from "../../../socket.js";
+import {
+  playUmbraSound,
+  startUmbraLoopingSound,
+  stopUmbraSound
+} from "../../../audio/umbraSoundEffects.js";
 import { applyChannelPreviewToWorkspace } from "../workspaceHelpers.js";
 
 export function createWorkspaceActionShared(context) {
@@ -112,10 +117,13 @@ export function createWorkspaceActionShared(context) {
     applyPreview,
     currentUserId,
     getLiveSocket,
+    playSound: playUmbraSound,
     sanitizeAttachmentForMessage,
     scrollToBottom,
     selectedVoiceDevices,
     setSelectedVoiceDevices,
-    showUiNotice
+    showUiNotice,
+    startLoopingSound: startUmbraLoopingSound,
+    stopSound: stopUmbraSound
   };
 }
