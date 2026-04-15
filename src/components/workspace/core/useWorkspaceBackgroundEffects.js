@@ -117,7 +117,7 @@ export function useWorkspaceBackgroundEffects({
   }, [accessToken, Boolean(workspace)]);
 
   useEffect(() => {
-    if (!accessToken || !workspace) {
+    if (!accessToken || !workspace || workspace.mode === "supabase") {
       return undefined;
     }
 

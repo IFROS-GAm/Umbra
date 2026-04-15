@@ -172,6 +172,7 @@ export function createLiveKitVoiceSession({
   let localCameraStream = null;
   let localScreenShareStream = null;
   let lastMetadataPayload = "";
+  let localTrackSyncPromise = Promise.resolve();
 
   const log = (event, details = {}, level = "info") => {
     const logger = typeof console[level] === "function" ? console[level] : console.info;
@@ -466,6 +467,14 @@ export function createLiveKitVoiceSession({
     await syncParticipantMetadata();
   }
 
+  function queueLocalTrackSync() {
+    localTrackSyncPromise = localTrackSyncPromise
+      .catch(() => {})
+      .then(() => syncLocalTracks());
+
+    return localTrackSyncPromise;
+  }
+
   room
     .on(RoomEvent.Connected, async () => {
       connected = true;
@@ -473,7 +482,7 @@ export function createLiveKitVoiceSession({
         participantCount: room.remoteParticipants.size
       });
       await syncParticipantMetadata();
-      await syncLocalTracks();
+      await queueLocalTrackSync();
       await syncAllParticipants();
     })
     .on(RoomEvent.ParticipantConnected, async (participant) => {
@@ -567,7 +576,7 @@ export function createLiveKitVoiceSession({
 
       try {
         await connectPromise;
-        await syncLocalTracks();
+        await queueLocalTrackSync();
       } catch (error) {
         handleSessionError(error);
       }
