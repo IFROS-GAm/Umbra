@@ -8,6 +8,58 @@ function resolveRemoteBoolean(remoteMedia, key, fallbackValue) {
   return Boolean(fallbackValue);
 }
 
+function buildStageIdentity(entry = {}) {
+  return String(entry.userId || entry.peerId || "").trim();
+}
+
+function buildFallbackPeerEntry({
+  activeChannelId,
+  currentUserId,
+  localPeerId,
+  userId,
+  userPresence
+}) {
+  return {
+    cameraEnabled: Boolean(userPresence?.cameraEnabled),
+    channelId: activeChannelId,
+    deafened: Boolean(userPresence?.deafened),
+    micMuted: Boolean(userPresence?.micMuted),
+    peerId: String(
+      userPresence?.peerId || (userId && userId === currentUserId ? localPeerId : "")
+    ).trim(),
+    screenShareEnabled: Boolean(userPresence?.screenShareEnabled),
+    speaking: Boolean(userPresence?.speaking),
+    userId,
+    videoMode: String(userPresence?.videoMode || "").trim()
+  };
+}
+
+function resolveRemoteMediaForEntry({
+  isCurrentVoicePeer,
+  peerEntry,
+  voicePeerMedia
+}) {
+  if (isCurrentVoicePeer) {
+    return null;
+  }
+
+  const peerId = String(peerEntry?.peerId || "").trim();
+  const userId = String(peerEntry?.userId || "").trim();
+
+  if (peerId && voicePeerMedia?.[peerId]) {
+    return voicePeerMedia[peerId];
+  }
+
+  if (!userId) {
+    return null;
+  }
+
+  return (
+    Object.values(voicePeerMedia || {}).find((entry) => String(entry?.userId || "").trim() === userId) ||
+    null
+  );
+}
+
 export function buildVoiceStageParticipants({
   activeChannel,
   activeGuild,
@@ -25,7 +77,9 @@ export function buildVoiceStageParticipants({
   voiceInputSpeaking,
   voiceLocalPeerIdRef,
   voicePeerMedia,
+  voicePresenceUsers,
   voicePresencePeers,
+  voiceUserIds,
   voiceState
 }) {
   const activeChannelId = activeChannel?.id || "";
@@ -34,17 +88,30 @@ export function buildVoiceStageParticipants({
   );
   const guildMembersById = new Map((activeGuild?.members || []).map((member) => [member.id, member]));
   const localPeerId = voiceLocalPeerIdRef.current;
-  const sessionEntries = activeChannelId
+  const peerEntries = activeChannelId
     ? Object.values(voicePresencePeers || {}).filter((entry) => entry.channelId === activeChannelId)
     : [];
+  const userPresenceEntries = activeChannelId
+    ? Object.values(voicePresenceUsers || {}).filter((entry) => entry.channelId === activeChannelId)
+    : [];
+  const stageEntriesByIdentity = new Map();
+
+  peerEntries.forEach((entry) => {
+    const identity = buildStageIdentity(entry);
+    if (!identity) {
+      return;
+    }
+
+    stageEntriesByIdentity.set(identity, entry);
+  });
 
   if (
     activeChannelId &&
     joinedVoiceChannelId === activeChannelId &&
     currentUserId &&
-    !sessionEntries.some((entry) => entry.peerId === localPeerId)
+    ![...stageEntriesByIdentity.values()].some((entry) => entry.peerId === localPeerId)
   ) {
-    sessionEntries.push({
+    stageEntriesByIdentity.set(currentUserId, {
       cameraEnabled: Boolean(voiceState.cameraEnabled),
       channelId: activeChannelId,
       deafened: Boolean(voiceState.deafen),
@@ -61,7 +128,39 @@ export function buildVoiceStageParticipants({
     });
   }
 
-  return sessionEntries.map((peerEntry) => {
+  const fallbackUserIds = new Set([
+    ...(Array.isArray(voiceUserIds) ? voiceUserIds : []),
+    ...userPresenceEntries.map((entry) => entry.userId).filter(Boolean)
+  ]);
+
+  if (joinedVoiceChannelId === activeChannelId && currentUserId) {
+    fallbackUserIds.add(currentUserId);
+  }
+
+  fallbackUserIds.forEach((userId) => {
+    const identity = String(userId || "").trim();
+    if (!identity || stageEntriesByIdentity.has(identity)) {
+      return;
+    }
+
+    const userPresence =
+      userPresenceEntries.find((entry) => String(entry.userId || "").trim() === identity) || null;
+
+    stageEntriesByIdentity.set(
+      identity,
+      buildFallbackPeerEntry({
+        activeChannelId,
+        currentUserId,
+        localPeerId,
+        userId: identity,
+        userPresence
+      })
+    );
+  });
+
+  const stageEntries = [...stageEntriesByIdentity.values()];
+
+  return stageEntries.map((peerEntry) => {
     const userId = peerEntry.userId || "";
     const resolvedUser =
       userId === currentUserId
@@ -84,8 +183,14 @@ export function buildVoiceStageParticipants({
       username: userId === currentUserId ? currentUserLabel : "Usuario conectado"
     };
     const userPrefs = getVoiceParticipantPref(user.id);
-    const isCurrentVoicePeer = peerEntry.peerId === localPeerId;
-    const remoteMedia = !isCurrentVoicePeer ? voicePeerMedia?.[peerEntry.peerId] || null : null;
+    const peerId = String(peerEntry.peerId || "").trim();
+    const isCurrentVoicePeer =
+      (peerId && peerId === localPeerId) || (!peerId && userId && userId === currentUserId);
+    const remoteMedia = resolveRemoteMediaForEntry({
+      isCurrentVoicePeer,
+      peerEntry,
+      voicePeerMedia
+    });
     const remoteCameraStream =
       remoteMedia?.cameraStream && !userPrefs.videoHidden ? remoteMedia.cameraStream : null;
     const remoteScreenShareStream =
@@ -141,7 +246,7 @@ export function buildVoiceStageParticipants({
       mediaVolume: Math.max(0, Math.min(1, userPrefs.volume / 100)),
       screenShareQualityLabel: isCurrentVoicePeer ? screenShareQualityLabel : "720P 30 FPS",
       stageStyle: buildVoiceStageTone(user.avatar_hue || 220),
-      voicePeerId: peerEntry.peerId,
+      voicePeerId: peerId || userId,
       volumeForMe: userPrefs.volume
     };
   });

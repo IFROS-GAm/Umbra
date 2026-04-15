@@ -435,7 +435,9 @@ export function UmbraWorkspace({
         voiceInputSpeaking,
         voiceLocalPeerIdRef,
         voicePeerMedia,
+        voicePresenceUsers,
         voicePresencePeers,
+        voiceUserIds,
         voiceState
       }),
     [
@@ -455,12 +457,14 @@ export function UmbraWorkspace({
       voiceInputSpeaking,
       voiceLocalPeerIdRef,
       voicePeerMedia,
+      voicePresenceUsers,
       voicePresencePeers,
       voiceParticipantPrefs,
       voiceState.cameraEnabled,
       voiceState.deafen,
       voiceState.micMuted,
       voiceState.screenShareEnabled,
+      voiceUserIds,
       voiceUsers
     ]
   );
