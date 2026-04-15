@@ -51,6 +51,7 @@ export function useWorkspaceVoiceEffects({
   const voicePresenceChannelRef = useRef(null);
   const voicePresenceRevisionRef = useRef(0);
   const voicePresenceSyncRef = useRef(null);
+  const voicePresenceHeartbeatRef = useRef(null);
 
   function buildCurrentVoicePresencePayload({ includeIdle = false } = {}) {
     const currentUserId = String(workspaceRef.current?.current_user?.id || "").trim();
@@ -154,9 +155,38 @@ export function useWorkspaceVoiceEffects({
       }
 
       const presenceState = channel.presenceState();
-      const nextSessions = buildVoiceSessionsFromPresenceState(presenceState);
-      const nextPresencePeers = buildVoicePresencePeersFromState(presenceState);
-      const nextPresenceUsers = buildVoicePresenceUsersFromState(presenceState);
+      let nextSessions = buildVoiceSessionsFromPresenceState(presenceState);
+      let nextPresencePeers = buildVoicePresencePeersFromState(presenceState);
+      let nextPresenceUsers = buildVoicePresenceUsersFromState(presenceState);
+      const currentJoinedChannelId = String(joinedVoiceChannelIdRef.current || "").trim();
+      const currentUserId = String(workspaceRef.current?.current_user?.id || "").trim();
+      const localPeerId = String(voiceLocalPeerIdRef.current || "").trim();
+
+      if (!currentJoinedChannelId) {
+        nextSessions = Object.fromEntries(
+          Object.entries(nextSessions).flatMap(([channelId, userIds]) => {
+            const filteredUserIds = (Array.isArray(userIds) ? userIds : []).filter(
+              (userId) => userId !== currentUserId
+            );
+            return filteredUserIds.length ? [[channelId, filteredUserIds]] : [];
+          })
+        );
+
+        nextPresencePeers = Object.fromEntries(
+          Object.entries(nextPresencePeers).filter(([peerId, entry]) => {
+            if (peerId === localPeerId) {
+              return false;
+            }
+
+            return entry?.userId !== currentUserId;
+          })
+        );
+
+        nextPresenceUsers = Object.fromEntries(
+          Object.entries(nextPresenceUsers).filter(([userId]) => userId !== currentUserId)
+        );
+      }
+
       console.info("[voice/client] realtime:presence:sync", {
         channelIds: Object.keys(nextSessions),
         peerId: voiceLocalPeerIdRef.current,
@@ -188,6 +218,16 @@ export function useWorkspaceVoiceEffects({
 
       await syncTrackedPresence();
       syncPresenceState();
+
+      if (voicePresenceHeartbeatRef.current) {
+        window.clearInterval(voicePresenceHeartbeatRef.current);
+      }
+      voicePresenceHeartbeatRef.current = window.setInterval(() => {
+        const payload = buildNextVoicePresencePayload({
+          includeIdle: true
+        });
+        voicePresenceSyncRef.current?.schedule(payload).catch(() => {});
+      }, 3_000);
     });
 
     return () => {
@@ -197,6 +237,10 @@ export function useWorkspaceVoiceEffects({
       }
       if (voicePresenceSyncRef.current === presenceSync) {
         voicePresenceSyncRef.current = null;
+      }
+      if (voicePresenceHeartbeatRef.current) {
+        window.clearInterval(voicePresenceHeartbeatRef.current);
+        voicePresenceHeartbeatRef.current = null;
       }
 
       presenceSync.dispose();

@@ -1,3 +1,5 @@
+const VOICE_PRESENCE_STALE_MS = 8_000;
+
 function normalizeVoicePresenceEntry(entry = {}) {
   const channelId = String(entry.channelId || "").trim();
   const peerId = String(entry.peerId || entry.presence_ref || "").trim();
@@ -27,6 +29,19 @@ function getVoicePresenceTimestamp(entry = {}) {
   );
 }
 
+function isVoicePresenceFresh(entry = {}) {
+  if (!entry.channelId) {
+    return true;
+  }
+
+  const timestamp = getVoicePresenceTimestamp(entry);
+  if (!timestamp) {
+    return false;
+  }
+
+  return Date.now() - timestamp <= VOICE_PRESENCE_STALE_MS;
+}
+
 function getVoicePresenceKey(entry = {}) {
   return (
     String(entry.peerId || "").trim() ||
@@ -53,7 +68,7 @@ export function flattenRealtimePresenceState(state = {}) {
   return Object.values(state || {})
     .flatMap((entries) => (Array.isArray(entries) ? entries : []))
     .map((entry) => normalizeVoicePresenceEntry(entry))
-    .filter((entry) => entry.channelId || entry.peerId || entry.userId);
+    .filter((entry) => (entry.channelId || entry.peerId || entry.userId) && isVoicePresenceFresh(entry));
 }
 
 function getLatestVoicePresenceEntries(state = {}) {
