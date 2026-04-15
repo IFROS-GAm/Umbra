@@ -118,15 +118,22 @@ export function createWorkspaceVoiceActions(context, shared) {
       });
       setVoiceJoinReadyChannelId(null);
       applyLocalVoicePresence(targetChannel.id);
-      const socket = getLiveSocket();
-      logVoiceClient(socket, "join:emit", {
+      const socket = workspace?.mode === "supabase" ? null : getLiveSocket();
+      logVoiceClient(socket, "flow:join-click", {
         channelId: targetChannel.id,
-        selectionKind: "guild"
-      });
-      socket.emit("voice:join", {
-        channelId: targetChannel.id
+        selectionKind: "guild",
+        step: 1
       });
       setJoinedVoiceChannelId(targetChannel.id);
+      if (workspace?.mode !== "supabase") {
+        logVoiceClient(socket, "join:emit", {
+          channelId: targetChannel.id,
+          selectionKind: "guild"
+        });
+        socket.emit("voice:join", {
+          channelId: targetChannel.id
+        });
+      }
       return true;
     }
 
@@ -147,15 +154,22 @@ export function createWorkspaceVoiceActions(context, shared) {
 
       setVoiceJoinReadyChannelId(null);
       applyLocalVoicePresence(targetChannel.id);
-      const socket = getLiveSocket();
-      logVoiceClient(socket, "join:emit", {
+      const socket = workspace?.mode === "supabase" ? null : getLiveSocket();
+      logVoiceClient(socket, "flow:join-click", {
         channelId: targetChannel.id,
-        selectionKind: targetChannel.type || "dm"
-      });
-      socket.emit("voice:join", {
-        channelId: targetChannel.id
+        selectionKind: targetChannel.type || "dm",
+        step: 1
       });
       setJoinedVoiceChannelId(targetChannel.id);
+      if (workspace?.mode !== "supabase") {
+        logVoiceClient(socket, "join:emit", {
+          channelId: targetChannel.id,
+          selectionKind: targetChannel.type || "dm"
+        });
+        socket.emit("voice:join", {
+          channelId: targetChannel.id
+        });
+      }
       return true;
     }
 

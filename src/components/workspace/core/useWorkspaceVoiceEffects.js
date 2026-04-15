@@ -53,6 +53,9 @@ export function useWorkspaceVoiceEffects({
   const voicePresenceRevisionRef = useRef(0);
   const voicePresenceSyncRef = useRef(null);
   const voicePresenceHeartbeatRef = useRef(null);
+  const voicePresenceSubscribedRef = useRef(false);
+  const voicePresenceConfirmedChannelRef = useRef(null);
+  const voiceServerJoinedChannelRef = useRef(null);
 
   function buildKnownVoicePeers(channelId) {
     const normalizedChannelId = String(channelId || "").trim();
@@ -212,10 +215,39 @@ export function useWorkspaceVoiceEffects({
       applyVoiceSessions(nextSessions);
       setVoicePresencePeers(nextPresencePeers);
       setVoicePresenceUsers(nextPresenceUsers);
+
+      const selfPeerEntry = localPeerId ? nextPresencePeers[localPeerId] || null : null;
+      const selfUserEntry = currentUserId ? nextPresenceUsers[currentUserId] || null : null;
+      const selfEntry = selfPeerEntry || selfUserEntry;
+      const confirmedChannelId = String(selfEntry?.channelId || "").trim();
+
+      if (
+        currentJoinedChannelId &&
+        confirmedChannelId === currentJoinedChannelId &&
+        voicePresenceConfirmedChannelRef.current !== currentJoinedChannelId
+      ) {
+        voicePresenceConfirmedChannelRef.current = currentJoinedChannelId;
+        console.info("[voice/client] flow:presence-confirmed", {
+          channelId: currentJoinedChannelId,
+          step: 3
+        });
+        setVoiceJoinReadyChannelId(currentJoinedChannelId);
+      }
+
+      if (
+        !currentJoinedChannelId &&
+        voicePresenceConfirmedChannelRef.current
+      ) {
+        voicePresenceConfirmedChannelRef.current = null;
+      }
     };
 
     const syncTrackedPresence = async () => {
       const payload = buildNextVoicePresencePayload();
+      console.info("[voice/client] flow:presence-track-request", {
+        channelId: payload?.channelId || "",
+        step: 2
+      });
       await presenceSync.schedule(payload);
     };
 
@@ -223,6 +255,7 @@ export function useWorkspaceVoiceEffects({
     channel.on("presence", { event: "join" }, syncPresenceState);
     channel.on("presence", { event: "leave" }, syncPresenceState);
     channel.subscribe(async (status) => {
+      voicePresenceSubscribedRef.current = status === "SUBSCRIBED";
       console.info("[voice/client] realtime:presence:status", {
         peerId: voiceLocalPeerIdRef.current,
         status
@@ -230,6 +263,11 @@ export function useWorkspaceVoiceEffects({
       if (status !== "SUBSCRIBED" || cancelled) {
         return;
       }
+
+      console.info("[voice/client] flow:presence-subscribed", {
+        channelId: String(joinedVoiceChannelIdRef.current || "").trim(),
+        step: "2.subscribed"
+      });
 
       await syncTrackedPresence();
       syncPresenceState();
@@ -245,6 +283,8 @@ export function useWorkspaceVoiceEffects({
 
     return () => {
       cancelled = true;
+      voicePresenceSubscribedRef.current = false;
+      voicePresenceConfirmedChannelRef.current = null;
       if (voicePresenceChannelRef.current === channel) {
         voicePresenceChannelRef.current = null;
       }
@@ -276,13 +316,22 @@ export function useWorkspaceVoiceEffects({
       return undefined;
     }
 
+    if (!voicePresenceSubscribedRef.current) {
+      return undefined;
+    }
+
     const nextPayload = buildNextVoicePresencePayload();
 
     if (!nextPayload) {
+      voicePresenceConfirmedChannelRef.current = null;
       voicePresenceSyncRef.current?.schedule(null).catch(() => {});
       return undefined;
     }
 
+    console.info("[voice/client] flow:presence-track-request", {
+      channelId: nextPayload.channelId,
+      step: 2
+    });
     voicePresenceSyncRef.current?.schedule(nextPayload).catch(() => {});
 
     return undefined;
@@ -303,6 +352,10 @@ export function useWorkspaceVoiceEffects({
     if (joinedVoiceChannelId || workspace?.mode !== "supabase") {
       return;
     }
+
+    voicePresenceConfirmedChannelRef.current = null;
+    voiceServerJoinedChannelRef.current = null;
+    setVoiceJoinReadyChannelId(null);
 
     const localPeerId = String(voiceLocalPeerIdRef.current || "").trim();
     const currentUserId = String(workspaceRef.current?.current_user?.id || "").trim();
@@ -531,7 +584,7 @@ export function useWorkspaceVoiceEffects({
       !accessToken ||
       !joinedVoiceChannelId ||
       !workspaceRef.current?.current_user?.id ||
-      (!useSharedVoiceRealtime && joinedVoiceChannelId !== readyChannelId)
+      joinedVoiceChannelId !== readyChannelId
     ) {
       if (voiceRtcSessionRef.current) {
         voiceRtcSessionRef.current.destroy().catch(() => {});
@@ -609,16 +662,33 @@ export function useWorkspaceVoiceEffects({
           screenShareStream
         })
         .catch(() => {});
+      session.setLocalTrackEnabled(!voiceState.micMuted);
+
       if (useSharedVoiceRealtime) {
         const knownPeers = buildKnownVoicePeers(joinedVoiceChannelId);
-        console.info("[voice/client] global:peers:sync", {
+        console.info("[voice/client] flow:peers-read", {
           channelId: joinedVoiceChannelId,
           peerIds: knownPeers.map((entry) => entry.peerId),
-          peerUserIds: knownPeers.map((entry) => entry.userId)
+          peerUserIds: knownPeers.map((entry) => entry.userId),
+          step: 4
         });
         session.syncKnownPeers?.(knownPeers).catch?.(() => {});
+
+        if (voiceServerJoinedChannelRef.current !== joinedVoiceChannelId) {
+          const socket = getSocket(accessToken);
+          if (!socket.connected) {
+            socket.connect();
+          }
+          console.info("[voice/client] flow:server-join-emit", {
+            channelId: joinedVoiceChannelId,
+            step: 5
+          });
+          socket.emit("voice:join", {
+            channelId: joinedVoiceChannelId
+          });
+          voiceServerJoinedChannelRef.current = joinedVoiceChannelId;
+        }
       }
-      session.setLocalTrackEnabled(!voiceState.micMuted);
 
       return () => {
         if (voiceRtcSessionRef.current === session) {
@@ -648,18 +718,19 @@ export function useWorkspaceVoiceEffects({
     }
 
     const session = voiceRtcSessionRef.current;
-    if (!session?.syncKnownPeers) {
+    if (!session?.syncKnownPeers || voiceJoinReadyChannelIdRef?.current !== joinedVoiceChannelId) {
       return;
     }
 
     const knownPeers = buildKnownVoicePeers(joinedVoiceChannelId);
-    console.info("[voice/client] global:peers:sync", {
+    console.info("[voice/client] flow:peers-read", {
       channelId: joinedVoiceChannelId,
       peerIds: knownPeers.map((entry) => entry.peerId),
-      peerUserIds: knownPeers.map((entry) => entry.userId)
+      peerUserIds: knownPeers.map((entry) => entry.userId),
+      step: 4
     });
     session.syncKnownPeers(knownPeers).catch(() => {});
-  }, [joinedVoiceChannelId, voicePresencePeers, workspace?.mode]);
+  }, [joinedVoiceChannelId, voiceJoinReadyChannelId, voicePresencePeers, workspace?.mode]);
 
   useEffect(() => {
     const session = voiceRtcSessionRef.current;

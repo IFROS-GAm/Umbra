@@ -310,7 +310,7 @@ export function useWorkspaceSocketRealtimeEffects({
         peerIds: (peers || []).map((peer) => peer.peerId),
         peerUserIds: (peers || []).map((peer) => peer.userId)
       });
-      if (channelId) {
+      if (channelId && workspaceRef.current?.mode !== "supabase") {
         setVoiceJoinReadyChannelId(channelId);
       }
     };
@@ -402,6 +402,13 @@ export function useWorkspaceSocketRealtimeEffects({
       }
 
       if (joinedVoiceChannelIdRef.current) {
+        if (workspaceRef.current?.mode === "supabase") {
+          logVoiceClient(socket, "join:deferred", {
+            channelId: joinedVoiceChannelIdRef.current,
+            reason: "waiting-for-supabase-presence"
+          });
+          return;
+        }
         setVoiceJoinReadyChannelId(null);
         logVoiceClient(socket, "join:re-emit", {
           channelId: joinedVoiceChannelIdRef.current
