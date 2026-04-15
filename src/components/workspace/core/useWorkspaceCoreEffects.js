@@ -83,6 +83,7 @@ export function useWorkspaceCoreEffects({
   voiceLocalPeerIdRef,
   voiceInputStream,
   voiceMenu,
+  voicePresencePeers,
   voiceState,
   workspaceRef,
   workspace
@@ -269,6 +270,7 @@ export function useWorkspaceCoreEffects({
     voiceJoinReadyChannelIdRef,
     voiceLocalPeerIdRef,
     voiceMenu,
+    voicePresencePeers,
     voiceState,
     workspace,
     workspaceRef

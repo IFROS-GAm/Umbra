@@ -286,7 +286,7 @@ export function createVoiceRtcSession({
     }
   }
 
-  return createVoiceRtcSessionControls({
+  const controls = createVoiceRtcSessionControls({
     applyPlaybackToPeer,
     cleanupPeer,
     getLocalStreams: () => ({
@@ -335,4 +335,18 @@ export function createVoiceRtcSession({
       localScreenShareStream = screenShareStream;
     }
   });
+
+  return {
+    ...controls,
+    async syncKnownPeers(nextPeers = []) {
+      log("global:peers:received", {
+        peerIds: nextPeers.map((peer) => peer?.peerId).filter(Boolean),
+        peerUserIds: nextPeers.map((peer) => peer?.userId).filter(Boolean)
+      });
+      await handlePeersSnapshot({
+        channelId,
+        peers: nextPeers
+      });
+    }
+  };
 }
