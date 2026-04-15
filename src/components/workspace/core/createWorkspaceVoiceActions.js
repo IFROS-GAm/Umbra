@@ -1,5 +1,6 @@
 import { findChannelInSession } from "../../../utils.js";
 import { fallbackDeviceLabel } from "../workspaceHelpers.js";
+import { primeSharedVoiceAudioContext } from "../voice/rtc/voiceRtcSessionConfig.js";
 import {
   DIRECT_CALL_TYPES,
   logVoiceClient
@@ -94,6 +95,8 @@ export function createWorkspaceVoiceActions(context, shared) {
     if (!accessToken || !channelId) {
       return false;
     }
+
+    primeSharedVoiceAudioContext().catch(() => {});
 
     const targetLookup = findChannelInSession(workspace, channelId);
     const targetChannel = targetLookup?.channel || null;

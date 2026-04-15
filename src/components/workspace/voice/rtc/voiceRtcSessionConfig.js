@@ -80,6 +80,7 @@ function parseIceServersFromEnv() {
 const ENV_ICE_SERVERS = parseIceServersFromEnv();
 const SHOULD_FORCE_RELAY =
   String(import.meta.env.VITE_WEBRTC_FORCE_RELAY || "").trim().toLowerCase() === "true";
+let sharedVoiceAudioContext = null;
 
 export function buildRtcConfiguration() {
   const dedupedServers = new Map();
@@ -138,6 +139,33 @@ export function createHiddenAudioElement() {
   element.style.width = "1px";
   document.body.appendChild(element);
   return element;
+}
+
+export function getSharedVoiceAudioContext() {
+  if (typeof AudioContext === "undefined") {
+    return null;
+  }
+
+  if (!sharedVoiceAudioContext || sharedVoiceAudioContext.state === "closed") {
+    sharedVoiceAudioContext = new AudioContext({
+      latencyHint: "interactive"
+    });
+  }
+
+  return sharedVoiceAudioContext;
+}
+
+export async function primeSharedVoiceAudioContext() {
+  const context = getSharedVoiceAudioContext();
+  if (!context) {
+    return null;
+  }
+
+  if (context.state === "suspended") {
+    await context.resume();
+  }
+
+  return context;
 }
 
 export function createRemoteStream() {

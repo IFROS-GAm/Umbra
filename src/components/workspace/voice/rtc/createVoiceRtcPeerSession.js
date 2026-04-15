@@ -3,6 +3,7 @@ import {
   buildRtcConfiguration,
   createHiddenAudioElement,
   createRemoteStream,
+  getSharedVoiceAudioContext,
   getVoiceSignalType
 } from "./voiceRtcSessionConfig.js";
 
@@ -26,24 +27,29 @@ export function createVoiceRtcPeerSession({
 }) {
   const pendingAudioUnlockEntries = new Set();
   let removeAudioUnlockListeners = null;
-  let remoteAudioContext = null;
+  let remoteAudioResumePending = false;
 
   function getRemoteAudioContext() {
-    if (typeof AudioContext === "undefined") {
+    const context = getSharedVoiceAudioContext();
+    if (!context) {
       return null;
     }
 
-    if (!remoteAudioContext || remoteAudioContext.state === "closed") {
-      remoteAudioContext = new AudioContext({
-        latencyHint: "interactive"
+    if (context.state === "suspended") {
+      remoteAudioResumePending = true;
+      context.resume().then(() => {
+        remoteAudioResumePending = false;
+        log("audio:context:resumed", {
+          state: context.state
+        });
+        updateAudioUnlockListeners();
+      }).catch(() => {
+        updateAudioUnlockListeners();
       });
+      updateAudioUnlockListeners();
     }
 
-    if (remoteAudioContext.state === "suspended") {
-      remoteAudioContext.resume().catch(() => {});
-    }
-
-    return remoteAudioContext;
+    return context;
   }
 
   function hasLiveRemoteTrack(stream, kind) {
@@ -52,7 +58,7 @@ export function createVoiceRtcPeerSession({
   }
 
   function updateAudioUnlockListeners() {
-    if (pendingAudioUnlockEntries.size === 0) {
+    if (pendingAudioUnlockEntries.size === 0 && !remoteAudioResumePending) {
       removeAudioUnlockListeners?.();
       removeAudioUnlockListeners = null;
       return;
@@ -63,6 +69,23 @@ export function createVoiceRtcPeerSession({
     }
 
     const unlockPlayback = () => {
+      const remoteAudioContext = getSharedVoiceAudioContext();
+      if (remoteAudioContext?.state === "suspended") {
+        remoteAudioContext.resume().then(() => {
+          remoteAudioResumePending = false;
+          log("audio:context:resumed", {
+            state: remoteAudioContext.state,
+            via: "user-gesture"
+          });
+          updateAudioUnlockListeners();
+        }).catch((error) => {
+          log("audio:context:resume-blocked", {
+            message: error?.message || "No se pudo reanudar el AudioContext.",
+            state: remoteAudioContext.state
+          }, "warn");
+        });
+      }
+
       for (const entry of [...pendingAudioUnlockEntries]) {
         entry?.audioElement?.play?.().then?.(() => {
           pendingAudioUnlockEntries.delete(entry);
@@ -194,6 +217,7 @@ export function createVoiceRtcPeerSession({
       analyser,
       animationFrameId,
       cleanup,
+      silentGain,
       source
     } = entry.remoteAudioAnalysis;
 
@@ -204,6 +228,7 @@ export function createVoiceRtcPeerSession({
     try {
       source?.disconnect?.();
       analyser?.disconnect?.();
+      silentGain?.disconnect?.();
     } catch {
       // Ignore audio node disconnect issues during teardown.
     }
@@ -231,6 +256,10 @@ export function createVoiceRtcPeerSession({
 
     const context = getRemoteAudioContext();
     if (!context) {
+      log("audio:analysis:no-context", {
+        peerId: entry.peerId,
+        userId: entry.userId || null
+      }, "warn");
       return;
     }
 
@@ -248,9 +277,13 @@ export function createVoiceRtcPeerSession({
     const analyser = context.createAnalyser();
     analyser.fftSize = 1024;
     analyser.smoothingTimeConstant = 0.55;
+    const silentGain = context.createGain();
+    silentGain.gain.value = 0;
 
     const source = context.createMediaStreamSource(entry.remoteAudioStream);
     source.connect(analyser);
+    analyser.connect(silentGain);
+    silentGain.connect(context.destination);
 
     const timeDomainData = new Float32Array(analyser.fftSize);
     let animationFrameId = 0;
@@ -258,6 +291,8 @@ export function createVoiceRtcPeerSession({
     let noiseFloor = 0.0045;
     let speaking = false;
     let speechHoldUntil = 0;
+    let frameCount = 0;
+    let loggedSignal = false;
 
     const replayOnCanPlay = () => {
       applyPlaybackToPeer(entry);
@@ -266,6 +301,14 @@ export function createVoiceRtcPeerSession({
 
     entry.audioElement.addEventListener("loadedmetadata", replayOnCanPlay);
     entry.audioElement.addEventListener("canplay", replayOnCanPlay);
+
+    log("audio:analysis:start", {
+      audioTrackIds: liveAudioTracks.map((track) => track.id),
+      audioTrackMuted: liveAudioTracks.map((track) => track.muted),
+      contextState: context.state,
+      peerId: entry.peerId,
+      streamKey
+    });
 
     const tick = () => {
       if (entry.destroyed) {
@@ -286,6 +329,7 @@ export function createVoiceRtcPeerSession({
 
       const rms = Math.sqrt(sumSquares / timeDomainData.length) || 0;
       const now = performance.now();
+      frameCount += 1;
 
       if (!speaking) {
         const noiseBlend = rms < noiseFloor ? 0.12 : 0.01;
@@ -328,6 +372,19 @@ export function createVoiceRtcPeerSession({
         emitPeerMedia(entry);
       }
 
+      if (!loggedSignal && (roundedLevel > 0 || nextSpeaking || frameCount === 30)) {
+        loggedSignal = true;
+        log("audio:analysis:sample", {
+          contextState: context.state,
+          frameCount,
+          level: roundedLevel,
+          peak: Number(peak.toFixed(4)),
+          peerId: entry.peerId,
+          rms: Number(rms.toFixed(4)),
+          speaking: nextSpeaking
+        });
+      }
+
       animationFrameId = window.requestAnimationFrame(tick);
       if (entry.remoteAudioAnalysis) {
         entry.remoteAudioAnalysis.animationFrameId = animationFrameId;
@@ -341,6 +398,7 @@ export function createVoiceRtcPeerSession({
         entry.audioElement.removeEventListener("loadedmetadata", replayOnCanPlay);
         entry.audioElement.removeEventListener("canplay", replayOnCanPlay);
       },
+      silentGain,
       source,
       streamKey
     };
@@ -655,7 +713,9 @@ export function createVoiceRtcPeerSession({
       log("track", {
         hasStreams: Boolean(event.streams?.length),
         kind: event.track?.kind || "",
+        muted: Boolean(event.track?.muted),
         peerId: entry.peerId,
+        readyState: event.track?.readyState || "",
         userId: entry.userId || null
       });
 
