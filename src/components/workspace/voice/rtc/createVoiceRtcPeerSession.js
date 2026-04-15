@@ -26,6 +26,25 @@ export function createVoiceRtcPeerSession({
 }) {
   const pendingAudioUnlockEntries = new Set();
   let removeAudioUnlockListeners = null;
+  let remoteAudioContext = null;
+
+  function getRemoteAudioContext() {
+    if (typeof AudioContext === "undefined") {
+      return null;
+    }
+
+    if (!remoteAudioContext || remoteAudioContext.state === "closed") {
+      remoteAudioContext = new AudioContext({
+        latencyHint: "interactive"
+      });
+    }
+
+    if (remoteAudioContext.state === "suspended") {
+      remoteAudioContext.resume().catch(() => {});
+    }
+
+    return remoteAudioContext;
+  }
 
   function hasLiveRemoteTrack(stream, kind) {
     const track = stream?.getTracks?.().find((candidate) => candidate.kind === kind) || null;
@@ -89,15 +108,19 @@ export function createVoiceRtcPeerSession({
     const videoMode =
       entry.videoMode ||
       (entry.screenShareEnabled ? "screen" : entry.cameraEnabled ? "camera" : "");
+    const hasAudio = hasLiveRemoteTrack(entry.remoteAudioStream, "audio");
+    const audioLevel = Math.max(0, Math.min(100, Number(entry.audioLevel) || 0));
+    const speaking = hasAudio ? Boolean(entry.detectedSpeaking) : Boolean(entry.speaking);
 
     onPeerMediaChange({
+      audioLevel,
       cameraEnabled: Boolean(entry.cameraEnabled),
       cameraStream:
         videoMode === "camera" && hasLiveRemoteTrack(entry.remoteVideoStream, "video")
           ? entry.remoteVideoStream
           : null,
       deafened: Boolean(entry.deafened),
-      hasAudio: hasLiveRemoteTrack(entry.remoteAudioStream, "audio"),
+      hasAudio,
       micMuted: Boolean(entry.micMuted),
       peerId: entry.peerId,
       removed: false,
@@ -106,7 +129,7 @@ export function createVoiceRtcPeerSession({
         videoMode === "screen" && hasLiveRemoteTrack(entry.remoteVideoStream, "video")
           ? entry.remoteVideoStream
           : null,
-      speaking: Boolean(entry.speaking),
+      speaking,
       userId: entry.userId || "",
       videoMode
     });
@@ -130,7 +153,8 @@ export function createVoiceRtcPeerSession({
     }
 
     const playbackState = getPlaybackState();
-    entry.audioElement.muted = playbackState.deafened;
+    entry.audioElement.defaultMuted = Boolean(playbackState.deafened);
+    entry.audioElement.muted = Boolean(playbackState.deafened);
     entry.audioElement.volume = playbackState.deafened ? 0 : playbackState.outputVolume;
     applySinkId(entry.audioElement, playbackState.outputDeviceId);
   }
@@ -159,6 +183,169 @@ export function createVoiceRtcPeerSession({
           "warn"
         );
       });
+  }
+
+  function stopRemoteAudioAnalysis(entry) {
+    if (!entry?.remoteAudioAnalysis) {
+      return;
+    }
+
+    const {
+      analyser,
+      animationFrameId,
+      cleanup,
+      source
+    } = entry.remoteAudioAnalysis;
+
+    if (animationFrameId) {
+      window.cancelAnimationFrame(animationFrameId);
+    }
+
+    try {
+      source?.disconnect?.();
+      analyser?.disconnect?.();
+    } catch {
+      // Ignore audio node disconnect issues during teardown.
+    }
+
+    cleanup?.();
+    entry.remoteAudioAnalysis = null;
+    entry.audioLevel = 0;
+    entry.detectedSpeaking = false;
+  }
+
+  function startRemoteAudioAnalysis(entry) {
+    if (!entry) {
+      return;
+    }
+
+    const liveAudioTracks = entry.remoteAudioStream
+      ?.getAudioTracks?.()
+      ?.filter((track) => track.readyState !== "ended");
+
+    if (!liveAudioTracks?.length) {
+      stopRemoteAudioAnalysis(entry);
+      emitPeerMedia(entry);
+      return;
+    }
+
+    const context = getRemoteAudioContext();
+    if (!context) {
+      return;
+    }
+
+    const streamKey = liveAudioTracks
+      .map((track) => track.id)
+      .sort()
+      .join("|");
+
+    if (entry.remoteAudioAnalysis?.streamKey === streamKey) {
+      return;
+    }
+
+    stopRemoteAudioAnalysis(entry);
+
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 1024;
+    analyser.smoothingTimeConstant = 0.55;
+
+    const source = context.createMediaStreamSource(entry.remoteAudioStream);
+    source.connect(analyser);
+
+    const timeDomainData = new Float32Array(analyser.fftSize);
+    let animationFrameId = 0;
+    let displayLevel = 0;
+    let noiseFloor = 0.0045;
+    let speaking = false;
+    let speechHoldUntil = 0;
+
+    const replayOnCanPlay = () => {
+      applyPlaybackToPeer(entry);
+      safePlayAudio(entry);
+    };
+
+    entry.audioElement.addEventListener("loadedmetadata", replayOnCanPlay);
+    entry.audioElement.addEventListener("canplay", replayOnCanPlay);
+
+    const tick = () => {
+      if (entry.destroyed) {
+        return;
+      }
+
+      analyser.getFloatTimeDomainData(timeDomainData);
+
+      let sumSquares = 0;
+      let peak = 0;
+      for (const sample of timeDomainData) {
+        const absolute = Math.abs(sample);
+        sumSquares += sample * sample;
+        if (absolute > peak) {
+          peak = absolute;
+        }
+      }
+
+      const rms = Math.sqrt(sumSquares / timeDomainData.length) || 0;
+      const now = performance.now();
+
+      if (!speaking) {
+        const noiseBlend = rms < noiseFloor ? 0.12 : 0.01;
+        noiseFloor = noiseFloor * (1 - noiseBlend) + rms * noiseBlend;
+      } else {
+        noiseFloor = noiseFloor * 0.992 + Math.min(rms, noiseFloor) * 0.008;
+      }
+
+      const floor = Math.max(noiseFloor, 0.0035);
+      const speakThreshold = Math.max(floor * 2.3, 0.009);
+      const releaseThreshold = Math.max(floor * 1.65, 0.0068);
+      const speechDetected = rms > speakThreshold || peak > speakThreshold * 3.2;
+
+      if (speechDetected) {
+        speechHoldUntil = now + 180;
+      }
+
+      const nextSpeaking = speechDetected || now < speechHoldUntil;
+      const normalizedRaw = Math.max(
+        0,
+        (rms - releaseThreshold) / Math.max(0.025, 0.09 - releaseThreshold)
+      );
+      const normalizedTarget = Math.min(100, normalizedRaw * 100);
+      const smoothing = nextSpeaking ? 0.3 : 0.14;
+      displayLevel = displayLevel * (1 - smoothing) + normalizedTarget * smoothing;
+
+      if (!nextSpeaking && displayLevel < 2) {
+        displayLevel = 0;
+      }
+
+      const roundedLevel = Math.round(displayLevel);
+      const didSpeakingChange = nextSpeaking !== entry.detectedSpeaking;
+      const didLevelChange = roundedLevel !== Math.round(entry.audioLevel || 0);
+
+      speaking = nextSpeaking;
+      entry.detectedSpeaking = nextSpeaking;
+      entry.audioLevel = roundedLevel;
+
+      if (didSpeakingChange || didLevelChange) {
+        emitPeerMedia(entry);
+      }
+
+      animationFrameId = window.requestAnimationFrame(tick);
+      if (entry.remoteAudioAnalysis) {
+        entry.remoteAudioAnalysis.animationFrameId = animationFrameId;
+      }
+    };
+
+    entry.remoteAudioAnalysis = {
+      analyser,
+      animationFrameId: 0,
+      cleanup() {
+        entry.audioElement.removeEventListener("loadedmetadata", replayOnCanPlay);
+        entry.audioElement.removeEventListener("canplay", replayOnCanPlay);
+      },
+      source,
+      streamKey
+    };
+
+    tick();
   }
 
   function sendSignal(targetPeerId, signal) {
@@ -281,6 +468,7 @@ export function createVoiceRtcPeerSession({
         if (!track.muted && track.readyState !== "ended") {
           safePlayAudio(entry);
         }
+        startRemoteAudioAnalysis(entry);
       }
 
       emitPeerMedia(entry);
@@ -290,6 +478,9 @@ export function createVoiceRtcPeerSession({
       const stream =
         kind === "audio" ? entry.remoteAudioStream : entry.remoteVideoStream;
       stream.removeTrack(track);
+      if (kind === "audio") {
+        startRemoteAudioAnalysis(entry);
+      }
       entry.remoteTrackListeners.get(listenerKey)?.cleanup?.();
       entry.remoteTrackListeners.delete(listenerKey);
       emitPeerMedia(entry);
@@ -375,6 +566,7 @@ export function createVoiceRtcPeerSession({
     pendingAudioUnlockEntries.delete(entry);
     updateAudioUnlockListeners();
     clearPeerMedia(entry);
+    stopRemoteAudioAnalysis(entry);
 
     entry.remoteTrackListeners.forEach(({ cleanup }) => {
       cleanup?.();
@@ -414,9 +606,11 @@ export function createVoiceRtcPeerSession({
 
     const entry = {
       audioElement,
+      audioLevel: 0,
       audioSender: audioTransceiver.sender,
       cameraEnabled: Boolean(peer.cameraEnabled),
       deafened: Boolean(peer.deafened),
+      detectedSpeaking: false,
       destroyed: false,
       iceRestartAttempts: 0,
       micMuted: Boolean(peer.micMuted),
@@ -425,6 +619,7 @@ export function createVoiceRtcPeerSession({
       peerConnection,
       peerId: peer.peerId,
       pendingRemoteCandidates: [],
+      remoteAudioAnalysis: null,
       remoteAudioStream: createRemoteStream(),
       remoteTrackListeners: new Map(),
       remoteVideoStream: createRemoteStream(),
@@ -438,6 +633,7 @@ export function createVoiceRtcPeerSession({
     audioElement.srcObject = entry.remoteAudioStream;
     peers.set(entry.peerId, entry);
     applyPlaybackToPeer(entry);
+    safePlayAudio(entry);
 
     peerConnection.onicecandidate = (event) => {
       if (entry.destroyed || !event.candidate) {
@@ -472,6 +668,7 @@ export function createVoiceRtcPeerSession({
         attachRemoteTrackLifecycle(entry, event.track, "audio");
         entry.audioElement.srcObject = entry.remoteAudioStream;
         applyPlaybackToPeer(entry);
+        startRemoteAudioAnalysis(entry);
         safePlayAudio(entry);
         emitPeerMedia(entry);
         return;
@@ -570,6 +767,11 @@ export function createVoiceRtcPeerSession({
       existing.speaking = Boolean(speaking);
       existing.userId = userId || existing.userId;
       existing.videoMode = videoMode || existing.videoMode || "";
+
+      if (existing.micMuted) {
+        existing.audioLevel = 0;
+        existing.detectedSpeaking = false;
+      }
 
       if (!existing.videoMode && !existing.cameraEnabled && !existing.screenShareEnabled) {
         existing.remoteVideoStream.getTracks().forEach((track) => {

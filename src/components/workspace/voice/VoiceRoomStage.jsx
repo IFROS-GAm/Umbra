@@ -106,6 +106,14 @@ export function VoiceRoomStage({
       return <span className="voice-stage-level-chip">{Math.round(voiceInputLevel)}%</span>;
     }
 
+    if (allowInputLevel && !user?.isCurrentUser) {
+      return (
+        <span className="voice-stage-level-chip">
+          {Math.round(Math.max(0, Math.min(100, Number(user?.audioLevel) || 0)))}%
+        </span>
+      );
+    }
+
     return null;
   }
 

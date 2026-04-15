@@ -212,6 +212,9 @@ export function buildVoiceStageParticipants({
     return {
       ...user,
       hiddenVideoLabel: t("voice.participant.hiddenVideo", "Video oculto"),
+      audioLevel: isCurrentVoicePeer
+        ? 0
+        : Math.max(0, Math.min(100, Number(remoteMedia?.audioLevel) || 0)),
       isCurrentUser: isCurrentVoicePeer,
       isCameraOn: isCurrentVoicePeer
         ? voiceState.cameraEnabled

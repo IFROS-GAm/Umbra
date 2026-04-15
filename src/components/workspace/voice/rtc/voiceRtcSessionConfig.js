@@ -123,8 +123,19 @@ export async function applySinkId(audioElement, outputDeviceId) {
 export function createHiddenAudioElement() {
   const element = document.createElement("audio");
   element.autoplay = true;
+  element.controls = false;
+  element.defaultMuted = false;
+  element.muted = false;
+  element.preload = "auto";
   element.playsInline = true;
-  element.style.display = "none";
+  element.setAttribute("aria-hidden", "true");
+  element.style.height = "1px";
+  element.style.left = "-9999px";
+  element.style.opacity = "0";
+  element.style.pointerEvents = "none";
+  element.style.position = "fixed";
+  element.style.top = "0";
+  element.style.width = "1px";
   document.body.appendChild(element);
   return element;
 }

@@ -559,6 +559,7 @@ export function useWorkspaceVoiceEffects({
             }
 
             nextState[entryKey] = {
+              audioLevel: Math.max(0, Math.min(100, Number(payload.audioLevel) || 0)),
               cameraEnabled: Boolean(payload.cameraEnabled),
               cameraStream: payload.cameraStream || null,
               deafened: Boolean(payload.deafened),
