@@ -1,8 +1,6 @@
 import { supabase } from "../../../../supabase-browser.js";
 import { createVoiceRtcPeerSession } from "./createVoiceRtcPeerSession.js";
 import { createVoiceRtcSessionControls } from "./createVoiceRtcSessionControls.js";
-import { createRealtimePresenceSync } from "../presence/createRealtimePresenceSync.js";
-import { buildVoicePeersFromPresenceState } from "../presence/voiceRealtimeHelpers.js";
 import { clampUnitVolume, hasTrack } from "./voiceRtcSessionConfig.js";
 
 export function createVoiceRtcSession({
@@ -29,12 +27,15 @@ export function createVoiceRtcSession({
 
   const realtimeEnabled = Boolean(useSharedRealtime && supabase);
   const peers = new Map();
+  const transportReadyWaiters = new Set();
+  const pendingRealtimeSignals = [];
   let destroyed = false;
   let localAudioStream = null;
   let localCameraStream = null;
   let localScreenShareStream = null;
   let realtimeChannel = null;
-  let realtimePresenceSync = null;
+  let realtimeTransportReady = !realtimeEnabled;
+  let pendingPeerSnapshot = null;
   let playbackState = {
     deafened: Boolean(deafened),
     outputDeviceId,
@@ -52,8 +53,6 @@ export function createVoiceRtcSession({
       globalThis.crypto?.randomUUID?.() ||
       `voice-peer-${Date.now()}-${Math.random().toString(16).slice(2)}`
   ).trim();
-  const joinedAt = new Date().toISOString();
-  let realtimePresenceRevision = 0;
 
   const log = (event, details = {}, level = "info") => {
     const logger = typeof console[level] === "function" ? console[level] : console.info;
@@ -107,30 +106,86 @@ export function createVoiceRtcSession({
     return getCurrentLocalVideoStream()?.getVideoTracks?.()?.[0] || null;
   }
 
-  function buildRealtimePresencePayload() {
-    return {
-      cameraEnabled: hasTrack(localCameraStream, "video"),
-      channelId,
-      deafened: Boolean(participantState.deafened),
-      joinedAt,
-      micMuted: Boolean(participantState.micMuted),
-      peerId: selfPeerId,
-      revision: realtimePresenceRevision,
-      screenShareEnabled: hasTrack(localScreenShareStream, "video"),
-      speaking: Boolean(participantState.speaking),
-      updatedAt: new Date().toISOString(),
-      userId: currentUserId || null,
-      videoMode: getCurrentLocalVideoMode()
-    };
+  function resolveTransportWaiters() {
+    transportReadyWaiters.forEach((resolve) => resolve());
+    transportReadyWaiters.clear();
   }
 
-  function syncRealtimePresence() {
-    if (!realtimeEnabled || !realtimeChannel || !realtimePresenceSync) {
+  function waitForRealtimeTransport() {
+    if (!realtimeEnabled || realtimeTransportReady || destroyed) {
       return Promise.resolve();
     }
 
-    realtimePresenceRevision += 1;
-    return realtimePresenceSync.schedule(buildRealtimePresencePayload());
+    return new Promise((resolve) => {
+      transportReadyWaiters.add(resolve);
+    });
+  }
+
+  async function flushPendingRealtimeSignals() {
+    if (!realtimeEnabled || !realtimeChannel || !realtimeTransportReady || destroyed) {
+      return;
+    }
+
+    while (pendingRealtimeSignals.length && !destroyed) {
+      const payload = pendingRealtimeSignals.shift();
+      if (!payload) {
+        continue;
+      }
+
+      try {
+        await realtimeChannel.send({
+          event: "signal",
+          payload,
+          type: "broadcast"
+        });
+      } catch (error) {
+        handleSessionError(error);
+        pendingRealtimeSignals.unshift(payload);
+        break;
+      }
+    }
+  }
+
+  async function applyKnownPeers(peersSnapshot = []) {
+    await handlePeersSnapshot({
+      channelId,
+      peers: peersSnapshot
+    });
+  }
+
+  async function flushPendingPeerSnapshot() {
+    if (!pendingPeerSnapshot || destroyed) {
+      return;
+    }
+
+    const snapshot = pendingPeerSnapshot;
+    pendingPeerSnapshot = null;
+    await applyKnownPeers(snapshot);
+  }
+
+  function sendRealtimeSignal(payload) {
+    if (!realtimeEnabled) {
+      return;
+    }
+
+    if (!realtimeChannel || !realtimeTransportReady) {
+      pendingRealtimeSignals.push(payload);
+      log("signal:queued", {
+        signalType:
+          payload?.signal?.description?.type ||
+          (payload?.signal?.candidate ? "ice" : "unknown"),
+        targetPeerId: payload?.targetPeerId || null
+      });
+      return;
+    }
+
+    realtimeChannel.send({
+      event: "signal",
+      payload,
+      type: "broadcast"
+    }).catch((error) => {
+      handleSessionError(error);
+    });
   }
 
   const {
@@ -151,12 +206,12 @@ export function createVoiceRtcSession({
     getCurrentLocalVideoTrack,
     getLocalAudioStream,
     getPlaybackState: () => playbackState,
-    getRealtimeChannel: () => realtimeChannel,
     handleSessionError,
     log,
     onPeerMediaChange,
     peers,
     realtimeEnabled,
+    sendRealtimeSignal,
     selfPeerId,
     socket
   });
@@ -180,69 +235,16 @@ export function createVoiceRtcSession({
     requestPeerSync();
   }
 
-  async function handleRealtimePresenceSync() {
-    if (destroyed || !realtimeChannel) {
-      return;
-    }
-
-    const nextPeers = buildVoicePeersFromPresenceState(realtimeChannel.presenceState(), {
-      channelId,
-      localPeerId: selfPeerId
-    });
-
-    log("realtime:peers", {
-      peerIds: nextPeers.map((peer) => peer.peerId),
-      peerUserIds: nextPeers.map((peer) => peer.userId)
-    });
-
-    await handlePeersSnapshot({
-      channelId,
-      peers: nextPeers
-    });
-  }
-
   async function setupRealtimeTransport() {
     if (!realtimeEnabled || destroyed || realtimeChannel) {
       return;
     }
 
-    realtimeChannel = supabase.channel(`umbra-voice-room:${channelId}`, {
-      config: {
-        presence: {
-          key: selfPeerId
-        }
-      }
-    });
-    realtimePresenceSync = createRealtimePresenceSync({
-      getChannel: () => realtimeChannel,
-      log: (event, details = {}, level = "info") => {
-        log(`realtime:${event}`, details, level);
-      },
-      onError: (error) => {
-        handleSessionError(error);
-      }
-    });
+    const signalChannel = supabase.channel(`umbra-voice-signal:${channelId}`);
+    realtimeChannel = signalChannel;
+    realtimeTransportReady = false;
 
-    realtimeChannel.on("presence", { event: "sync" }, () => {
-      handleRealtimePresenceSync();
-    });
-    realtimeChannel.on("presence", { event: "join" }, () => {
-      handleRealtimePresenceSync();
-    });
-    realtimeChannel.on("presence", { event: "leave" }, ({ leftPresences = [] } = {}) => {
-      leftPresences.forEach((presence) => {
-        const peerId = String(presence?.peerId || presence?.presence_ref || "").trim();
-        if (peerId) {
-          log("peer:left", {
-            peerId,
-            transport: "supabase"
-          });
-          cleanupPeer(peerId);
-        }
-      });
-      handleRealtimePresenceSync();
-    });
-    realtimeChannel.on("broadcast", { event: "signal" }, ({ payload } = {}) => {
+    signalChannel.on("broadcast", { event: "signal" }, ({ payload } = {}) => {
       const nextPayload = payload || {};
       if (!nextPayload?.targetPeerId || nextPayload.targetPeerId !== selfPeerId) {
         return;
@@ -256,15 +258,19 @@ export function createVoiceRtcSession({
       });
     });
 
-    realtimeChannel.subscribe(async (status) => {
-      log("realtime:status", { status });
-      if (status !== "SUBSCRIBED" || destroyed) {
+    signalChannel.subscribe(async (status) => {
+      log("signal:status", { status });
+
+      if (status !== "SUBSCRIBED" || destroyed || realtimeChannel !== signalChannel) {
         return;
       }
 
+      realtimeTransportReady = true;
+      resolveTransportWaiters();
+
       try {
-        await syncRealtimePresence();
-        await handleRealtimePresenceSync();
+        await flushPendingRealtimeSignals();
+        await flushPendingPeerSnapshot();
       } catch (error) {
         handleSessionError(error);
       }
@@ -297,7 +303,6 @@ export function createVoiceRtcSession({
     getParticipantState: () => participantState,
     getPlaybackState: () => playbackState,
     getPeers: () => peers,
-    getRealtimePresenceSync: () => realtimePresenceSync,
     getRealtimeChannel: () => realtimeChannel,
     handlePeerLeft,
     handlePeersSnapshot,
@@ -308,6 +313,12 @@ export function createVoiceRtcSession({
     requestPeerOffer: startPeerOffer,
     setDestroyed: (nextDestroyed) => {
       destroyed = nextDestroyed;
+      if (destroyed) {
+        realtimeTransportReady = true;
+        pendingPeerSnapshot = null;
+        pendingRealtimeSignals.length = 0;
+        resolveTransportWaiters();
+      }
     },
     setParticipantState: (nextParticipantState) => {
       participantState = nextParticipantState;
@@ -317,14 +328,10 @@ export function createVoiceRtcSession({
     },
     setRealtimeChannel: (nextRealtimeChannel) => {
       realtimeChannel = nextRealtimeChannel;
-      if (!nextRealtimeChannel) {
-        realtimePresenceSync = null;
-      }
     },
     socket,
     syncLocalAudioToPeer,
     syncLocalVideoToPeer,
-    syncRealtimePresence,
     updateLocalStreams: ({
       audioStream = null,
       cameraStream = null,
@@ -343,10 +350,26 @@ export function createVoiceRtcSession({
         peerIds: nextPeers.map((peer) => peer?.peerId).filter(Boolean),
         peerUserIds: nextPeers.map((peer) => peer?.userId).filter(Boolean)
       });
-      await handlePeersSnapshot({
-        channelId,
-        peers: nextPeers
-      });
+
+      if (!realtimeEnabled) {
+        await applyKnownPeers(nextPeers);
+        return;
+      }
+
+      pendingPeerSnapshot = nextPeers;
+
+      if (!realtimeTransportReady) {
+        log("signal:transport:waiting", {
+          peerIds: nextPeers.map((peer) => peer?.peerId).filter(Boolean)
+        });
+        await waitForRealtimeTransport();
+      }
+
+      if (destroyed) {
+        return;
+      }
+
+      await flushPendingPeerSnapshot();
     }
   };
 }

@@ -16,12 +16,12 @@ export function createVoiceRtcPeerSession({
   getCurrentLocalVideoStream,
   getCurrentLocalVideoTrack,
   getPlaybackState,
-  getRealtimeChannel,
   handleSessionError,
   log,
   onPeerMediaChange,
   peers,
   realtimeEnabled,
+  sendRealtimeSignal,
   selfPeerId,
   socket
 }) {
@@ -411,27 +411,19 @@ export function createVoiceRtcPeerSession({
       return;
     }
 
-    if (realtimeEnabled && getRealtimeChannel()) {
+    if (realtimeEnabled) {
       log("signal:emit", {
         signalType: getVoiceSignalType(signal),
         targetPeerId,
         transport: "supabase"
       });
-      getRealtimeChannel()
-        .send({
-          type: "broadcast",
-          event: "signal",
-          payload: {
-            channelId,
-            fromPeerId: selfPeerId,
-            signal,
-            targetPeerId,
-            userId: currentUserId || null
-          }
-        })
-        .catch((error) => {
-          handleSessionError(error);
-        });
+      sendRealtimeSignal?.({
+        channelId,
+        fromPeerId: selfPeerId,
+        signal,
+        targetPeerId,
+        userId: currentUserId || null
+      });
       return;
     }
 
