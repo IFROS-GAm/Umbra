@@ -119,7 +119,7 @@ export function createWorkspaceVoiceActions(context, shared) {
       setVoiceJoinReadyChannelId(null);
       applyLocalVoicePresence(targetChannel.id);
       setJoinedVoiceChannelId(targetChannel.id);
-      const socket = getLiveSocket();
+      const socket = workspace?.mode === "supabase" ? null : getLiveSocket();
       logVoiceClient(socket, "flow:join-click", {
         channelId: targetChannel.id,
         selectionKind: "guild",
@@ -155,7 +155,7 @@ export function createWorkspaceVoiceActions(context, shared) {
       setVoiceJoinReadyChannelId(null);
       applyLocalVoicePresence(targetChannel.id);
       setJoinedVoiceChannelId(targetChannel.id);
-      const socket = getLiveSocket();
+      const socket = workspace?.mode === "supabase" ? null : getLiveSocket();
       logVoiceClient(socket, "flow:join-click", {
         channelId: targetChannel.id,
         selectionKind: targetChannel.type || "dm",
@@ -230,7 +230,7 @@ export function createWorkspaceVoiceActions(context, shared) {
     }
 
     try {
-      const socket = getLiveSocket();
+      const socket = workspace?.mode === "supabase" ? null : getLiveSocket();
       if (workspace?.mode !== "supabase") {
         logVoiceClient(socket, "leave:emit", {
           channelId: previousChannelId

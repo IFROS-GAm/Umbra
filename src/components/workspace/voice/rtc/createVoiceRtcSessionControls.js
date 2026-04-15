@@ -9,6 +9,7 @@ export function createVoiceRtcSessionControls({
   getPlaybackState,
   getPeers,
   getRealtimeChannel,
+  getRealtimePresenceSync,
   handlePeerLeft,
   handlePeersSnapshot,
   handleSignal,
@@ -23,6 +24,7 @@ export function createVoiceRtcSessionControls({
   socket,
   syncLocalAudioToPeer,
   syncLocalVideoToPeer,
+  syncRealtimePresence,
   updateLocalStreams
 }) {
   return {
@@ -36,6 +38,12 @@ export function createVoiceRtcSessionControls({
         cameraStream,
         screenShareStream
       });
+
+      if (realtimeEnabled && getRealtimeChannel()) {
+        syncRealtimePresence().catch((error) => {
+          handleSessionError(error);
+        });
+      }
 
       for (const entry of getPeers().values()) {
         await syncLocalAudioToPeer(entry);
@@ -53,6 +61,12 @@ export function createVoiceRtcSessionControls({
       streams.localAudioStream?.getAudioTracks?.().forEach((track) => {
         track.enabled = Boolean(nextEnabled);
       });
+
+      if (realtimeEnabled && getRealtimeChannel()) {
+        syncRealtimePresence().catch((error) => {
+          handleSessionError(error);
+        });
+      }
     },
     updateParticipantState(nextState = {}) {
       const participantState = getParticipantState();
@@ -70,6 +84,12 @@ export function createVoiceRtcSessionControls({
             ? nextState.speaking
             : participantState.speaking
       });
+
+      if (realtimeEnabled && getRealtimeChannel()) {
+        syncRealtimePresence().catch((error) => {
+          handleSessionError(error);
+        });
+      }
     },
     updatePlayback(nextPlayback = {}) {
       const playbackState = getPlaybackState();
@@ -94,7 +114,20 @@ export function createVoiceRtcSessionControls({
 
       if (realtimeEnabled) {
         const realtimeChannel = getRealtimeChannel();
+        const realtimePresenceSync = getRealtimePresenceSync?.() || null;
         if (realtimeChannel) {
+          try {
+            if (realtimePresenceSync) {
+              await realtimePresenceSync.schedule(null);
+            } else {
+              await realtimeChannel.untrack();
+            }
+          } catch {
+            // Ignore untrack races during teardown.
+          }
+
+          realtimePresenceSync?.dispose?.();
+
           try {
             await supabase.removeChannel(realtimeChannel);
           } catch {
