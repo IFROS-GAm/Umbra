@@ -1,4 +1,5 @@
 import { api, buildInviteUrl } from "../../../api.js";
+import { playUmbraSound } from "../../../audio/umbraSoundEffects.js";
 
 import {
   applyServerFolderAction,
@@ -241,8 +242,10 @@ export function createWorkspaceNavigationActions({
 
       await loadBootstrap(activeSelectionRef.current);
       setAppError("");
+      playUmbraSound("saveChanges");
       showUiNotice("Servidor actualizado.");
     } catch (error) {
+      playUmbraSound("error");
       setAppError(error.message);
       throw error;
     }

@@ -1,11 +1,19 @@
 const SOUND_DEFINITIONS = {
+  cameraDisable: {
+    fileName: "Apagar-camara.mp3",
+    volume: 0.72
+  },
   cameraEnable: {
     fileName: "Prender-camara.mp3",
     volume: 0.72
   },
   directCallJoin: {
-    fileName: "Entrar-al-chat-de-voz.mp3",
+    fileName: "Entrar-en-canal-voz.mp3",
     volume: 0.72
+  },
+  error: {
+    fileName: "Error.mp3",
+    volume: 0.62
   },
   incomingCall: {
     fileName: "Tono-de-llamada.mp3",
@@ -16,8 +24,12 @@ const SOUND_DEFINITIONS = {
     volume: 0.58
   },
   notification: {
-    fileName: "gigidelaromusic-pure-meditation-tone-450975.mp3",
+    fileName: "Guardar-cambios.mp3",
     volume: 0.42
+  },
+  saveChanges: {
+    fileName: "Guardar-cambios.mp3",
+    volume: 0.52
   },
   screenShareOff: {
     fileName: "Apagar-transmision.mp3",
@@ -191,4 +203,3 @@ export function stopAllUmbraSounds() {
     stopUmbraSound(key);
   });
 }
-

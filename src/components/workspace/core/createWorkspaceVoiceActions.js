@@ -40,8 +40,8 @@ export function createWorkspaceVoiceActions(context, shared) {
         playSound("voiceMute");
       } else if (key === "deafen") {
         playSound("voiceDeafen");
-      } else if (key === "cameraEnabled" && nextValue) {
-        playSound("cameraEnable");
+      } else if (key === "cameraEnabled") {
+        playSound(nextValue ? "cameraEnable" : "cameraDisable");
       }
 
       return {
@@ -61,8 +61,8 @@ export function createWorkspaceVoiceActions(context, shared) {
         playSound(value ? "screenShareOn" : "screenShareOff");
       }
 
-      if (key === "cameraEnabled" && !previous[key] && value) {
-        playSound("cameraEnable");
+      if (key === "cameraEnabled" && previous[key] !== value) {
+        playSound(value ? "cameraEnable" : "cameraDisable");
       }
 
       return {

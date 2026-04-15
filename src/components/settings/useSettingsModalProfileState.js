@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { playUmbraSound } from "../../audio/umbraSoundEffects.js";
 import { sanitizeUsername } from "../../utils.js";
 import {
   buildSocialLinkDrafts,
@@ -317,7 +318,9 @@ export function useSettingsModalProfileState({
       setClearBanner(false);
       setEditorOpen(false);
       setSaved("Perfil actualizado.");
+      playUmbraSound("saveChanges");
     } catch (saveError) {
+      playUmbraSound("error");
       setError(saveError.message);
     } finally {
       setSaving(false);
