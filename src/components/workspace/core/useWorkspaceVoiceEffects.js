@@ -52,20 +52,29 @@ export function useWorkspaceVoiceEffects({
   const voicePresenceRevisionRef = useRef(0);
   const voicePresenceSyncRef = useRef(null);
 
-  function buildCurrentVoicePresencePayload() {
+  function buildCurrentVoicePresencePayload({ includeIdle = false } = {}) {
     const currentUserId = String(workspaceRef.current?.current_user?.id || "").trim();
     const currentChannelId = String(joinedVoiceChannelIdRef.current || "").trim();
-    const hasCameraTrack = Boolean(cameraStream?.getVideoTracks?.().length);
-    const hasScreenTrack = Boolean(screenShareStream?.getVideoTracks?.().length);
-    const isMicMuted = Boolean(voiceState.micMuted);
-    const isDeafened = Boolean(voiceState.deafen);
-    const isSpeaking = !isMicMuted && !isDeafened && Boolean(voiceInputSpeaking);
+    const hasActiveChannel = Boolean(currentChannelId);
+    const hasCameraTrack = hasActiveChannel && Boolean(cameraStream?.getVideoTracks?.().length);
+    const hasScreenTrack =
+      hasActiveChannel && Boolean(screenShareStream?.getVideoTracks?.().length);
+    const isMicMuted = hasActiveChannel ? Boolean(voiceState.micMuted) : false;
+    const isDeafened = hasActiveChannel ? Boolean(voiceState.deafen) : false;
+    const isSpeaking =
+      hasActiveChannel && !isMicMuted && !isDeafened && Boolean(voiceInputSpeaking);
 
-    if (!currentUserId || !currentChannelId) {
+    if (!currentUserId) {
       return null;
     }
 
-    const lookup = findChannelInSession(workspaceRef.current, currentChannelId);
+    if (!hasActiveChannel && !includeIdle) {
+      return null;
+    }
+
+    const lookup = hasActiveChannel
+      ? findChannelInSession(workspaceRef.current, currentChannelId)
+      : null;
 
     return {
       channelId: currentChannelId,
@@ -83,8 +92,10 @@ export function useWorkspaceVoiceEffects({
     };
   }
 
-  function buildNextVoicePresencePayload() {
-    const payload = buildCurrentVoicePresencePayload();
+  function buildNextVoicePresencePayload({ includeIdle = false } = {}) {
+    const payload = buildCurrentVoicePresencePayload({
+      includeIdle
+    });
     if (!payload) {
       return null;
     }
@@ -157,7 +168,9 @@ export function useWorkspaceVoiceEffects({
     };
 
     const syncTrackedPresence = async () => {
-      const payload = buildNextVoicePresencePayload();
+      const payload = buildNextVoicePresencePayload({
+        includeIdle: true
+      });
       await presenceSync.schedule(payload);
     };
 
@@ -206,16 +219,9 @@ export function useWorkspaceVoiceEffects({
       return undefined;
     }
 
-    const payload = buildCurrentVoicePresencePayload();
-    const nextPayload = payload
-      ? {
-          ...payload,
-          revision: voicePresenceRevisionRef.current + 1
-        }
-      : null;
-    if (payload) {
-      voicePresenceRevisionRef.current += 1;
-    }
+    const nextPayload = buildNextVoicePresencePayload({
+      includeIdle: true
+    });
 
     voicePresenceSyncRef.current?.schedule(nextPayload).catch(() => {});
 
@@ -231,6 +237,66 @@ export function useWorkspaceVoiceEffects({
     workspace?.current_user?.id,
     setVoicePresencePeers,
     setVoicePresenceUsers
+  ]);
+
+  useEffect(() => {
+    if (joinedVoiceChannelId || workspace?.mode !== "supabase") {
+      return;
+    }
+
+    const localPeerId = String(voiceLocalPeerIdRef.current || "").trim();
+    const currentUserId = String(workspaceRef.current?.current_user?.id || "").trim();
+
+    if (localPeerId) {
+      setVoicePresencePeers((previous) => {
+        const currentEntry = previous?.[localPeerId];
+        if (!currentEntry?.channelId) {
+          return previous;
+        }
+
+        return {
+          ...(previous || {}),
+          [localPeerId]: {
+            ...currentEntry,
+            cameraEnabled: false,
+            channelId: "",
+            deafened: false,
+            micMuted: false,
+            screenShareEnabled: false,
+            speaking: false,
+            videoMode: ""
+          }
+        };
+      });
+    }
+
+    if (currentUserId) {
+      setVoicePresenceUsers((previous) => {
+        const currentEntry = previous?.[currentUserId];
+        if (!currentEntry?.channelId) {
+          return previous;
+        }
+
+        return {
+          ...(previous || {}),
+          [currentUserId]: {
+            ...currentEntry,
+            cameraEnabled: false,
+            channelId: "",
+            deafened: false,
+            micMuted: false,
+            screenShareEnabled: false,
+            speaking: false,
+            videoMode: ""
+          }
+        };
+      });
+    }
+  }, [
+    joinedVoiceChannelId,
+    setVoicePresencePeers,
+    setVoicePresenceUsers,
+    workspace?.mode
   ]);
 
   useEffect(() => {
