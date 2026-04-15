@@ -15,6 +15,7 @@ export function useWorkspaceDerivedData({
   isDirectConversation,
   isVoiceChannel,
   joinedVoiceChannelId,
+  voicePresenceUsers,
   voiceSessions,
   voiceUserIds,
   workspace
@@ -138,11 +139,26 @@ export function useWorkspaceDerivedData({
       .find((channel) => channel.id === joinedVoiceChannelId) || null;
   const voiceUsersByChannel = useMemo(() => {
     const guildMembersById = new Map((activeGuild?.members || []).map((member) => [member.id, member]));
+    const presenceUsersByChannel = Object.values(voicePresenceUsers || {}).reduce((accumulator, entry) => {
+      const channelId = String(entry?.channelId || "").trim();
+      const userId = String(entry?.userId || "").trim();
+      if (!channelId || !userId) {
+        return accumulator;
+      }
+
+      if (!accumulator[channelId]) {
+        accumulator[channelId] = [];
+      }
+
+      accumulator[channelId].push(userId);
+      return accumulator;
+    }, {});
 
     return Object.fromEntries(
       activeGuildVoiceChannels.map((channel) => {
         const layeredUserIds = [
           ...(voiceSessions[channel.id] || []),
+          ...(presenceUsersByChannel[channel.id] || []),
           ...(joinedVoiceChannelId === channel.id && currentUserId ? [currentUserId] : []),
           ...(activeChannel?.id === channel.id ? voiceUserIds : [])
         ];
@@ -196,6 +212,7 @@ export function useWorkspaceDerivedData({
     currentUserId,
     currentUserLabel,
     joinedVoiceChannelId,
+    voicePresenceUsers,
     voiceSessions,
     voiceUserIds
   ]);

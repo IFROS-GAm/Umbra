@@ -53,6 +53,7 @@ export function useWorkspaceVoiceEffects({
   const voicePresenceRevisionRef = useRef(0);
   const voicePresenceSyncRef = useRef(null);
   const voicePresenceHeartbeatRef = useRef(null);
+  const voicePresenceResyncRef = useRef(null);
 
   function buildKnownVoicePeers(channelId) {
     const normalizedChannelId = String(channelId || "").trim();
@@ -262,10 +263,17 @@ export function useWorkspaceVoiceEffects({
       if (voicePresenceHeartbeatRef.current) {
         window.clearInterval(voicePresenceHeartbeatRef.current);
       }
+      if (voicePresenceResyncRef.current) {
+        window.clearInterval(voicePresenceResyncRef.current);
+      }
       voicePresenceHeartbeatRef.current = window.setInterval(() => {
         const payload = buildNextVoicePresencePayload();
         voicePresenceSyncRef.current?.schedule(payload).catch(() => {});
+        syncPresenceState();
       }, 3_000);
+      voicePresenceResyncRef.current = window.setInterval(() => {
+        syncPresenceState();
+      }, 1_200);
     });
 
     return () => {
@@ -279,6 +287,10 @@ export function useWorkspaceVoiceEffects({
       if (voicePresenceHeartbeatRef.current) {
         window.clearInterval(voicePresenceHeartbeatRef.current);
         voicePresenceHeartbeatRef.current = null;
+      }
+      if (voicePresenceResyncRef.current) {
+        window.clearInterval(voicePresenceResyncRef.current);
+        voicePresenceResyncRef.current = null;
       }
 
       presenceSync.dispose();
