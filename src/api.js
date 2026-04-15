@@ -128,6 +128,19 @@ export const api = {
   fetchVoiceState() {
     return request("/api/voice/state");
   },
+  fetchLiveKitToken({ peerId, room }) {
+    const params = new URLSearchParams();
+
+    if (room) {
+      params.set("room", room);
+    }
+
+    if (peerId) {
+      params.set("peerId", peerId);
+    }
+
+    return request(`/api/livekit/token?${params.toString()}`);
+  },
   fetchMessages({ before, channelId, limit = 30, signal } = {}) {
     const params = new URLSearchParams({
       limit: String(limit)

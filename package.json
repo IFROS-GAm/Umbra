@@ -28,6 +28,8 @@
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.1.0",
+    "livekit-client": "^2.18.1",
+    "livekit-server-sdk": "^2.15.1",
     "lucide-react": "^1.7.0",
     "marked": "^15.0.7",
     "multer": "^2.1.1",

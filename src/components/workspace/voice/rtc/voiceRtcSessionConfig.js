@@ -80,7 +80,16 @@ function parseIceServersFromEnv() {
 const ENV_ICE_SERVERS = parseIceServersFromEnv();
 const SHOULD_FORCE_RELAY =
   String(import.meta.env.VITE_WEBRTC_FORCE_RELAY || "").trim().toLowerCase() === "true";
+const LIVEKIT_SERVER_URL = String(import.meta.env.VITE_LIVEKIT_URL || "").trim();
 let sharedVoiceAudioContext = null;
+
+export function hasLiveKitVoiceClientConfig() {
+  return Boolean(LIVEKIT_SERVER_URL);
+}
+
+export function shouldUseLiveKitVoice(workspaceMode) {
+  return workspaceMode === "supabase" && hasLiveKitVoiceClientConfig();
+}
 
 export function buildRtcConfiguration() {
   const dedupedServers = new Map();

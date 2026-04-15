@@ -10,6 +10,8 @@ import {
   buildVoiceSessionsFromPresenceState
 } from "../voiceRealtimeHelpers.js";
 import { createRealtimePresenceSync } from "../voice/presence/createRealtimePresenceSync.js";
+import { createLiveKitVoiceSession } from "../voice/rtc/createLiveKitVoiceSession.js";
+import { shouldUseLiveKitVoice } from "../voice/rtc/voiceRtcSessionConfig.js";
 import { createVoiceRtcSession } from "../voiceRtcSession.js";
 
 export function useWorkspaceVoiceEffects({
@@ -131,13 +133,6 @@ export function useWorkspaceVoiceEffects({
     });
     const presenceSync = createRealtimePresenceSync({
       getChannel: () => (voicePresenceChannelRef.current === channel ? channel : null),
-      log: (event, details = {}, level = "info") => {
-        const logger = typeof console[level] === "function" ? console[level] : console.info;
-        logger(`[voice/client] realtime:presence:${event}`, {
-          peerId: voiceLocalPeerIdRef.current,
-          ...details
-        });
-      },
       onError: (error) => {
         console.warn("[voice/client] realtime:presence:error", {
           error: error?.message || String(error),
@@ -174,22 +169,11 @@ export function useWorkspaceVoiceEffects({
           Object.entries(nextPresenceUsers).filter(([userId]) => userId !== currentUserId)
         );
       }
-
-      console.info("[voice/client] realtime:presence:sync", {
-        channelIds: Object.keys(nextSessions),
-        peerId: voiceLocalPeerIdRef.current,
-        userId: workspaceRef.current?.current_user?.id || null
-      });
       applyVoiceSessions(nextSessions);
       setVoicePresenceUsers(nextPresenceUsers);
 
       const localEntry = currentUserId ? nextPresenceUsers?.[currentUserId] : null;
       if (currentJoinedChannelId && localEntry?.channelId === currentJoinedChannelId) {
-        console.info("[voice/client] flow:presence-confirmed", {
-          channelId: currentJoinedChannelId,
-          peerId: localPeerId,
-          step: 3
-        });
         setVoiceJoinReadyChannelId((previous) =>
           previous === currentJoinedChannelId ? previous : currentJoinedChannelId
         );
@@ -198,13 +182,6 @@ export function useWorkspaceVoiceEffects({
 
     const syncTrackedPresence = async () => {
       const payload = buildNextVoicePresencePayload();
-      if (payload) {
-        console.info("[voice/client] flow:presence-track-request", {
-          channelId: payload.channelId,
-          peerId: payload.peerId,
-          step: 2
-        });
-      }
       await presenceSync.schedule(payload);
     };
 
@@ -212,19 +189,9 @@ export function useWorkspaceVoiceEffects({
     channel.on("presence", { event: "join" }, syncPresenceState);
     channel.on("presence", { event: "leave" }, syncPresenceState);
     channel.subscribe(async (status) => {
-      console.info("[voice/client] realtime:presence:status", {
-        peerId: voiceLocalPeerIdRef.current,
-        status
-      });
       if (status !== "SUBSCRIBED" || cancelled) {
         return;
       }
-
-      console.info("[voice/client] flow:presence-subscribed", {
-        channelId: joinedVoiceChannelIdRef.current || "",
-        peerId: voiceLocalPeerIdRef.current,
-        step: "2.subscribed"
-      });
 
       await syncTrackedPresence();
       syncPresenceState();
@@ -509,12 +476,13 @@ export function useWorkspaceVoiceEffects({
     const readyChannelId = voiceJoinReadyChannelIdRef?.current || null;
     const useSharedVoiceRealtime =
       workspaceRef.current?.mode === "supabase" && Boolean(supabase);
+    const useLiveKitVoice = shouldUseLiveKitVoice(workspaceRef.current?.mode);
 
     if (
       !accessToken ||
       !joinedVoiceChannelId ||
       !workspaceRef.current?.current_user?.id ||
-      joinedVoiceChannelId !== readyChannelId
+      (!useLiveKitVoice && joinedVoiceChannelId !== readyChannelId)
     ) {
       if (voiceRtcSessionRef.current) {
         voiceRtcSessionRef.current.destroy().catch(() => {});
@@ -524,67 +492,94 @@ export function useWorkspaceVoiceEffects({
       return undefined;
     }
 
-    const socket = getSocket(accessToken);
-    if (!socket.connected) {
-      socket.connect();
-    }
-
     try {
-      const session = createVoiceRtcSession({
-        channelId: joinedVoiceChannelId,
-        currentUserId: workspaceRef.current.current_user.id,
-        deafened: Boolean(voiceState.deafen),
-        localPeerId: voiceLocalPeerIdRef.current,
-        micMuted: Boolean(voiceState.micMuted),
-        onError: (error) => {
-          if (error?.message) {
-            setUiNotice(error.message);
-          }
-        },
-        onPresencePeersChange: (nextPresencePeers) => {
-          setVoicePresencePeers(nextPresencePeers || {});
-        },
-        onPeerMediaChange: (payload) => {
-          const entryKey = String(payload?.peerId || "").trim();
-          if (!entryKey) {
-            return;
-          }
+      const applyPeerMediaPayload = (payload) => {
+        const entryKey = String(payload?.peerId || "").trim();
+        if (!entryKey) {
+          return;
+        }
 
-          setVoicePeerMedia((previous) => {
-            const nextState = {
-              ...(previous || {})
-            };
+        setVoicePeerMedia((previous) => {
+          const nextState = {
+            ...(previous || {})
+          };
 
-            if (payload?.removed) {
-              delete nextState[entryKey];
-              return nextState;
-            }
-
-            nextState[entryKey] = {
-              audioLevel: Math.max(0, Math.min(100, Number(payload.audioLevel) || 0)),
-              cameraEnabled: Boolean(payload.cameraEnabled),
-              cameraStream: payload.cameraStream || null,
-              deafened: Boolean(payload.deafened),
-              hasAudio: Boolean(payload.hasAudio),
-              micMuted: Boolean(payload.micMuted),
-              peerId: payload.peerId || "",
-              screenShareEnabled: Boolean(payload.screenShareEnabled),
-              screenShareStream: payload.screenShareStream || null,
-              speaking: Boolean(payload.speaking),
-              userId: payload.userId || "",
-              videoMode: payload.videoMode || ""
-            };
-
+          if (payload?.removed) {
+            delete nextState[entryKey];
             return nextState;
-          });
-        },
-        outputDeviceId: selectedVoiceDevices.audiooutput,
-        outputVolume: (Number(voiceState.outputVolume) || 0) / 100,
-        speaking:
-          !voiceState.micMuted && !voiceState.deafen && Boolean(voiceInputSpeaking),
-        socket,
-        useSharedRealtime: useSharedVoiceRealtime
-      });
+          }
+
+          nextState[entryKey] = {
+            audioLevel: Math.max(0, Math.min(100, Number(payload.audioLevel) || 0)),
+            cameraEnabled: Boolean(payload.cameraEnabled),
+            cameraStream: payload.cameraStream || null,
+            deafened: Boolean(payload.deafened),
+            hasAudio: Boolean(payload.hasAudio),
+            micMuted: Boolean(payload.micMuted),
+            peerId: payload.peerId || "",
+            screenShareEnabled: Boolean(payload.screenShareEnabled),
+            screenShareStream: payload.screenShareStream || null,
+            speaking: Boolean(payload.speaking),
+            userId: payload.userId || "",
+            videoMode: payload.videoMode || ""
+          };
+
+          return nextState;
+        });
+      };
+      let session = null;
+
+      if (useLiveKitVoice) {
+        session = createLiveKitVoiceSession({
+          accessToken,
+          channelId: joinedVoiceChannelId,
+          currentUserId: workspaceRef.current.current_user.id,
+          deafened: Boolean(voiceState.deafen),
+          localPeerId: voiceLocalPeerIdRef.current,
+          micMuted: Boolean(voiceState.micMuted),
+          onError: (error) => {
+            if (error?.message) {
+              setUiNotice(error.message);
+            }
+          },
+          onPeerMediaChange: applyPeerMediaPayload,
+          onPresencePeersChange: (nextPresencePeers) => {
+            setVoicePresencePeers(nextPresencePeers || {});
+          },
+          outputDeviceId: selectedVoiceDevices.audiooutput,
+          outputVolume: (Number(voiceState.outputVolume) || 0) / 100,
+          speaking:
+            !voiceState.micMuted && !voiceState.deafen && Boolean(voiceInputSpeaking)
+        });
+      } else {
+        const socket = getSocket(accessToken);
+        if (!socket.connected) {
+          socket.connect();
+        }
+
+        session = createVoiceRtcSession({
+          channelId: joinedVoiceChannelId,
+          currentUserId: workspaceRef.current.current_user.id,
+          deafened: Boolean(voiceState.deafen),
+          localPeerId: voiceLocalPeerIdRef.current,
+          micMuted: Boolean(voiceState.micMuted),
+          onError: (error) => {
+            if (error?.message) {
+              setUiNotice(error.message);
+            }
+          },
+          onPeerMediaChange: applyPeerMediaPayload,
+          onPresencePeersChange: (nextPresencePeers) => {
+            setVoicePresencePeers(nextPresencePeers || {});
+          },
+          outputDeviceId: selectedVoiceDevices.audiooutput,
+          outputVolume: (Number(voiceState.outputVolume) || 0) / 100,
+          speaking:
+            !voiceState.micMuted && !voiceState.deafen && Boolean(voiceInputSpeaking),
+          socket,
+          useSharedRealtime: useSharedVoiceRealtime
+        });
+      }
 
       voiceRtcSessionRef.current = session;
       setVoicePresencePeers({});
