@@ -15,6 +15,7 @@ export function useWorkspaceDerivedData({
   isDirectConversation,
   isVoiceChannel,
   joinedVoiceChannelId,
+  voicePresencePeers,
   voicePresenceUsers,
   voiceSessions,
   voiceUserIds,
@@ -100,9 +101,35 @@ export function useWorkspaceDerivedData({
     [workspace?.available_users]
   );
   const currentInboxItems = inboxItems[inboxTab] || [];
+  const activeVoicePeerUserIds = useMemo(() => {
+    const activeChannelId = String(activeChannel?.id || "").trim();
+    if (!activeChannelId) {
+      return [];
+    }
+
+    const layeredUserIds = [
+      ...(Array.isArray(voiceUserIds) ? voiceUserIds : []),
+      ...Object.values(voicePresenceUsers || {})
+        .filter((entry) => String(entry?.channelId || "").trim() === activeChannelId)
+        .map((entry) => String(entry?.userId || "").trim()),
+      ...Object.values(voicePresencePeers || {})
+        .filter((entry) => String(entry?.channelId || "").trim() === activeChannelId)
+        .map((entry) => String(entry?.userId || "").trim()),
+      ...(joinedVoiceChannelId === activeChannelId && currentUserId ? [currentUserId] : [])
+    ];
+
+    return [...new Set(layeredUserIds.filter(Boolean))];
+  }, [
+    activeChannel?.id,
+    currentUserId,
+    joinedVoiceChannelId,
+    voicePresencePeers,
+    voicePresenceUsers,
+    voiceUserIds
+  ]);
   const voiceUsers = useMemo(
     () =>
-      voiceUserIds
+      activeVoicePeerUserIds
         .map((userId) => {
           if (currentUserId === userId) {
             return currentUser;
@@ -126,11 +153,11 @@ export function useWorkspaceDerivedData({
     [
       activeChannel?.participants,
       activeGuild?.members,
+      activeVoicePeerUserIds,
       availableUsersById,
       currentUser,
       currentUserId,
-      isDirectConversation,
-      voiceUserIds
+      isDirectConversation
     ]
   );
   const joinedVoiceChannel =
@@ -153,14 +180,29 @@ export function useWorkspaceDerivedData({
       accumulator[channelId].push(userId);
       return accumulator;
     }, {});
+    const presencePeersByChannel = Object.values(voicePresencePeers || {}).reduce((accumulator, entry) => {
+      const channelId = String(entry?.channelId || "").trim();
+      const userId = String(entry?.userId || "").trim();
+      if (!channelId || !userId) {
+        return accumulator;
+      }
+
+      if (!accumulator[channelId]) {
+        accumulator[channelId] = [];
+      }
+
+      accumulator[channelId].push(userId);
+      return accumulator;
+    }, {});
 
     return Object.fromEntries(
       activeGuildVoiceChannels.map((channel) => {
         const layeredUserIds = [
           ...(voiceSessions[channel.id] || []),
           ...(presenceUsersByChannel[channel.id] || []),
+          ...(presencePeersByChannel[channel.id] || []),
           ...(joinedVoiceChannelId === channel.id && currentUserId ? [currentUserId] : []),
-          ...(activeChannel?.id === channel.id ? voiceUserIds : [])
+          ...(activeChannel?.id === channel.id ? activeVoicePeerUserIds : [])
         ];
         const seenUserIds = new Set();
         const resolvedUsers = layeredUserIds
@@ -212,9 +254,10 @@ export function useWorkspaceDerivedData({
     currentUserId,
     currentUserLabel,
     joinedVoiceChannelId,
+    activeVoicePeerUserIds,
+    voicePresencePeers,
     voicePresenceUsers,
-    voiceSessions,
-    voiceUserIds
+    voiceSessions
   ]);
   const memberList =
     activeSelection.kind === "guild"

@@ -94,6 +94,7 @@ export function WorkspaceNavigation(props) {
       outputMenuNode={props.outputMenuNode}
       voiceMenu={props.voiceMenu}
       voiceSessions={props.voiceSessions}
+      voiceUsersByChannel={props.voiceUsersByChannel}
       voiceState={props.voiceState}
       workspace={props.workspace}
     />

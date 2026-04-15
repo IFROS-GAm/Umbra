@@ -259,9 +259,22 @@ export function createLiveKitVoiceSession({
       return;
     }
 
+    const previousPayload = lastMetadataPayload;
     lastMetadataPayload = payload;
-    await room.localParticipant.setMetadata(payload);
-    log("metadata:update", safeParseMetadata(payload));
+
+    try {
+      await room.localParticipant.setMetadata(payload);
+      log("metadata:update", safeParseMetadata(payload));
+    } catch (error) {
+      lastMetadataPayload = previousPayload;
+      log(
+        "metadata:update:error",
+        {
+          message: error?.message || String(error)
+        },
+        "warn"
+      );
+    }
   }
 
   async function ensureRemoteAudioTrack(participant) {

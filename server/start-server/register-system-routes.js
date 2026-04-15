@@ -83,6 +83,7 @@ export function registerSystemRoutes({
         canPublish: true,
         canPublishData: true,
         canSubscribe: true,
+        canUpdateOwnMetadata: true,
         room,
         roomJoin: true
       });

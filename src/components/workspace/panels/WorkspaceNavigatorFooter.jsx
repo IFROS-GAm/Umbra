@@ -17,9 +17,17 @@ export function WorkspaceNavigatorFooter({
   truncatedCurrentUserLabel,
   voiceMenu,
   voiceSessions,
+  voiceUsersByChannel,
   voiceState,
   workspace
 }) {
+  const joinedVoiceCount = joinedVoiceChannel
+    ? Math.max(
+        (voiceSessions[joinedVoiceChannel.id] || []).length,
+        (voiceUsersByChannel?.[joinedVoiceChannel.id] || []).length
+      )
+    : 0;
+
   return (
     <div className="navigator-footer">
       {joinedVoiceChannel ? (
@@ -32,7 +40,7 @@ export function WorkspaceNavigatorFooter({
             <Icon name="headphones" size={15} />
             <span>
               <strong title={joinedVoiceChannel.name}>{joinedVoiceChannel.name}</strong>
-              <small>{(voiceSessions[joinedVoiceChannel.id] || []).length} conectado(s)</small>
+              <small>{joinedVoiceCount} conectado(s)</small>
             </span>
           </button>
           <button

@@ -53,6 +53,7 @@ export function WorkspaceNavigationContent({
   outputMenuNode,
   voiceMenu,
   voiceSessions,
+  voiceUsersByChannel,
   voiceState,
   workspace
 }) {
@@ -247,6 +248,7 @@ export function WorkspaceNavigationContent({
           truncatedCurrentUserLabel={navigation.truncatedCurrentUserLabel}
           voiceMenu={voiceMenu}
           voiceSessions={voiceSessions}
+          voiceUsersByChannel={voiceUsersByChannel}
           voiceState={voiceState}
           workspace={workspace}
         />

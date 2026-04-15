@@ -379,6 +379,7 @@ export function UmbraWorkspace({
     isDirectConversation,
     isVoiceChannel,
     joinedVoiceChannelId,
+    voicePresencePeers,
     voicePresenceUsers,
     voiceSessions,
     voiceUserIds,
