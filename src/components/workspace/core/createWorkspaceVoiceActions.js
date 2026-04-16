@@ -111,7 +111,10 @@ export function createWorkspaceVoiceActions(context, shared) {
     return device.label || fallbackDeviceLabel(kind, Math.max(index, 0));
   }
 
-  function joinVoiceChannelById(channelId, { enableCamera = false } = {}) {
+  function joinVoiceChannelById(
+    channelId,
+    { enableCamera = false, notifyParticipants = true } = {}
+  ) {
     if (!accessToken || !channelId) {
       return false;
     }
@@ -154,6 +157,8 @@ export function createWorkspaceVoiceActions(context, shared) {
 
     if (targetLookup.kind === "dm" && DIRECT_CALL_TYPES.has(targetChannel.type)) {
       const shouldPlayJoinSound = joinedVoiceChannelId !== targetChannel.id;
+      const shouldNotifyParticipants =
+        notifyParticipants && shouldPlayJoinSound && targetChannel.type === "dm";
       setVoiceMenu(null);
       setActiveSelection({
         channelId: targetChannel.id,
@@ -175,6 +180,16 @@ export function createWorkspaceVoiceActions(context, shared) {
         const socket = getLiveSocket();
         socket.emit("voice:join", {
           channelId: targetChannel.id
+        });
+      }
+      if (shouldNotifyParticipants) {
+        const socket = getLiveSocket();
+        socket.emit("call:invite", {
+          callId:
+            globalThis.crypto?.randomUUID?.() ||
+            `call-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          channelId: targetChannel.id,
+          mode: enableCamera ? "video" : "audio"
         });
       }
       if (shouldPlayJoinSound) {

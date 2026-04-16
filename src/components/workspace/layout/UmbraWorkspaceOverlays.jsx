@@ -7,6 +7,7 @@ import { UserProfileModal } from "../../UserProfileModal.jsx";
 import { WorkspacePanelFallback } from "../WorkspacePanelFallback.jsx";
 import { WorkspaceScreenSharePicker } from "../WorkspaceScreenSharePicker.jsx";
 import { WorkspaceTooltipLayer } from "../WorkspaceTooltipLayer.jsx";
+import { IncomingCallPopup } from "./IncomingCallPopup.jsx";
 
 export function UmbraWorkspaceOverlays({
   ConfirmActionModal,
@@ -141,32 +142,12 @@ export function UmbraWorkspaceOverlays({
         />
       ) : null}
 
-      {incomingCall ? (
-        <div
-          aria-live="assertive"
-          className="incoming-call-inline-card floating-surface"
-          role="dialog"
-        >
-          <small className="incoming-call-inline-eyebrow">Llamada entrante</small>
-          <strong>{incomingCall.callerName || incomingCall.channelName || "Umbra"}</strong>
-          <p>{incomingCall.body || "Hay una llamada esperandote."}</p>
-          <div className="incoming-call-inline-actions">
-            <button
-              className="ghost-button danger"
-              onClick={() => rejectIncomingCall(incomingCall.channelId)}
-              type="button"
-            >
-              Rechazar
-            </button>
-            <button
-              className="primary-button"
-              onClick={() => acceptIncomingCall(incomingCall.channelId)}
-              type="button"
-            >
-              Aceptar
-            </button>
-          </div>
-        </div>
+      {!settingsOpen && !serverSettingsGuild && incomingCall ? (
+        <IncomingCallPopup
+          call={incomingCall}
+          onAccept={acceptIncomingCall}
+          onReject={(channelId) => rejectIncomingCall(channelId, "rejected")}
+        />
       ) : null}
 
       {profileCard ? (

@@ -93,6 +93,7 @@ export function useWorkspaceDesktopNotifications({
   const notifiedMessageIdsRef = useRef(new Set());
   const notifiedFriendRequestIdsRef = useRef(new Set());
   const dismissedIncomingCallsRef = useRef(new Set());
+  const incomingCallTimeoutRef = useRef(null);
   const activeIncomingCallRef = useRef(null);
   const previousVoiceSessionsRef = useRef({});
   const [incomingCall, setIncomingCall] = useState(null);
@@ -117,93 +118,88 @@ export function useWorkspaceDesktopNotifications({
     workspace
   ]);
 
-  const hideIncomingCallPopup = useCallback((channelId = null, { clearDismissed = false } = {}) => {
-    if (channelId && clearDismissed) {
-      dismissedIncomingCallsRef.current.delete(channelId);
+  const clearIncomingCallTimer = useCallback(() => {
+    if (!incomingCallTimeoutRef.current) {
+      return;
     }
 
-    setIncomingCall((previous) => {
-      if (!previous) {
-        return null;
-      }
+    window.clearTimeout(incomingCallTimeoutRef.current);
+    incomingCallTimeoutRef.current = null;
+  }, []);
 
-      if (!channelId || previous.channelId === channelId) {
-        return null;
-      }
+  const hideIncomingCallPopup = useCallback(({ clearDismissed = false } = {}) => {
+    if (clearDismissed && activeIncomingCallRef.current?.callId) {
+      dismissedIncomingCallsRef.current.delete(activeIncomingCallRef.current.callId);
+    }
 
-      return previous;
-    });
+    clearIncomingCallTimer();
+    setIncomingCall(null);
     activeIncomingCallRef.current = null;
     stopUmbraSound("incomingCall");
-    desktopBridge?.hideIncomingCallPopup?.().catch?.(() => {});
-  }, [desktopBridge]);
+  }, [clearIncomingCallTimer]);
 
   const acceptIncomingCall = useCallback((channelId = null) => {
+    const activeCall = activeIncomingCallRef.current;
     const resolvedChannelId = String(
-      channelId || activeIncomingCallRef.current?.channelId || incomingCall?.channelId || ""
+      channelId || activeCall?.channelId || incomingCall?.channelId || ""
     ).trim();
+    const resolvedCallId = String(activeCall?.callId || incomingCall?.callId || "").trim();
 
     if (!resolvedChannelId) {
       return false;
     }
 
-    dismissedIncomingCallsRef.current.delete(resolvedChannelId);
-    const joined = joinVoiceChannelById(resolvedChannelId);
+    const joined = joinVoiceChannelById(resolvedChannelId, {
+      notifyParticipants: false
+    });
     if (!joined) {
       showUiNotice?.("No se pudo abrir la llamada entrante.");
-    }
-
-    hideIncomingCallPopup(resolvedChannelId, { clearDismissed: true });
-    return joined;
-  }, [hideIncomingCallPopup, incomingCall?.channelId, joinVoiceChannelById, showUiNotice]);
-
-  const rejectIncomingCall = useCallback((channelId = null) => {
-    const resolvedChannelId = String(
-      channelId || activeIncomingCallRef.current?.channelId || incomingCall?.channelId || ""
-    ).trim();
-
-    if (!resolvedChannelId) {
+      playUmbraSound("error");
       return false;
     }
 
-    dismissedIncomingCallsRef.current.add(resolvedChannelId);
-    hideIncomingCallPopup();
-    return true;
-  }, [hideIncomingCallPopup, incomingCall?.channelId]);
-
-  useEffect(() => {
-    if (!desktopBridge?.onIncomingCallAction) {
-      return undefined;
+    if (accessToken && resolvedCallId) {
+      const socket = getSocket(accessToken);
+      if (!socket.connected) {
+        socket.connect();
+      }
+      socket.emit("call:response", {
+        callId: resolvedCallId,
+        channelId: resolvedChannelId,
+        status: "accepted"
+      });
     }
 
-    return desktopBridge.onIncomingCallAction((payload = {}) => {
-      const action = String(payload.action || "").trim().toLowerCase();
-      const channelId = String(payload.channelId || payload.callId || "").trim();
+    hideIncomingCallPopup({ clearDismissed: true });
+    return true;
+  }, [accessToken, hideIncomingCallPopup, incomingCall?.callId, incomingCall?.channelId, joinVoiceChannelById, showUiNotice]);
 
-      if (!channelId) {
-        return;
+  const rejectIncomingCall = useCallback((channelId = null, reason = "rejected") => {
+    const activeCall = activeIncomingCallRef.current;
+    const resolvedChannelId = String(
+      channelId || activeCall?.channelId || incomingCall?.channelId || ""
+    ).trim();
+    const resolvedCallId = String(activeCall?.callId || incomingCall?.callId || "").trim();
+
+    if (!resolvedChannelId || !resolvedCallId) {
+      return false;
+    }
+
+    dismissedIncomingCallsRef.current.add(resolvedCallId);
+    if (accessToken) {
+      const socket = getSocket(accessToken);
+      if (!socket.connected) {
+        socket.connect();
       }
-
-      if (action === "accept") {
-        acceptIncomingCall(channelId);
-      } else {
-        rejectIncomingCall(channelId);
-      }
-    });
-  }, [acceptIncomingCall, desktopBridge, rejectIncomingCall]);
-
-  useEffect(() => {
-    dismissedIncomingCallsRef.current.forEach((channelId) => {
-      const currentUserIds = Array.isArray(voiceSessions?.[channelId])
-        ? voiceSessions[channelId]
-        : [];
-      const otherParticipants = currentUserIds.filter((userId) => userId !== currentUserId);
-
-      if (otherParticipants.length === 0) {
-        dismissedIncomingCallsRef.current.delete(channelId);
-      }
-    });
-  }, [currentUserId, voiceSessions]);
+      socket.emit("call:response", {
+        callId: resolvedCallId,
+        channelId: resolvedChannelId,
+        status: reason === "missed" ? "missed" : "rejected"
+      });
+    }
+    hideIncomingCallPopup();
+    return true;
+  }, [accessToken, hideIncomingCallPopup, incomingCall?.callId, incomingCall?.channelId]);
 
   useEffect(() => {
     const currentCall = activeIncomingCallRef.current;
@@ -217,9 +213,34 @@ export function useWorkspaceDesktopNotifications({
     const otherParticipants = currentUserIds.filter((userId) => userId !== currentUserId);
 
     if (joinedVoiceChannelId === currentCall.channelId || otherParticipants.length === 0) {
-      hideIncomingCallPopup(currentCall.channelId, { clearDismissed: true });
+      hideIncomingCallPopup({ clearDismissed: true });
     }
   }, [currentUserId, hideIncomingCallPopup, joinedVoiceChannelId, voiceSessions]);
+
+  useEffect(() => {
+    clearIncomingCallTimer();
+    if (!incomingCall?.callId) {
+      return undefined;
+    }
+
+    const remainingMs = Math.max(
+      0,
+      Number(incomingCall.expiresAt || Date.now() + 28000) - Date.now()
+    );
+    incomingCallTimeoutRef.current = window.setTimeout(() => {
+      rejectIncomingCall(incomingCall.channelId, "missed");
+    }, remainingMs);
+
+    return () => {
+      clearIncomingCallTimer();
+    };
+  }, [
+    clearIncomingCallTimer,
+    incomingCall?.callId,
+    incomingCall?.channelId,
+    incomingCall?.expiresAt,
+    rejectIncomingCall
+  ]);
 
   const handleIncomingMessage = useCallback(
     ({ message, preview, workspace: nextWorkspace }) => {
@@ -357,7 +378,11 @@ export function useWorkspaceDesktopNotifications({
       }
 
       const channel = target.channel;
-      if (!["dm", "group_dm"].includes(channel?.type || "")) {
+      if ((channel?.type || "") === "dm") {
+        return;
+      }
+
+      if ((channel?.type || "") !== "group_dm") {
         return;
       }
 
@@ -368,22 +393,14 @@ export function useWorkspaceDesktopNotifications({
 
       const activeOtherParticipants = userIds.filter((userId) => userId && userId !== nextCurrentUserId);
 
-      if (activeOtherParticipants.length === 0) {
-        dismissedIncomingCallsRef.current.delete(channel.id);
-      }
-
       if (
         nextJoinedVoiceChannelId === channel.id ||
         userIds.includes(nextCurrentUserId) ||
         activeOtherParticipants.length === 0
       ) {
         if (activeIncomingCallRef.current?.channelId === channel.id) {
-          hideIncomingCallPopup(channel.id);
+          hideIncomingCallPopup();
         }
-        return;
-      }
-
-      if (dismissedIncomingCallsRef.current.has(channel.id)) {
         return;
       }
 
@@ -423,9 +440,94 @@ export function useWorkspaceDesktopNotifications({
         playSound: false,
         title: t("notifications.incomingCall", "Llamada entrante")
       })?.catch?.(() => {});
-      desktopBridge?.showIncomingCallPopup?.(popupPayload)?.catch?.(() => {});
     },
     [desktopBridge, hideIncomingCallPopup]
+  );
+
+  const handleIncomingCallInvite = useCallback(
+    (payload = {}) => {
+      const runtimeWorkspace = stateRef.current.workspace;
+      const nextJoinedVoiceChannelId = stateRef.current.joinedVoiceChannelId;
+      const callId = String(payload.callId || "").trim();
+      const channelId = String(payload.channelId || "").trim();
+      const callerId = String(payload.caller?.id || "").trim();
+
+      if (!runtimeWorkspace || !callId || !channelId || !callerId || callerId === currentUserId) {
+        return;
+      }
+
+      const target = findChannelInSession(runtimeWorkspace, channelId);
+      if (!target || target.kind !== "dm" || target.channel?.type !== "dm") {
+        return;
+      }
+
+      if (nextJoinedVoiceChannelId === channelId || dismissedIncomingCallsRef.current.has(callId)) {
+        return;
+      }
+
+      const caller =
+        payload.caller ||
+        findCallParticipant(runtimeWorkspace, target.channel, callerId) ||
+        null;
+      const callerName =
+        caller?.display_name || caller?.username || target.channel.display_name || "Umbra";
+      const body =
+        payload.mode === "video"
+          ? `${callerName} te esta llamando por video.`
+          : `${callerName} te esta llamando.`;
+      const popupPayload = {
+        avatarUrl: caller?.avatar_url || "",
+        body,
+        callId,
+        callerId,
+        callerName,
+        channelId,
+        channelName: target.channel.display_name || callerName,
+        expiresAt: Number(payload.expiresAt || Date.now() + 28000),
+        kind: "call"
+      };
+
+      activeIncomingCallRef.current = popupPayload;
+      setIncomingCall(popupPayload);
+      startUmbraLoopingSound("incomingCall");
+
+      desktopBridge?.showNativeNotification?.({
+        body,
+        kind: "call",
+        playSound: false,
+        title: translate(stateRef.current.language, "notifications.incomingCall", "Llamada entrante")
+      })?.catch?.(() => {});
+    },
+    [currentUserId, desktopBridge]
+  );
+
+  const handleIncomingCallResponse = useCallback(
+    (payload = {}) => {
+      const callId = String(payload.callId || "").trim();
+      const status = String(payload.status || "").trim();
+      const responderName =
+        payload.responder?.display_name ||
+        payload.responder?.username ||
+        "La otra persona";
+
+      if (!callId || !status) {
+        return;
+      }
+
+      playUmbraSound("notification");
+      if (status === "accepted") {
+        showUiNotice?.(`${responderName} acepto la llamada.`);
+        return;
+      }
+
+      if (status === "missed") {
+        showUiNotice?.(`${responderName} no respondio la llamada.`);
+        return;
+      }
+
+      showUiNotice?.(`${responderName} rechazo la llamada.`);
+    },
+    [showUiNotice]
   );
 
   useEffect(() => {
@@ -468,25 +570,45 @@ export function useWorkspaceDesktopNotifications({
       handleIncomingFriendRequest(payload);
     };
 
+    const onCallIncoming = (payload = {}) => {
+      handleIncomingCallInvite(payload);
+    };
+
+    const onCallResponse = (payload = {}) => {
+      handleIncomingCallResponse(payload);
+    };
+
     socket.on("message:create", onMessageCreate);
     socket.on("friend:request", onFriendRequest);
+    socket.on("call:incoming", onCallIncoming);
+    socket.on("call:response", onCallResponse);
     socket.on("voice:state", onVoiceState);
     socket.on("voice:update", onVoiceUpdate);
 
     return () => {
       socket.off("message:create", onMessageCreate);
       socket.off("friend:request", onFriendRequest);
+      socket.off("call:incoming", onCallIncoming);
+      socket.off("call:response", onCallResponse);
       socket.off("voice:state", onVoiceState);
       socket.off("voice:update", onVoiceUpdate);
     };
-  }, [accessToken, handleIncomingFriendRequest, handleIncomingMessage, handleVoiceUpdateNotification]);
+  }, [
+    accessToken,
+    handleIncomingCallInvite,
+    handleIncomingCallResponse,
+    handleIncomingFriendRequest,
+    handleIncomingMessage,
+    handleVoiceUpdateNotification
+  ]);
 
   useEffect(() => {
     return () => {
+      clearIncomingCallTimer();
       stopUmbraSound("incomingCall");
       stopAllUmbraSounds();
     };
-  }, []);
+  }, [clearIncomingCallTimer]);
 
   return {
     acceptIncomingCall,

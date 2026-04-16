@@ -248,7 +248,106 @@ export function registerSocketHandlers({
       leaveVoiceChannel(socket, viewer.id);
     });
 
-    socket.on("disconnect", () => {
+    socket.on("call:invite", async ({ callId, channelId, mode = "audio" } = {}) => {
+      if (!channelId) {
+        return;
+      }
+
+      try {
+        const normalizedChannelId = normalizeVoiceChannelId(channelId);
+        const canAccess = await store.canAccessChannel({
+          channelId: normalizedChannelId,
+          userId: viewer.id
+        });
+        const channel = await store.getChannel(normalizedChannelId);
+
+        if (!canAccess || channel?.type !== "dm") {
+          return;
+        }
+
+        const participantIds = (channel.participants || [])
+          .map((participant) => String(participant?.id || "").trim())
+          .filter((participantId) => participantId && participantId !== viewer.id);
+
+        if (!participantIds.length) {
+          return;
+        }
+
+        const issuedAt = Date.now();
+        const payload = {
+          callId:
+            String(callId || "").trim() ||
+            `${normalizedChannelId}:${viewer.id}:${issuedAt}`,
+          caller: {
+            avatar_url: viewer.avatar_url || "",
+            display_name: viewer.display_name || "",
+            id: viewer.id,
+            username: viewer.username || ""
+          },
+          channelId: normalizedChannelId,
+          expiresAt: issuedAt + 28000,
+          issuedAt,
+          mode: mode === "video" ? "video" : "audio"
+        };
+
+        participantIds.forEach((participantId) => {
+          io.to(`user:${participantId}`).emit("call:incoming", payload);
+        });
+      } catch {
+        // keep direct-call invite best-effort
+      }
+    });
+
+    socket.on("call:response", async ({ callId, channelId, status } = {}) => {
+      if (!channelId || !status) {
+        return;
+      }
+
+      try {
+        const normalizedChannelId = normalizeVoiceChannelId(channelId);
+        const canAccess = await store.canAccessChannel({
+          channelId: normalizedChannelId,
+          userId: viewer.id
+        });
+        const channel = await store.getChannel(normalizedChannelId);
+
+        if (!canAccess || channel?.type !== "dm") {
+          return;
+        }
+
+        const normalizedStatus = ["accepted", "missed", "rejected"].includes(status)
+          ? status
+          : "rejected";
+        const participantIds = (channel.participants || [])
+          .map((participant) => String(participant?.id || "").trim())
+          .filter((participantId) => participantId && participantId !== viewer.id);
+
+        if (!participantIds.length) {
+          return;
+        }
+
+        const payload = {
+          callId: String(callId || "").trim() || normalizedChannelId,
+          channelId: normalizedChannelId,
+          respondedAt: Date.now(),
+          responder: {
+            avatar_url: viewer.avatar_url || "",
+            display_name: viewer.display_name || "",
+            id: viewer.id,
+            username: viewer.username || ""
+          },
+          status: normalizedStatus
+        };
+
+        participantIds.forEach((participantId) => {
+          io.to(`user:${participantId}`).emit("call:response", payload);
+        });
+      } catch {
+        // keep direct-call response best-effort
+      }
+    });
+
+    socket.on("disconnect", () => {
       leaveVoiceChannel(socket, viewer.id);
       const nextCount = Math.max(0, (connectedUsers.get(viewer.id) || 1) - 1);
 
