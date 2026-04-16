@@ -279,15 +279,6 @@ export function VoiceRoomStage({
         </button>
         <button
           className="voice-stage-control tooltip-anchor"
-          data-tooltip="Soundboard"
-          data-tooltip-position="top"
-          onClick={() => onShowNotice("Soundboard y efectos listos para una siguiente pasada.")}
-          type="button"
-        >
-          <Icon name="sparkles" />
-        </button>
-        <button
-          className="voice-stage-control tooltip-anchor"
           data-tooltip="Pantalla completa"
           data-tooltip-position="top"
           onClick={() => {
@@ -301,15 +292,6 @@ export function VoiceRoomStage({
           type="button"
         >
           <Icon name="expand" />
-        </button>
-        <button
-          className="voice-stage-control tooltip-anchor"
-          data-tooltip="Mas acciones"
-          data-tooltip-position="top"
-          onClick={() => onShowNotice("Acciones extra de voz pendientes.")}
-          type="button"
-        >
-          <span className="voice-stage-more">...</span>
         </button>
       </div>
 

@@ -43,10 +43,28 @@ export function registerSocketHandlers({
     }
   });
 
-  io.on("connection", (socket) => {
+  io.on("connection", (socket) => {
     const viewer = socket.data.user;
-    socket.join(`user:${viewer.id}`);
-    socket.emit("voice:state", serializeVoiceState());
+    socket.join(`user:${viewer.id}`);
+    socket.emit("voice:state", serializeVoiceState());
+
+    const listDirectCallParticipantIds = async (channelId) => {
+      if (store?.getMode?.() === "supabase" && store?.client) {
+        const memberships = await store.client
+          .from("channel_members")
+          .select("user_id")
+          .eq("channel_id", channelId);
+
+        return (memberships?.data || [])
+          .map((membership) => String(membership?.user_id || "").trim())
+          .filter(Boolean);
+      }
+
+      return (store?.db?.channel_members || [])
+        .filter((membership) => membership?.channel_id === channelId)
+        .map((membership) => String(membership?.user_id || "").trim())
+        .filter(Boolean);
+    };
 
     const currentCount = connectedUsers.get(viewer.id) || 0;
     connectedUsers.set(viewer.id, currentCount + 1);
@@ -265,8 +283,7 @@ export function registerSocketHandlers({
           return;
         }
 
-        const participantIds = (channel.participants || [])
-          .map((participant) => String(participant?.id || "").trim())
+        const participantIds = (await listDirectCallParticipantIds(normalizedChannelId))
           .filter((participantId) => participantId && participantId !== viewer.id);
 
         if (!participantIds.length) {
@@ -318,8 +335,7 @@ export function registerSocketHandlers({
         const normalizedStatus = ["accepted", "missed", "rejected"].includes(status)
           ? status
           : "rejected";
-        const participantIds = (channel.participants || [])
-          .map((participant) => String(participant?.id || "").trim())
+        const participantIds = (await listDirectCallParticipantIds(normalizedChannelId))
           .filter((participantId) => participantId && participantId !== viewer.id);
 
         if (!participantIds.length) {
