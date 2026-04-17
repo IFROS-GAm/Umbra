@@ -215,6 +215,34 @@
   font-size: 0.82rem;
 }
 
+.user-profile-meta-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.user-profile-meta-card {
+  background: #111214;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px 14px;
+}
+
+.user-profile-meta-card strong {
+  color: var(--text-0);
+  font-size: 1rem;
+}
+
+.user-profile-meta-card span {
+  color: var(--text-2);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+}
+
 .user-profile-section {
   background: #111214;
   border: 1px solid rgba(255, 255, 255, 0.05);

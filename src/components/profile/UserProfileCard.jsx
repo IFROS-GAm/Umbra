@@ -299,34 +299,53 @@ export function UserProfileCard({
 
           <div className="user-profile-chip-row">
             <span className="user-profile-chip">{statusLabel(profile.status)}</span>
-            {profile.primaryTag ? (
-              <span
-                className="user-profile-chip accent"
-                style={
-                  profile.roleColor
-                    ? {
-                        borderColor: `${profile.roleColor}66`,
-                        color: profile.roleColor
-                      }
-                    : undefined
-                }
-              >
-                {profile.primaryTag}
-              </span>
+          </div>
+
+          <div className="user-profile-meta user-profile-meta-grid">
+            {profile.sharedGuildCount ? (
+              <div className="user-profile-meta-card">
+                <strong>{profile.sharedGuildCount}</strong>
+                <span>servidores en comun</span>
+              </div>
             ) : null}
-            {profile.authProvider ? (
-              <span className="user-profile-chip muted">
-                {String(profile.authProvider).toUpperCase()}
-              </span>
+            {profile.sharedDmCount ? (
+              <div className="user-profile-meta-card">
+                <strong>{profile.sharedDmCount}</strong>
+                <span>DM visibles</span>
+              </div>
             ) : null}
           </div>
 
-          <div className="user-profile-meta">
-            {profile.sharedGuildCount ? (
-              <span>{profile.sharedGuildCount} servidores en comun</span>
-            ) : null}
-            {profile.sharedDmCount ? <span>{profile.sharedDmCount} DM visibles</span> : null}
-          </div>
+          {profile.sharedGuilds?.length ? (
+            <section className="user-profile-section">
+              <h4>Servidores en comun</h4>
+              <div className="user-profile-chip-row">
+                {profile.sharedGuilds.slice(0, 3).map((guild) => (
+                  <span className="user-profile-chip accent" key={guild.id}>
+                    {guild.name}
+                  </span>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {profile.authProvider || profile.connections?.length ? (
+            <section className="user-profile-section">
+              <h4>Conexiones</h4>
+              <div className="user-profile-chip-row">
+                {profile.authProvider ? (
+                  <span className="user-profile-chip muted">
+                    {String(profile.authProvider).toUpperCase()}
+                  </span>
+                ) : null}
+                {profile.connections?.slice(0, 2).map((connection) => (
+                  <span className="user-profile-chip muted" key={connection.id}>
+                    {connection.label}
+                  </span>
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           <section className="user-profile-section">
             <h4>Acerca de mi</h4>
@@ -427,14 +446,6 @@ export function UserProfileCard({
           ) : (
             <>
               <div className="user-profile-action-row">
-              <button
-                className="primary-button"
-                onClick={() => onOpenDm(profile)}
-                type="button"
-              >
-                <Icon name="mail" />
-                <span>Mensaje directo</span>
-              </button>
                 {friendAction.visible ? (
                   <button
                     className="ghost-button"

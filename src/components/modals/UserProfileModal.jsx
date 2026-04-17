@@ -177,10 +177,6 @@ export function UserProfileModal({
           </div>
 
           <div className="profile-detail-chip-row">
-            {profile.primaryTag ? <span className="user-profile-chip muted">{profile.primaryTag}</span> : null}
-            {profile.authProvider ? (
-              <span className="user-profile-chip muted">{String(profile.authProvider).toUpperCase()}</span>
-            ) : null}
             {profile.statusLabel ? <span className="user-profile-chip">{profile.statusLabel}</span> : null}
           </div>
 
@@ -220,11 +216,53 @@ export function UserProfileModal({
             <p>{profile.memberSinceLabel || "Sin fecha visible por ahora."}</p>
           </section>
 
-          {profile.connections?.length ? (
+          {profile.sharedGuilds?.length ? (
+            <section className="profile-detail-section">
+              <h4>Servidores en comun</h4>
+              <div className="profile-detail-connections">
+                {profile.sharedGuilds.map((guild) => (
+                  <div className="profile-detail-connection" key={guild.id}>
+                    <div className="profile-detail-connection-main">
+                      <span className="profile-detail-connection-icon">
+                        {guild.iconUrl ? (
+                          <img alt={guild.name} src={resolveAssetUrl(guild.iconUrl)} />
+                        ) : (
+                          <Icon name="server" size={16} />
+                        )}
+                      </span>
+                      <div className="profile-detail-connection-copy">
+                        <strong>{guild.name}</strong>
+                        <small>
+                          {guild.joinedAtLabel
+                            ? `Miembro desde ${guild.joinedAtLabel}`
+                            : `${guild.memberCount} miembros visibles`}
+                        </small>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {profile.authProvider || profile.connections?.length ? (
             <section className="profile-detail-section">
               <h4>Conexiones</h4>
               <div className="profile-detail-connections">
-                {profile.connections.map((connection) => (
+                {profile.authProvider ? (
+                  <div className="profile-detail-connection" key="auth-provider">
+                    <div className="profile-detail-connection-main">
+                      <span className="profile-detail-connection-icon">
+                        <Icon name="profile" size={16} />
+                      </span>
+                      <div className="profile-detail-connection-copy">
+                        <strong>{String(profile.authProvider).toUpperCase()}</strong>
+                        <small>Proveedor de acceso visible</small>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+                {profile.connections?.map((connection) => (
                   <div className="profile-detail-connection" key={connection.id}>
                     <div className="profile-detail-connection-main">
                       <span className="profile-detail-connection-icon">

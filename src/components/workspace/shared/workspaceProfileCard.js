@@ -74,6 +74,7 @@ export function buildWorkspaceProfileCardData({
       id: guild.id,
       iconUrl: resolveGuildIcon(guild),
       joinedAt: member?.joined_at || null,
+      joinedAtLabel: member?.joined_at ? formatMemberSinceLabel(member.joined_at) : "",
       memberCount: guild.member_count || guild.members?.length || 0,
       name: guild.name
     };
@@ -164,18 +165,7 @@ export function buildWorkspaceProfileCardData({
       "",
     bio,
     commonFriends,
-    connections: [
-      ...sharedGuildEntries.slice(0, 6).map((guild) => ({
-        iconUrl: guild.iconUrl,
-        id: `guild-${guild.id}`,
-        kind: "guild",
-        label: guild.name,
-        meta: guild.joinedAt
-          ? `Miembro desde ${formatMemberSinceLabel(guild.joinedAt)}`
-          : `${guild.memberCount} miembros visibles`
-      })),
-      ...visibleConnections
-    ],
+    connections: visibleConnections,
     customStatus: privacySettings.showActivityStatus
       ? targetUser.custom_status ||
         activeGuildMember?.custom_status ||
