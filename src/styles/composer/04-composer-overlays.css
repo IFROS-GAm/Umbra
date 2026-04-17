@@ -210,6 +210,18 @@
   color: var(--text-2);
 }
 
+.user-profile-chip-link {
+  cursor: pointer;
+  text-decoration: none;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.user-profile-chip-link:hover {
+  background: rgba(88, 101, 242, 0.12);
+  border-color: rgba(88, 101, 242, 0.28);
+  color: var(--text-0);
+}
+
 .user-profile-meta {
   color: var(--text-2);
   font-size: 0.82rem;

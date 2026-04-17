@@ -263,28 +263,46 @@ export function UserProfileModal({
                   </div>
                 ) : null}
                 {profile.connections?.map((connection) => (
-                  <div className="profile-detail-connection" key={connection.id}>
-                    <div className="profile-detail-connection-main">
-                      <span className="profile-detail-connection-icon">
-                        {connection.iconUrl ? (
-                          <img alt={connection.label} src={resolveAssetUrl(connection.iconUrl)} />
-                        ) : (
-                          <Icon name={connection.kind === "link" ? "link" : "server"} size={16} />
-                        )}
-                      </span>
-                      <div className="profile-detail-connection-copy">
-                        {connection.kind === "link" ? (
-                          <a href={connection.href} rel="noreferrer" target="_blank">
-                            {connectionLabel(connection)}
-                          </a>
-                        ) : (
+                  connection.kind === "link" && connection.href ? (
+                    <a
+                      className="profile-detail-connection profile-detail-connection-link"
+                      href={connection.href}
+                      key={connection.id}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      <div className="profile-detail-connection-main">
+                        <span className="profile-detail-connection-icon">
+                          {connection.iconUrl ? (
+                            <img alt={connection.label} src={resolveAssetUrl(connection.iconUrl)} />
+                          ) : (
+                            <Icon name="link" size={16} />
+                          )}
+                        </span>
+                        <div className="profile-detail-connection-copy">
                           <strong>{connectionLabel(connection)}</strong>
-                        )}
-                        {connection.meta ? <small>{connection.meta}</small> : null}
+                          {connection.meta ? <small>{connection.meta}</small> : null}
+                        </div>
+                      </div>
+                      <Icon name="arrowRight" size={14} />
+                    </a>
+                  ) : (
+                    <div className="profile-detail-connection" key={connection.id}>
+                      <div className="profile-detail-connection-main">
+                        <span className="profile-detail-connection-icon">
+                          {connection.iconUrl ? (
+                            <img alt={connection.label} src={resolveAssetUrl(connection.iconUrl)} />
+                          ) : (
+                            <Icon name="server" size={16} />
+                          )}
+                        </span>
+                        <div className="profile-detail-connection-copy">
+                          <strong>{connectionLabel(connection)}</strong>
+                          {connection.meta ? <small>{connection.meta}</small> : null}
+                        </div>
                       </div>
                     </div>
-                    {connection.kind === "link" ? <Icon name="arrowRight" size={14} /> : null}
-                  </div>
+                  )
                 ))}
               </div>
             </section>

@@ -195,6 +195,18 @@
   min-width: 0;
 }
 
+.profile-detail-connection-link {
+  color: inherit;
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform 160ms ease, color 160ms ease;
+}
+
+.profile-detail-connection-link:hover {
+  color: var(--text-0);
+  transform: translateX(1px);
+}
+
 .profile-detail-connection-main {
   gap: 12px;
   min-width: 0;

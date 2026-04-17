@@ -339,9 +339,21 @@ export function UserProfileCard({
                   </span>
                 ) : null}
                 {profile.connections?.slice(0, 2).map((connection) => (
-                  <span className="user-profile-chip muted" key={connection.id}>
-                    {connection.label}
-                  </span>
+                  connection.href ? (
+                    <a
+                      className="user-profile-chip user-profile-chip-link muted"
+                      href={connection.href}
+                      key={connection.id}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      {connection.label}
+                    </a>
+                  ) : (
+                    <span className="user-profile-chip muted" key={connection.id}>
+                      {connection.label}
+                    </span>
+                  )
                 ))}
               </div>
             </section>
