@@ -40,6 +40,7 @@ function pushRoute(path, { replace = false } = {}) {
 }
 
 const TRANSIENT_AUTH_ERROR_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+const DYNAMIC_IMPORT_RELOAD_KEY = "umbra.dynamicImportReloaded";
 
 function isTransientAuthError(error) {
   const status = Number(error?.status || error?.code || 0);
@@ -58,6 +59,18 @@ function isTransientAuthError(error) {
   );
 }
 
+function isDynamicImportError(error) {
+  const message = String(error?.message || "").toLowerCase();
+  const stack = String(error?.stack || "").toLowerCase();
+
+  return (
+    message.includes("failed to fetch dynamically imported module") ||
+    message.includes("importing a module script failed") ||
+    message.includes("chunkloaderror") ||
+    stack.includes("chunkloaderror")
+  );
+}
+
 class RootErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -71,6 +84,21 @@ class RootErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error) {
+    if (typeof window !== "undefined" && isDynamicImportError(error)) {
+      try {
+        const alreadyReloaded =
+          window.sessionStorage.getItem(DYNAMIC_IMPORT_RELOAD_KEY) === "1";
+        if (!alreadyReloaded) {
+          window.sessionStorage.setItem(DYNAMIC_IMPORT_RELOAD_KEY, "1");
+          console.warn("Umbra detected a stale dynamic chunk and will reload once.", error);
+          window.location.reload();
+          return;
+        }
+      } catch {
+        // Ignore sessionStorage access issues and fall back to the normal error card.
+      }
+    }
+
     console.error("Umbra root render failed:", error);
   }
 
@@ -108,6 +136,18 @@ function AppContent() {
   const [inviteBrowserMode, setInviteBrowserMode] = useState(false);
   const [workspaceInitialSelection, setWorkspaceInitialSelection] = useState(null);
   const [language, setLanguage] = useState(() => getStoredLanguage());
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      window.sessionStorage.removeItem(DYNAMIC_IMPORT_RELOAD_KEY);
+    } catch {
+      // Ignore sessionStorage access issues.
+    }
+  }, []);
 
   useEffect(() => {
     persistLanguage(language);
