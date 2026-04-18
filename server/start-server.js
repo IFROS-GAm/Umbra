@@ -39,7 +39,7 @@ export async function startServer(options = {}) {
   const upload = multer({
     storage: multer.memoryStorage(),
     limits: {
-      fileSize: Number(process.env.MAX_ATTACHMENT_BYTES || 8 * 1024 * 1024),
+      fileSize: Number(process.env.MAX_ATTACHMENT_BYTES || 25 * 1024 * 1024),
       files: Number(process.env.MAX_ATTACHMENT_FILES || 10)
     }
   });
@@ -135,6 +135,14 @@ export async function startServer(options = {}) {
 
   app.use((error, _req, res, next) => {
     if (error instanceof multer.MulterError) {
+      if (error.code === "LIMIT_FILE_SIZE") {
+        runtime.sendError(
+          res,
+          createHttpError("El archivo supera el limite permitido de 25 MB.", 400)
+        );
+        return;
+      }
+
       runtime.sendError(
         res,
         createHttpError("No se pudieron procesar los adjuntos.", 400)

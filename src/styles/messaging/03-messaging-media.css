@@ -140,51 +140,110 @@
   white-space: nowrap;
 }
 
-.message-audio-attachment-head {
+.audio-attachment-card {
+  display: grid;
+  gap: 12px;
+}
+
+.audio-attachment-card.composer {
+  height: 100%;
+}
+
+.audio-attachment-card.message {
+  gap: 14px;
+}
+
+.audio-attachment-card-head {
   align-items: center;
   display: flex;
   gap: 12px;
-  margin-bottom: 12px;
 }
 
-.message-audio-attachment-icon {
+.audio-attachment-card-art {
   align-items: center;
-  background: rgba(88, 101, 242, 0.16);
-  border-radius: 14px;
-  color: #c8d0ff;
+  background: linear-gradient(180deg, rgba(118, 129, 255, 0.22), rgba(82, 96, 234, 0.16));
+  border-radius: 16px;
+  color: #cdd3ff;
   display: inline-flex;
   flex: 0 0 auto;
-  height: 44px;
+  height: 56px;
   justify-content: center;
-  width: 44px;
+  width: 56px;
 }
 
-.message-audio-attachment-copy {
+.audio-attachment-card-copy {
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
 }
 
-.message-audio-attachment-copy strong,
-.message-audio-attachment-copy span {
+.audio-attachment-card-copy strong,
+.audio-attachment-card-copy span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.message-audio-attachment-copy strong {
-  color: var(--text-0);
-  font-size: 0.94rem;
+.audio-attachment-card-copy strong {
+  color: #6ea8ff;
+  font-size: 0.98rem;
+  font-weight: 800;
 }
 
-.message-audio-attachment-copy span {
+.audio-attachment-card-copy span {
   color: var(--text-2);
+  font-size: 0.8rem;
+}
+
+.audio-attachment-card-error {
+  color: #ffb8c2 !important;
+}
+
+.audio-attachment-card-player {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.audio-attachment-card-toggle {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.06);
+  border: 0;
+  border-radius: 999px;
+  color: var(--text-0);
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 36px;
+  justify-content: center;
+  width: 36px;
+}
+
+.audio-attachment-card-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.audio-attachment-card-timeline {
+  display: grid;
+  flex: 1;
+  gap: 6px;
+  min-width: 0;
+}
+
+.audio-attachment-card-time {
+  color: var(--text-2);
+  display: flex;
+  font-size: 0.76rem;
+  justify-content: space-between;
+}
+
+.audio-attachment-card.message .audio-attachment-card-time {
   font-size: 0.78rem;
 }
 
-.message-attachment.audio audio {
-  display: block;
+.audio-attachment-card-seek {
+  accent-color: #7486ff;
+  margin: 0;
   width: 100%;
 }
 

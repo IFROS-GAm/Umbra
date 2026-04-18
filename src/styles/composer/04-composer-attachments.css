@@ -164,17 +164,36 @@
 }
 
 .composer-attachment-preview.audio {
-  align-items: stretch;
-  display: grid;
-  gap: 10px;
-  grid-template-columns: auto minmax(0, 1fr);
-  padding: 14px;
+  min-height: 124px;
+  padding: 12px;
 }
 
-.composer-attachment-preview.audio audio {
-  align-self: center;
-  max-width: 100%;
+.composer-attachment-preview.audio .audio-attachment-card {
+  background: rgba(17, 20, 27, 0.92);
+  border: 1px solid rgba(116, 134, 255, 0.18);
+  border-radius: 16px;
+  min-height: 100%;
+  padding: 14px;
   width: 100%;
+}
+
+.composer-attachment-preview.audio .audio-attachment-card-art {
+  border-radius: 18px;
+  height: 62px;
+  width: 62px;
+}
+
+.composer-attachment-preview.audio .audio-attachment-card-copy strong {
+  color: var(--text-0);
+  font-size: 0.96rem;
+}
+
+.composer-attachment-preview.audio .audio-attachment-card-copy span {
+  font-size: 0.78rem;
+}
+
+.composer-attachment-preview.audio .audio-attachment-card-player {
+  margin-top: auto;
 }
 
 .composer-attachment-copy {
@@ -306,17 +325,11 @@
 }
 
 .attachment-editor-audio-preview {
-  align-items: center;
   background: linear-gradient(180deg, rgba(32, 34, 42, 0.92), rgba(18, 20, 26, 0.92));
-  color: #c8d0ff;
-  display: grid;
-  gap: 14px;
-  grid-template-columns: auto minmax(0, 1fr);
   padding: 18px;
 }
 
-.attachment-editor-audio-preview audio {
-  max-width: 100%;
+.attachment-editor-audio-preview .audio-attachment-card {
   width: 100%;
 }
 

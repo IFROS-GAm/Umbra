@@ -2,6 +2,7 @@ import React, { memo } from "react";
 
 import { resolveAssetUrl } from "../../../../api.js";
 import { Icon } from "../../../Icon.jsx";
+import { AudioAttachmentCard } from "../media/AudioAttachmentCard.jsx";
 import { MessageImageViewer } from "../media/MessageImageViewer.jsx";
 import {
   COMPOSER_SHORTCUTS,
@@ -61,12 +62,15 @@ function ComposerAttachmentPreview({
 
   if (isAudioAttachment(attachment)) {
     return (
-      <div className="composer-attachment-preview audio">
-        <span className="composer-attachment-file-icon">
-          <Icon name="headphones" size={20} />
-        </span>
-        <audio controls preload="metadata" src={source} />
-      </div>
+      <AudioAttachmentCard
+        className="composer-attachment-preview audio"
+        error={attachment.upload_status === "failed" ? attachment.upload_error : ""}
+        name={getComposerAttachmentLabel(attachment)}
+        size={attachment.size}
+        src={source}
+        status={attachment.upload_status === "uploading" ? "Subiendo..." : "Audio listo"}
+        variant="composer"
+      />
     );
   }
 
@@ -93,12 +97,13 @@ function AttachmentEditorPreview({ attachment, resolveComposerAttachmentUrl }) {
 
   if (isAudioAttachment(attachment)) {
     return (
-      <div className="attachment-editor-audio-preview">
-        <span className="composer-attachment-file-icon">
-          <Icon name="headphones" size={22} />
-        </span>
-        <audio controls preload="metadata" src={source} />
-      </div>
+      <AudioAttachmentCard
+        className="attachment-editor-audio-preview"
+        name={getComposerAttachmentLabel(attachment)}
+        size={attachment.size}
+        src={source}
+        variant="composer"
+      />
     );
   }
 

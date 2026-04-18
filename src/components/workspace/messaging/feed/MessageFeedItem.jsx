@@ -10,6 +10,7 @@ import {
 } from "../../../../utils.js";
 import { Avatar } from "../../../Avatar.jsx";
 import { Icon } from "../../../Icon.jsx";
+import { AudioAttachmentCard } from "../media/AudioAttachmentCard.jsx";
 import { MessageActionMenu } from "../menus/MessageActionMenu.jsx";
 import {
   MESSAGE_TOOLBAR_REACTIONS,
@@ -236,18 +237,14 @@ export const MessageFeedItem = memo(function MessageFeedItem({
         {audioAttachments.length ? (
           <div className="message-audio-attachment-list">
             {audioAttachments.map((attachment) => (
-              <div className="message-attachment audio" key={attachmentKey(attachment)}>
-                <div className="message-audio-attachment-head">
-                  <span className="message-audio-attachment-icon">
-                    <Icon name="headphones" size={18} />
-                  </span>
-                  <div className="message-audio-attachment-copy">
-                    <strong title={attachment.name || "Audio"}>{attachment.name || "Audio"}</strong>
-                    <span>{attachment.content_type || "Audio"}</span>
-                  </div>
-                </div>
-                <audio controls preload="metadata" src={resolveAssetUrl(attachment.url)} />
-              </div>
+              <AudioAttachmentCard
+                className="message-attachment audio"
+                key={attachmentKey(attachment)}
+                name={attachment.name || "Audio"}
+                size={attachment.size}
+                src={resolveAssetUrl(attachment.url)}
+                variant="message"
+              />
             ))}
           </div>
         ) : null}
