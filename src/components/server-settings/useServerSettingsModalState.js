@@ -88,6 +88,12 @@ function buildInitialMemberActionState() {
   };
 }
 
+function buildInitialOwnerTransferDraft() {
+  return {
+    memberId: null
+  };
+}
+
 export function useServerSettingsModalState({
   copy,
   currentUserId,
@@ -125,6 +131,7 @@ export function useServerSettingsModalState({
   const [invitesState, setInvitesState] = useState(buildInitialInvitesState);
   const [memberActionState, setMemberActionState] = useState(buildInitialMemberActionState);
   const [banDraft, setBanDraft] = useState(buildInitialBanDraft);
+  const [ownerTransferDraft, setOwnerTransferDraft] = useState(buildInitialOwnerTransferDraft);
 
   useEffect(() => {
     setActiveTab("profile");
@@ -150,6 +157,7 @@ export function useServerSettingsModalState({
     setInvitesState(buildInitialInvitesState());
     setMemberActionState(buildInitialMemberActionState());
     setBanDraft(buildInitialBanDraft());
+    setOwnerTransferDraft(buildInitialOwnerTransferDraft());
   }, [guild.id]);
 
   useEffect(
@@ -798,6 +806,7 @@ export function useServerSettingsModalState({
 
   function openBanDraft(memberId) {
     clearMemberActionFeedback();
+    setOwnerTransferDraft(buildInitialOwnerTransferDraft());
     setBanDraft({
       memberId,
       permanent: false,
@@ -808,6 +817,18 @@ export function useServerSettingsModalState({
 
   function closeBanDraft() {
     setBanDraft(buildInitialBanDraft());
+  }
+
+  function openOwnerTransferDraft(memberId) {
+    clearMemberActionFeedback();
+    closeBanDraft();
+    setOwnerTransferDraft({
+      memberId
+    });
+  }
+
+  function closeOwnerTransferDraft() {
+    setOwnerTransferDraft(buildInitialOwnerTransferDraft());
   }
 
   function buildBanExpirationIso() {
@@ -921,6 +942,46 @@ export function useServerSettingsModalState({
     }
   }
 
+  async function handleTransferOwnerAction(member) {
+    if (!member?.id) {
+      return;
+    }
+
+    setMemberActionState({
+      error: "",
+      memberId: member.id,
+      mode: "owner-transfer",
+      success: ""
+    });
+
+    try {
+      await api.transferGuildOwnership({
+        guildId: guild.id,
+        userId: member.id
+      });
+      closeOwnerTransferDraft();
+      await refreshWorkspaceSnapshot();
+      await refreshRoles();
+      setMemberActionState({
+        error: "",
+        memberId: null,
+        mode: "",
+        success: replaceName(
+          copy.ownerTransferSuccess,
+          member.display_name || member.username,
+          `Transferiste el owner a ${member.display_name || member.username}.`
+        )
+      });
+    } catch (actionError) {
+      setMemberActionState({
+        error: actionError.message,
+        memberId: null,
+        mode: "",
+        success: ""
+      });
+    }
+  }
+
   return {
     activeTab,
     assignableRoles,
@@ -932,6 +993,7 @@ export function useServerSettingsModalState({
     clearRoleIconPreview,
     clearIconPreview,
     closeBanDraft,
+    closeOwnerTransferDraft,
     error,
     filteredMembers,
     filteredRoles,
@@ -948,6 +1010,7 @@ export function useServerSettingsModalState({
     handleSaveRole,
     handleSelectRole,
     handleSubmit,
+    handleTransferOwnerAction,
     handleToggleRolePermission,
     handleToggleAllowMemberInvites,
     iconInputRef,
@@ -956,6 +1019,8 @@ export function useServerSettingsModalState({
     membersQuery,
     normalizedBannerColor,
     openBanDraft,
+    openOwnerTransferDraft,
+    ownerTransferDraft,
     previewBanner,
     previewCardStyle,
     previewIcon,

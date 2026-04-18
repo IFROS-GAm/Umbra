@@ -225,14 +225,18 @@ function ServerSettingsMembersTab({
   language,
   memberActionState,
   membersQuery,
+  ownerTransferDraft,
   assignableRoles,
   onBanDraftChange,
   onBanMember,
   onCloseBanDraft,
+  onCloseOwnerTransferDraft,
   onKickMember,
   onMembersQueryChange,
   onOpenBanDraft,
+  onOpenOwnerTransferDraft,
   onAssignRole,
+  onTransferOwner,
   sortedMembers
 }) {
   return (
@@ -277,6 +281,10 @@ function ServerSettingsMembersTab({
               const canModerateMember =
                 canManageMembers && member.id !== guild.owner_id && member.id !== currentUserId;
               const canAssignRole = canManageRoles && member.id !== guild.owner_id;
+              const canTransferOwner =
+                guild.owner_id === currentUserId &&
+                member.id !== guild.owner_id &&
+                member.id !== currentUserId;
               const selectedRoleId =
                 (member.role_ids || []).find((roleId) =>
                   assignableRoles.some((role) => role.id === roleId)
@@ -350,6 +358,22 @@ function ServerSettingsMembersTab({
                           >
                             <span>{copy.banAction}</span>
                           </button>
+                          {canTransferOwner ? (
+                            <button
+                              className={`ghost-button small accent ${
+                                ownerTransferDraft.memberId === member.id ? "active" : ""
+                              }`.trim()}
+                              disabled={Boolean(memberActionState.mode)}
+                              onClick={() =>
+                                ownerTransferDraft.memberId === member.id
+                                  ? onCloseOwnerTransferDraft()
+                                  : onOpenOwnerTransferDraft(member.id)
+                              }
+                              type="button"
+                            >
+                              <span>{copy.transferOwnerAction}</span>
+                            </button>
+                          ) : null}
                         </div>
                       ) : null}
 
@@ -484,6 +508,58 @@ function ServerSettingsMembersTab({
                             {isBusy && memberActionState.mode === "ban"
                               ? copy.membersModerating
                               : copy.banPanelConfirm}
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {ownerTransferDraft.memberId === member.id ? (
+                    <div className="server-settings-member-transfer-panel">
+                      <div className="server-settings-member-ban-header">
+                        <div>
+                          <strong>{copy.transferOwnerTitle}</strong>
+                          <span>
+                            {replaceName(
+                              copy.transferOwnerDescription,
+                              member.display_name || member.username,
+                              `Vas a transferir el owner a ${member.display_name || member.username}.`
+                            )}
+                          </span>
+                        </div>
+                        <button
+                          className="ghost-button small"
+                          disabled={isBusy}
+                          onClick={onCloseOwnerTransferDraft}
+                          type="button"
+                        >
+                          <span>{copy.banPanelCancel}</span>
+                        </button>
+                      </div>
+
+                      <div className="server-settings-member-transfer-copy">
+                        <span>{copy.transferOwnerHint}</span>
+                      </div>
+
+                      <div className="server-settings-member-actions">
+                        <button
+                          className="ghost-button small"
+                          disabled={isBusy}
+                          onClick={onCloseOwnerTransferDraft}
+                          type="button"
+                        >
+                          <span>{copy.banPanelCancel}</span>
+                        </button>
+                        <button
+                          className="ghost-button small danger"
+                          disabled={isBusy}
+                          onClick={() => onTransferOwner(member)}
+                          type="button"
+                        >
+                          <span>
+                            {isBusy && memberActionState.mode === "owner-transfer"
+                              ? copy.membersModerating
+                              : copy.transferOwnerConfirm}
                           </span>
                         </button>
                       </div>
@@ -975,14 +1051,18 @@ export function ServerSettingsModalContent({
             language={language}
             memberActionState={state.memberActionState}
             membersQuery={state.membersQuery}
+            ownerTransferDraft={state.ownerTransferDraft}
             assignableRoles={state.assignableRoles}
             onBanDraftChange={state.setBanDraft}
             onBanMember={state.handleBanMemberAction}
             onCloseBanDraft={state.closeBanDraft}
+            onCloseOwnerTransferDraft={state.closeOwnerTransferDraft}
             onKickMember={state.handleKickMemberAction}
             onMembersQueryChange={state.setMembersQuery}
             onOpenBanDraft={state.openBanDraft}
+            onOpenOwnerTransferDraft={state.openOwnerTransferDraft}
             onAssignRole={state.handleAssignRoleToMember}
+            onTransferOwner={state.handleTransferOwnerAction}
             sortedMembers={state.sortedMembers}
           />
         ) : null}

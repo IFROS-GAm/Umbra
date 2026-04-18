@@ -152,6 +152,10 @@ export function getServerSettingsCopy(language) {
       "No se encontraron roles con ese filtro."
     ),
     owner: t("server.settings.role.owner", "Owner"),
+    ownerTransferSuccess: t(
+      "server.settings.members.ownerTransferSuccess",
+      "Transferiste el owner a {name}."
+    ),
     profileDescription: t(
       "server.settings.profile.subtitle",
       "Personaliza como aparece tu servidor dentro de Umbra."
@@ -188,6 +192,20 @@ export function getServerSettingsCopy(language) {
     searchRoles: t("server.settings.roles.search", "Buscar roles"),
     serverUpdated: t("server.settings.profile.saved", "Servidor actualizado."),
     stickerTab: t("server.settings.nav.stickers", "Stickers"),
+    transferOwnerAction: t("server.settings.members.transferOwner", "Dar owner"),
+    transferOwnerConfirm: t("server.settings.members.transferOwnerConfirm", "Confirmar transferencia"),
+    transferOwnerDescription: t(
+      "server.settings.members.transferOwnerDescription",
+      "Vas a transferir el owner a {name}."
+    ),
+    transferOwnerHint: t(
+      "server.settings.members.transferOwnerHint",
+      "Esta accion te quitara el owner de inmediato y le dara control total del servidor."
+    ),
+    transferOwnerTitle: t(
+      "server.settings.members.transferOwnerTitle",
+      "Transferir owner del servidor"
+    ),
     uploadBanner: t("server.settings.profile.uploadBanner", "Subir cartel"),
     uses: t("server.settings.invites.uses", "{count} usos")
   };

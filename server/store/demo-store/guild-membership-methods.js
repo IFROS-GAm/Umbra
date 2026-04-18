@@ -374,4 +374,65 @@ export const demoStoreGuildMembershipMethods = {
       user_id: targetUserId
     };
   }
+,
+  async transferGuildOwnership({ guildId, targetUserId, userId }) {
+    const guild = this.db.guilds.find((item) => item.id === guildId);
+    if (!guild) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    if (guild.owner_id !== userId) {
+      throw createError("Solo el owner puede transferir el servidor.", 403);
+    }
+
+    if (!targetUserId) {
+      throw createError("Debes elegir a quien transferir el owner.", 400);
+    }
+
+    if (targetUserId === guild.owner_id) {
+      throw createError("Ese miembro ya es el owner del servidor.", 400);
+    }
+
+    const targetMembership = this.db.guild_members.find(
+      (member) => member.guild_id === guildId && member.user_id === targetUserId
+    );
+    if (!targetMembership) {
+      throw createError("Ese miembro ya no pertenece a este servidor.", 404);
+    }
+
+    const ownerRole = this.db.roles.find(
+      (role) => role.guild_id === guildId && role.name === "Owner"
+    );
+    const everyoneRole = this.db.roles.find(
+      (role) => role.guild_id === guildId && role.name === "@everyone"
+    );
+    const guildMembers = this.db.guild_members.filter((member) => member.guild_id === guildId);
+
+    guild.owner_id = targetUserId;
+    guild.updated_at = new Date().toISOString();
+
+    if (ownerRole?.id) {
+      guildMembers.forEach((member) => {
+        const nextRoleIds = new Set(Array.isArray(member.role_ids) ? member.role_ids : []);
+        nextRoleIds.delete(ownerRole.id);
+
+        if (member.user_id === targetUserId) {
+          nextRoleIds.add(ownerRole.id);
+          if (everyoneRole?.id) {
+            nextRoleIds.add(everyoneRole.id);
+          }
+        }
+
+        member.role_ids = [...nextRoleIds];
+      });
+    }
+
+    await this.save();
+
+    return {
+      affected_user_ids: [...new Set(guildMembers.map((member) => member.user_id).filter(Boolean))],
+      guild_id: guildId,
+      transferred_owner_id: targetUserId
+    };
+  }
 };

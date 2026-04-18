@@ -283,6 +283,19 @@
   justify-content: flex-end;
 }
 
+.server-settings-member-actions .ghost-button.small.accent {
+  background: rgba(88, 101, 242, 0.12);
+  border-color: rgba(125, 139, 255, 0.24);
+  color: #d7ddff;
+}
+
+.server-settings-member-actions .ghost-button.small.accent:hover,
+.server-settings-member-actions .ghost-button.small.accent.active {
+  background: rgba(88, 101, 242, 0.18);
+  border-color: rgba(160, 176, 255, 0.34);
+  color: #f2f4ff;
+}
+
 .server-settings-member-role-select {
   align-items: stretch;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
@@ -597,6 +610,24 @@
   flex-direction: column;
   gap: 14px;
   padding: 16px;
+}
+
+.server-settings-member-transfer-panel {
+  background:
+    radial-gradient(circle at top, rgba(88, 101, 242, 0.08), transparent 56%),
+    rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(125, 139, 255, 0.18);
+  border-radius: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+}
+
+.server-settings-member-transfer-copy {
+  color: var(--text-2);
+  font-size: 0.9rem;
+  line-height: 1.5;
 }
 
 .server-settings-member-ban-header {

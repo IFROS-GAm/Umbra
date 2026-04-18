@@ -876,6 +876,95 @@ export const supabaseStoreRuntimeGuildMethods = {
     };
   }
 ,
+  async transferGuildOwnership({ guildId, targetUserId, userId }) {
+    const [guildRows, targetMembershipRows, allMembers, roles] = await Promise.all([
+      expectData(this.client.from("guilds").select("id,owner_id").eq("id", guildId).limit(1)),
+      expectData(
+        this.client
+          .from("guild_members")
+          .select("guild_id,user_id,role_ids")
+          .eq("guild_id", guildId)
+          .eq("user_id", targetUserId)
+          .limit(1)
+      ),
+      expectData(
+        this.client
+          .from("guild_members")
+          .select("guild_id,user_id,role_ids")
+          .eq("guild_id", guildId)
+      ),
+      expectData(this.client.from("roles").select("id,name").eq("guild_id", guildId))
+    ]);
+
+    const guild = guildRows[0] || null;
+    if (!guild) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    if (guild.owner_id !== userId) {
+      throw createError("Solo el owner puede transferir el servidor.", 403);
+    }
+
+    if (!targetUserId) {
+      throw createError("Debes elegir a quien transferir el owner.", 400);
+    }
+
+    if (targetUserId === guild.owner_id) {
+      throw createError("Ese miembro ya es el owner del servidor.", 400);
+    }
+
+    const targetMembership = targetMembershipRows[0] || null;
+    if (!targetMembership) {
+      throw createError("Ese miembro ya no pertenece a este servidor.", 404);
+    }
+
+    const ownerRole = roles.find((role) => role.name === "Owner") || null;
+    const everyoneRole = roles.find((role) => role.name === "@everyone") || null;
+    const affectedUserIds = [...new Set(allMembers.map((member) => member.user_id).filter(Boolean))];
+
+    await expectData(
+      this.client
+        .from("guilds")
+        .update({
+          owner_id: targetUserId,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", guildId)
+    );
+
+    if (ownerRole?.id) {
+      await Promise.all(
+        allMembers.map((member) => {
+          const nextRoleIds = new Set(Array.isArray(member.role_ids) ? member.role_ids : []);
+          nextRoleIds.delete(ownerRole.id);
+
+          if (member.user_id === targetUserId) {
+            nextRoleIds.add(ownerRole.id);
+            if (everyoneRole?.id) {
+              nextRoleIds.add(everyoneRole.id);
+            }
+          }
+
+          return expectData(
+            this.client
+              .from("guild_members")
+              .update({
+                role_ids: [...nextRoleIds]
+              })
+              .eq("guild_id", guildId)
+              .eq("user_id", member.user_id)
+          );
+        })
+      );
+    }
+
+    return {
+      affected_user_ids: affectedUserIds,
+      guild_id: guildId,
+      transferred_owner_id: targetUserId
+    };
+  }
+,
   async listGuildInvites({ guildId, userId }) {
     const guildRows = await expectData(
       this.client.from("guilds").select(GUILD_PERMISSION_SELECT).eq("id", guildId).limit(1)

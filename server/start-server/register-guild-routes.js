@@ -239,6 +239,27 @@ export function registerGuildRoutes({
     }
   });
 
+  app.patch("/api/guilds/:guildId/owner", requireViewer, async (req, res) => {
+    try {
+      const payload = await store.transferGuildOwnership({
+        guildId: req.params.guildId,
+        targetUserId: req.body.userId,
+        userId: req.viewer.id
+      });
+
+      emitNavigationUpdateToUsers(payload?.affected_user_ids || [req.viewer.id], {
+        guildId: req.params.guildId,
+        transferredOwnerId: payload?.transferred_owner_id || null,
+        type: "guild:update",
+        userId: req.viewer.id
+      });
+
+      res.json(payload);
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
   app.get("/api/guilds/:guildId/stickers", requireViewer, async (req, res) => {
     try {
       const stickers = await store.listGuildStickers({

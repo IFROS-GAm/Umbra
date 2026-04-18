@@ -324,6 +324,14 @@ export const api = {
       })
     });
   },
+  transferGuildOwnership({ guildId, userId }) {
+    return request(`/api/guilds/${guildId}/owner`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        userId
+      })
+    });
+  },
   listGuildStickers({ guildId }) {
     return request(`/api/guilds/${guildId}/stickers`);
   },
