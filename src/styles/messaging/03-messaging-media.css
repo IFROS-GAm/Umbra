@@ -147,6 +147,7 @@
   display: grid;
   gap: 12px;
   padding: 14px;
+  position: relative;
 }
 
 .audio-attachment-card.composer {
@@ -156,6 +157,36 @@
 .audio-attachment-card.message {
   gap: 14px;
   max-width: 420px;
+}
+
+.audio-attachment-card-download {
+  align-items: center;
+  background: rgba(18, 22, 29, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  color: #eef2ff;
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  transform: translateY(-4px);
+  transition: opacity 160ms ease, transform 160ms ease, background 160ms ease;
+  width: 34px;
+}
+
+.audio-attachment-card.message:hover .audio-attachment-card-download,
+.audio-attachment-card.message:focus-within .audio-attachment-card-download {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.audio-attachment-card-download:hover {
+  background: rgba(33, 38, 49, 0.98);
 }
 
 .audio-attachment-card-head {
@@ -209,8 +240,9 @@
 
 .audio-attachment-card-player {
   align-items: center;
-  display: flex;
+  display: grid;
   gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
 }
 
 .audio-attachment-card-toggle {
@@ -246,6 +278,16 @@
 
 .audio-attachment-card.message .audio-attachment-card-time {
   font-size: 0.78rem;
+}
+
+.audio-attachment-card-volume {
+  align-items: center;
+  color: rgba(255, 255, 255, 0.92);
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 24px;
+  justify-content: center;
+  width: 24px;
 }
 
 .audio-attachment-card-seek {

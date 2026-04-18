@@ -34,6 +34,7 @@ function formatFileSize(size) {
 
 export function AudioAttachmentCard({
   className = "",
+  downloadUrl = "",
   error = "",
   name = "Audio",
   size = 0,
@@ -140,6 +141,19 @@ export function AudioAttachmentCard({
     <div className={`audio-attachment-card ${variant} ${className}`.trim()}>
       <audio preload="metadata" ref={audioRef} src={src} />
 
+      {downloadUrl ? (
+        <a
+          aria-label="Descargar audio"
+          className="audio-attachment-card-download"
+          download={name}
+          href={downloadUrl}
+          rel="noreferrer"
+          target="_blank"
+        >
+          <Icon name="download" size={16} />
+        </a>
+      ) : null}
+
       <div className="audio-attachment-card-head">
         <div className="audio-attachment-card-art">
           <Icon name="headphones" size={variant === "composer" ? 28 : 24} />
@@ -183,6 +197,10 @@ export function AudioAttachmentCard({
             value={Math.min(currentTime, progressMax)}
           />
         </div>
+
+        <span className="audio-attachment-card-volume" aria-hidden="true">
+          <Icon name="volume" size={18} />
+        </span>
       </div>
     </div>
   );

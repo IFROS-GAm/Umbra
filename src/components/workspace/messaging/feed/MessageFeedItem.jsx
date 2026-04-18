@@ -236,16 +236,20 @@ export const MessageFeedItem = memo(function MessageFeedItem({
 
         {audioAttachments.length ? (
           <div className="message-audio-attachment-list">
-            {audioAttachments.map((attachment) => (
+            {audioAttachments.map((attachment) => {
+              const attachmentUrl = resolveAssetUrl(attachment.url);
+              return (
               <AudioAttachmentCard
                 className="message-attachment audio"
+                downloadUrl={attachmentUrl}
                 key={attachmentKey(attachment)}
                 name={attachment.name || "Audio"}
                 size={attachment.size}
-                src={resolveAssetUrl(attachment.url)}
+                src={attachmentUrl}
                 variant="message"
               />
-            ))}
+              );
+            })}
           </div>
         ) : null}
 

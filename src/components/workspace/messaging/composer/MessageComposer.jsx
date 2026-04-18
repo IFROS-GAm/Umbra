@@ -64,6 +64,7 @@ function ComposerAttachmentPreview({
     return (
       <AudioAttachmentCard
         className="composer-attachment-preview audio"
+        downloadUrl={source}
         error={attachment.upload_status === "failed" ? attachment.upload_error : ""}
         name={getComposerAttachmentLabel(attachment)}
         size={attachment.size}
@@ -99,6 +100,7 @@ function AttachmentEditorPreview({ attachment, resolveComposerAttachmentUrl }) {
     return (
       <AudioAttachmentCard
         className="attachment-editor-audio-preview"
+        downloadUrl={source}
         name={getComposerAttachmentLabel(attachment)}
         size={attachment.size}
         src={source}
