@@ -143,45 +143,7 @@ button {
 }
 
 .boot-loader-orbit {
-  align-items: center;
-  display: flex;
-  justify-content: center;
-}
-
-.boot-orbit-ring,
-.boot-orbit-path {
-  border-radius: 999px;
   display: block;
-  position: absolute;
-}
-
-.boot-orbit-ring {
-  border: 2px solid rgba(214, 206, 255, 0.72);
-  box-shadow: 0 0 0 1px rgba(133, 92, 255, 0.06);
-}
-
-.boot-orbit-ring-outer,
-.boot-orbit-path-outer {
-  height: 112px;
-  margin-left: -56px;
-  margin-top: -56px;
-  width: 112px;
-}
-
-.boot-orbit-ring-middle,
-.boot-orbit-path-middle {
-  height: 82px;
-  margin-left: -41px;
-  margin-top: -41px;
-  width: 82px;
-}
-
-.boot-orbit-ring-inner,
-.boot-orbit-path-inner {
-  height: 52px;
-  margin-left: -26px;
-  margin-top: -26px;
-  width: 52px;
 }
 
 .boot-orbit-core {
@@ -191,55 +153,98 @@ button {
     0 0 32px rgba(162, 100, 255, 0.35),
     0 0 0 8px rgba(147, 87, 247, 0.08);
   height: 28px;
+  left: 50%;
+  margin-left: -14px;
+  margin-top: -14px;
   position: absolute;
+  top: 50%;
   width: 28px;
 }
 
-.boot-orbit-path-outer {
-  animation: boot-orbit-spin-outer 0.78s linear infinite;
+.boot-orbit-ring,
+.boot-orbiter,
+.boot-planet {
+  border-radius: 50%;
+  display: block;
+  position: absolute;
 }
 
-.boot-orbit-path-middle {
-  animation: boot-orbit-spin-middle 0.58s linear infinite reverse;
-}
-
-.boot-orbit-path-inner {
-  animation: boot-orbit-spin-inner 0.42s linear infinite;
-}
-
-.boot-orbit-path {
+.boot-orbit-ring {
+  border: 2px solid rgba(214, 206, 255, 0.72);
+  box-shadow: 0 0 0 1px rgba(133, 92, 255, 0.06);
   left: 50%;
   top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.boot-orbit-ring-outer,
+.boot-orbiter-outer {
+  height: 112px;
+  left: 50%;
+  margin-left: -56px;
+  margin-top: -56px;
+  top: 50%;
+  width: 112px;
+}
+
+.boot-orbit-ring-middle,
+.boot-orbiter-middle {
+  height: 82px;
+  left: 50%;
+  margin-left: -41px;
+  margin-top: -41px;
+  top: 50%;
+  width: 82px;
+}
+
+.boot-orbit-ring-inner,
+.boot-orbiter-inner {
+  height: 52px;
+  left: 50%;
+  margin-left: -26px;
+  margin-top: -26px;
+  top: 50%;
+  width: 52px;
+}
+
+.boot-orbiter {
   transform-origin: center center;
   will-change: transform;
 }
 
-.boot-orbit-ring {
-  left: 50%;
-  top: 50%;
+.boot-orbiter-outer {
+  animation: boot-orbit-spin 0.78s linear infinite;
 }
 
-.boot-orbit-dot {
-  background: radial-gradient(circle at 35% 35%, #f7f0ff, #47f2dc 62%, #1fd9c2 100%);
-  border-radius: 999px;
-  box-shadow: 0 0 18px rgba(71, 242, 220, 0.42);
-  display: block;
+.boot-orbiter-middle {
+  animation: boot-orbit-spin 0.58s linear infinite reverse;
+}
+
+.boot-orbiter-inner {
+  animation: boot-orbit-spin 0.42s linear infinite;
+}
+
+.boot-planet {
+  box-shadow: 0 0 18px rgba(160, 122, 255, 0.42);
   height: 12px;
-  position: absolute;
   right: -6px;
   top: 50%;
-  margin-top: -6px;
+  transform: translateY(-50%);
   width: 12px;
 }
 
-.boot-orbit-path-middle .boot-orbit-dot {
-  background: radial-gradient(circle at 35% 35%, #f7f0ff, #8a7dff 60%, #6c4dff 100%);
-  box-shadow: 0 0 18px rgba(138, 125, 255, 0.42);
+.boot-planet-outer {
+  background: radial-gradient(circle at 35% 35%, #faf6ff, #a482ff 62%, #7a4dff 100%);
 }
 
-.boot-orbit-path-inner .boot-orbit-dot {
-  background: radial-gradient(circle at 35% 35%, #fff0fa, #c679ff 60%, #9d4bff 100%);
-  box-shadow: 0 0 18px rgba(198, 121, 255, 0.42);
+.boot-planet-middle {
+  background: radial-gradient(circle at 35% 35%, #f8ecff, #d991ff 60%, #a94dff 100%);
+  box-shadow: 0 0 18px rgba(217, 145, 255, 0.4);
+}
+
+.boot-planet-inner {
+  background: radial-gradient(circle at 35% 35%, #f1dbff, #7d66ff 60%, #5a3cff 100%);
+  box-shadow: 0 0 18px rgba(125, 102, 255, 0.4);
 }
 
 .boot-copy {
@@ -267,7 +272,7 @@ button {
   max-width: 34ch;
 }
 
-@keyframes boot-orbit-spin-outer {
+@keyframes boot-orbit-spin {
   from {
     transform: rotate(0deg);
   }
@@ -277,28 +282,8 @@ button {
   }
 }
 
-@keyframes boot-orbit-spin-middle {
-  from {
-    transform: rotate(28deg);
-  }
-
-  to {
-    transform: rotate(388deg);
-  }
-}
-
-@keyframes boot-orbit-spin-inner {
-  from {
-    transform: rotate(64deg);
-  }
-
-  to {
-    transform: rotate(424deg);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .boot-orbit-path {
+  .boot-orbiter {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }
