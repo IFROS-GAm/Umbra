@@ -155,8 +155,33 @@ button {
 }
 
 .boot-orbit-ring {
-  border: 2px solid rgba(214, 206, 255, 0.7);
+  border: 2px solid transparent;
   box-shadow: 0 0 0 1px rgba(133, 92, 255, 0.06);
+  will-change: transform;
+}
+
+.boot-orbit-ring-outer {
+  animation: boot-orbit-spin 0.56s linear infinite;
+  border-bottom-color: rgba(230, 220, 255, 0.92);
+  border-left-color: rgba(181, 124, 255, 0.18);
+  border-right-color: rgba(181, 124, 255, 0.22);
+  border-top-color: rgba(181, 124, 255, 0.12);
+}
+
+.boot-orbit-ring-middle {
+  animation: boot-orbit-spin 0.43s linear infinite reverse;
+  border-right-color: rgba(221, 210, 255, 0.94);
+  border-bottom-color: rgba(150, 103, 255, 0.16);
+  border-left-color: rgba(150, 103, 255, 0.22);
+  border-top-color: rgba(150, 103, 255, 0.1);
+}
+
+.boot-orbit-ring-inner {
+  animation: boot-orbit-spin 0.31s linear infinite;
+  border-top-color: rgba(245, 235, 255, 0.95);
+  border-right-color: rgba(196, 134, 255, 0.22);
+  border-left-color: rgba(196, 134, 255, 0.14);
+  border-bottom-color: rgba(196, 134, 255, 0.08);
 }
 
 .boot-orbit-ring-outer,
@@ -189,15 +214,15 @@ button {
 }
 
 .boot-orbit-path-outer {
-  animation: boot-orbit-spin 0.72s linear infinite;
+  animation: boot-orbit-spin 0.28s linear infinite;
 }
 
 .boot-orbit-path-middle {
-  animation: boot-orbit-spin 0.54s linear infinite reverse;
+  animation: boot-orbit-spin 0.22s linear infinite reverse;
 }
 
 .boot-orbit-path-inner {
-  animation: boot-orbit-spin 0.44s linear infinite;
+  animation: boot-orbit-spin 0.16s linear infinite;
 }
 
 .boot-orbit-dot {
@@ -205,12 +230,12 @@ button {
   border-radius: 999px;
   box-shadow: 0 0 18px rgba(71, 242, 220, 0.42);
   display: block;
-  height: 11px;
+  height: 12px;
   position: absolute;
-  right: -3px;
+  right: -4px;
   top: 50%;
   transform: translateY(-50%);
-  width: 11px;
+  width: 12px;
 }
 
 .boot-orbit-path-middle .boot-orbit-dot {
