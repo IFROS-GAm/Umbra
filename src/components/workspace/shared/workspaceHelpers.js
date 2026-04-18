@@ -145,6 +145,50 @@ export function isImageAttachment(attachment) {
   return Boolean(String(attachment?.name || "").match(/\.(avif|gif|jpe?g|png|svg|webp)$/i));
 }
 
+export function isGifAttachment(attachment) {
+  if (attachment?.content_type?.toLowerCase?.() === "image/gif") {
+    return true;
+  }
+
+  return Boolean(String(attachment?.name || "").match(/\.gif$/i));
+}
+
+export function isVideoAttachment(attachment) {
+  if (attachment?.content_type?.startsWith?.("video/")) {
+    return true;
+  }
+
+  return Boolean(String(attachment?.name || "").match(/\.(mp4|m4v|mov|ogv|webm)$/i));
+}
+
+export function isAudioAttachment(attachment) {
+  if (attachment?.content_type?.startsWith?.("audio/")) {
+    return true;
+  }
+
+  return Boolean(String(attachment?.name || "").match(/\.(aac|flac|m4a|mp3|oga|ogg|opus|wav|weba)$/i));
+}
+
+export function describeAttachmentType(attachment) {
+  if (isGifAttachment(attachment)) {
+    return "GIF";
+  }
+
+  if (isImageAttachment(attachment)) {
+    return "Imagen";
+  }
+
+  if (isVideoAttachment(attachment)) {
+    return "Video";
+  }
+
+  if (isAudioAttachment(attachment)) {
+    return "Audio";
+  }
+
+  return "Archivo";
+}
+
 export function attachmentKey(attachment) {
   return attachment.local_id || attachment.path || attachment.url || attachment.name;
 }

@@ -14,7 +14,9 @@ import { MessageActionMenu } from "../menus/MessageActionMenu.jsx";
 import {
   MESSAGE_TOOLBAR_REACTIONS,
   attachmentKey,
-  isImageAttachment
+  isAudioAttachment,
+  isImageAttachment,
+  isVideoAttachment
 } from "../../shared/workspaceHelpers.js";
 
 function buildImageAttachmentGridClassName(imageCount) {
@@ -45,6 +47,10 @@ function buildImageAttachmentClassName(imageCount, index) {
   }
 
   return classNames.join(" ");
+}
+
+function renderAttachmentName(attachment) {
+  return attachment.alt_text || attachment.name || "Adjunto";
 }
 
 export const MessageFeedItem = memo(function MessageFeedItem({
@@ -79,8 +85,31 @@ export const MessageFeedItem = memo(function MessageFeedItem({
     () => (message.attachments || []).filter((attachment) => isImageAttachment(attachment)),
     [message.attachments]
   );
+  const videoAttachments = React.useMemo(
+    () =>
+      (message.attachments || []).filter(
+        (attachment) => !isImageAttachment(attachment) && isVideoAttachment(attachment)
+      ),
+    [message.attachments]
+  );
+  const audioAttachments = React.useMemo(
+    () =>
+      (message.attachments || []).filter(
+        (attachment) =>
+          !isImageAttachment(attachment) &&
+          !isVideoAttachment(attachment) &&
+          isAudioAttachment(attachment)
+      ),
+    [message.attachments]
+  );
   const fileAttachments = React.useMemo(
-    () => (message.attachments || []).filter((attachment) => !isImageAttachment(attachment)),
+    () =>
+      (message.attachments || []).filter(
+        (attachment) =>
+          !isImageAttachment(attachment) &&
+          !isVideoAttachment(attachment) &&
+          !isAudioAttachment(attachment)
+      ),
     [message.attachments]
   );
 
@@ -172,16 +201,53 @@ export const MessageFeedItem = memo(function MessageFeedItem({
                 className={buildImageAttachmentClassName(imageAttachments.length, index)}
                 key={attachmentKey(attachment)}
                 onClick={() => onOpenAttachmentViewer?.(imageAttachments, index)}
-                type="button"
+                  type="button"
               >
                 <img
-                  alt={attachment.alt_text || attachment.name || "Adjunto"}
+                  alt={renderAttachmentName(attachment)}
                   decoding="async"
                   fetchPriority="low"
                   loading="lazy"
                   src={resolveAssetUrl(attachment.url)}
                 />
               </button>
+            ))}
+          </div>
+        ) : null}
+
+        {videoAttachments.length ? (
+          <div className="message-video-attachment-list">
+            {videoAttachments.map((attachment) => (
+              <div className="message-attachment video" key={attachmentKey(attachment)}>
+                <video
+                  controls
+                  playsInline
+                  preload="metadata"
+                  src={resolveAssetUrl(attachment.url)}
+                />
+                <div className="message-attachment-caption">
+                  <strong title={attachment.name || "Video"}>{attachment.name || "Video"}</strong>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {audioAttachments.length ? (
+          <div className="message-audio-attachment-list">
+            {audioAttachments.map((attachment) => (
+              <div className="message-attachment audio" key={attachmentKey(attachment)}>
+                <div className="message-audio-attachment-head">
+                  <span className="message-audio-attachment-icon">
+                    <Icon name="headphones" size={18} />
+                  </span>
+                  <div className="message-audio-attachment-copy">
+                    <strong title={attachment.name || "Audio"}>{attachment.name || "Audio"}</strong>
+                    <span>{attachment.content_type || "Audio"}</span>
+                  </div>
+                </div>
+                <audio controls preload="metadata" src={resolveAssetUrl(attachment.url)} />
+              </div>
             ))}
           </div>
         ) : null}

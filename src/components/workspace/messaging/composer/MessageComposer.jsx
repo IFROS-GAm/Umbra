@@ -7,7 +7,10 @@ import {
   COMPOSER_SHORTCUTS,
   PICKER_CONTENT,
   attachmentKey,
-  isImageAttachment
+  describeAttachmentType,
+  isAudioAttachment,
+  isImageAttachment,
+  isVideoAttachment
 } from "../../shared/workspaceHelpers.js";
 
 function getComposerAttachmentLabel(attachment) {
@@ -23,7 +26,87 @@ function getComposerAttachmentStatus(attachment) {
     return attachment?.upload_error || "No se pudo subir";
   }
 
-  return isImageAttachment(attachment) ? "Imagen lista" : "Archivo listo";
+  return `${describeAttachmentType(attachment)} listo`;
+}
+
+function ComposerAttachmentPreview({
+  attachment,
+  onOpenImageViewer,
+  resolveComposerAttachmentUrl
+}) {
+  const source = resolveComposerAttachmentUrl(attachment);
+  const label = attachment.alt_text || getComposerAttachmentLabel(attachment);
+
+  if (isImageAttachment(attachment)) {
+    return (
+      <button
+        className="composer-attachment-preview-button"
+        onClick={onOpenImageViewer}
+        type="button"
+      >
+        <div className="composer-attachment-preview">
+          <img alt={label} src={source} />
+        </div>
+      </button>
+    );
+  }
+
+  if (isVideoAttachment(attachment)) {
+    return (
+      <div className="composer-attachment-preview video">
+        <video controls playsInline preload="metadata" src={source} />
+      </div>
+    );
+  }
+
+  if (isAudioAttachment(attachment)) {
+    return (
+      <div className="composer-attachment-preview audio">
+        <span className="composer-attachment-file-icon">
+          <Icon name="headphones" size={20} />
+        </span>
+        <audio controls preload="metadata" src={source} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="composer-attachment-preview file">
+      <span className="composer-attachment-file-icon">
+        <Icon name="upload" size={20} />
+      </span>
+    </div>
+  );
+}
+
+function AttachmentEditorPreview({ attachment, resolveComposerAttachmentUrl }) {
+  const source = resolveComposerAttachmentUrl(attachment);
+  const label = attachment.alt_text || getComposerAttachmentLabel(attachment);
+
+  if (isImageAttachment(attachment)) {
+    return <img alt={label} src={source} />;
+  }
+
+  if (isVideoAttachment(attachment)) {
+    return <video controls playsInline preload="metadata" src={source} />;
+  }
+
+  if (isAudioAttachment(attachment)) {
+    return (
+      <div className="attachment-editor-audio-preview">
+        <span className="composer-attachment-file-icon">
+          <Icon name="headphones" size={22} />
+        </span>
+        <audio controls preload="metadata" src={source} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="attachment-editor-file-preview">
+      <Icon name="upload" size={28} />
+    </div>
+  );
 }
 
 export const MessageComposer = memo(function MessageComposer({
@@ -209,7 +292,15 @@ export const MessageComposer = memo(function MessageComposer({
         <div className="composer-attachments">
           {composerAttachments.map((attachment) => (
             <article
-              className={`composer-attachment-chip ${isImageAttachment(attachment) ? "image" : "file"} ${
+              className={`composer-attachment-chip ${
+                isImageAttachment(attachment)
+                  ? "image"
+                  : isVideoAttachment(attachment)
+                    ? "video"
+                    : isAudioAttachment(attachment)
+                      ? "audio"
+                      : "file"
+              } ${
                 attachment.upload_status || "ready"
               } ${attachment.is_spoiler ? "spoiler" : ""}`.trim()}
               key={attachmentKey(attachment)}
@@ -239,31 +330,16 @@ export const MessageComposer = memo(function MessageComposer({
                   disabled={submittingMessage}
                   onClick={() => removeComposerAttachment(attachment)}
                   type="button"
-                >
-                  <Icon name="trash" size={15} />
-                </button>
+                  >
+                    <Icon name="trash" size={15} />
+                  </button>
               </div>
 
-              {isImageAttachment(attachment) ? (
-                <button
-                  className="composer-attachment-preview-button"
-                  onClick={() => openAttachmentViewer(attachment)}
-                  type="button"
-                >
-                  <div className="composer-attachment-preview">
-                    <img
-                      alt={attachment.alt_text || getComposerAttachmentLabel(attachment)}
-                      src={resolveComposerAttachmentUrl(attachment)}
-                    />
-                  </div>
-                </button>
-              ) : (
-                <div className="composer-attachment-preview file">
-                  <span className="composer-attachment-file-icon">
-                    <Icon name="upload" size={20} />
-                  </span>
-                </div>
-              )}
+              <ComposerAttachmentPreview
+                attachment={attachment}
+                onOpenImageViewer={() => openAttachmentViewer(attachment)}
+                resolveComposerAttachmentUrl={resolveComposerAttachmentUrl}
+              />
 
               <div className="composer-attachment-copy">
                 <strong title={getComposerAttachmentLabel(attachment)}>
@@ -504,19 +580,10 @@ export const MessageComposer = memo(function MessageComposer({
             </div>
 
             <div className="attachment-editor-preview">
-              {isImageAttachment(editingAttachment) ? (
-                <img
-                  alt={
-                    attachmentEditorState.altText ||
-                    getComposerAttachmentLabel(editingAttachment)
-                  }
-                  src={resolveComposerAttachmentUrl(editingAttachment)}
-                />
-              ) : (
-                <div className="attachment-editor-file-preview">
-                  <Icon name="upload" size={28} />
-                </div>
-              )}
+              <AttachmentEditorPreview
+                attachment={editingAttachment}
+                resolveComposerAttachmentUrl={resolveComposerAttachmentUrl}
+              />
             </div>
 
             <label className="attachment-editor-field">

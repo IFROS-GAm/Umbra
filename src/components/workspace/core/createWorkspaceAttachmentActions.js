@@ -47,6 +47,12 @@ export function createWorkspaceAttachmentActions(context, shared) {
       const localId =
         globalThis.crypto?.randomUUID?.() ||
         `attachment-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`;
+      const previewUrl =
+        file.type?.startsWith("image/") ||
+        file.type?.startsWith("audio/") ||
+        file.type?.startsWith("video/")
+          ? URL.createObjectURL(file)
+          : "";
 
       return {
         alt_text: "",
@@ -55,7 +61,7 @@ export function createWorkspaceAttachmentActions(context, shared) {
         is_spoiler: false,
         local_id: localId,
         name: file.name || `Adjunto ${composerAttachments.length + index + 1}`,
-        preview_url: file.type?.startsWith("image/") ? URL.createObjectURL(file) : "",
+        preview_url: previewUrl,
         size: file.size || 0,
         upload_error: "",
         upload_status: "uploading"

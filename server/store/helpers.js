@@ -79,9 +79,26 @@ export function buildMessagePreview(content = "", attachments = [], sticker = nu
   }
 
   if (attachmentCount === 1) {
-    return attachments[0]?.content_type?.startsWith("image/")
-      ? "[imagen]"
-      : `[${attachments[0]?.name || "archivo"}]`;
+    const attachment = attachments[0] || {};
+    const contentType = String(attachment.content_type || "").toLowerCase();
+
+    if (contentType.startsWith("image/gif")) {
+      return "[gif]";
+    }
+
+    if (contentType.startsWith("image/")) {
+      return "[imagen]";
+    }
+
+    if (contentType.startsWith("video/")) {
+      return "[video]";
+    }
+
+    if (contentType.startsWith("audio/")) {
+      return "[audio]";
+    }
+
+    return `[${attachment?.name || "archivo"}]`;
   }
 
   return `[${attachmentCount} adjuntos]`;
