@@ -178,6 +178,7 @@ export function registerGuildRoutes({
         color: req.body.color,
         guildId: req.params.guildId,
         icon: req.body.icon,
+        iconUrl: req.body.iconUrl,
         name: req.body.name,
         permissions: req.body.permissions,
         userId: req.viewer.id
@@ -200,6 +201,7 @@ export function registerGuildRoutes({
         color: req.body.color,
         guildId: req.params.guildId,
         icon: req.body.icon,
+        iconUrl: req.body.iconUrl,
         name: req.body.name,
         permissions: req.body.permissions,
         roleId: req.params.roleId,

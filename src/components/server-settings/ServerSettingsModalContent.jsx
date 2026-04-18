@@ -8,6 +8,7 @@ import {
   buildGuildInitials,
   getRoleDisplayName,
   getRoleIcon,
+  getRoleIconUrl,
   getRolePermissionOptions,
   buildRoleSummary,
   formatRelativeDate,
@@ -280,6 +281,8 @@ function ServerSettingsMembersTab({
                 (member.role_ids || []).find((roleId) =>
                   assignableRoles.some((role) => role.id === roleId)
                 ) || "";
+              const selectedRole =
+                assignableRoles.find((role) => role.id === selectedRoleId) || null;
 
               return (
                 <div className="server-settings-list-stack" key={member.id}>
@@ -353,6 +356,28 @@ function ServerSettingsMembersTab({
                       {canAssignRole ? (
                         <label className="server-settings-member-role-select">
                           <span>{copy.assignRole}</span>
+                          <div className="server-settings-member-role-current">
+                            <span
+                              className="server-settings-role-icon mini"
+                              style={{
+                                "--server-role-color": selectedRole?.color || "#7F8EA3"
+                              }}
+                            >
+                              {selectedRole?.icon_url ? (
+                                <img
+                                  alt={getRoleDisplayName(selectedRole)}
+                                  src={resolveAssetUrl(selectedRole.icon_url)}
+                                />
+                              ) : (
+                                <span>{getRoleIcon(selectedRole) || "#"}</span>
+                              )}
+                            </span>
+                            <strong
+                              style={selectedRole?.color ? { color: selectedRole.color } : undefined}
+                            >
+                              {selectedRole ? getRoleDisplayName(selectedRole) : copy.noExtraRole}
+                            </strong>
+                          </div>
                           <select
                             disabled={Boolean(memberActionState.mode)}
                             onChange={(event) => onAssignRole(member, event.target.value)}
@@ -481,21 +506,33 @@ function ServerSettingsRolesTab({
   copy,
   filteredRoles,
   language,
+  onClearRoleIcon,
   onCreateRoleDraft,
   onRoleFieldChange,
+  onRoleIconSelection,
   onRolePermissionToggle,
   onRolesQueryChange,
   onSaveRole,
   onSelectRole,
   permissionOptions,
+  roleIconInputRef,
+  roleIconPreview,
   roleForm,
   roleSaving,
   rolesQuery,
   rolesState
 }) {
+  const resolvedRoleIconUrl = roleIconPreview || roleForm.iconUrl || getRoleIconUrl(roleForm);
   return (
     <div className="server-settings-body single-column">
       <div className="server-settings-tab-panel">
+        <input
+          accept="image/*"
+          className="hidden-file-input"
+          onChange={onRoleIconSelection}
+          ref={roleIconInputRef}
+          type="file"
+        />
         <div className="server-settings-list-header">
           <div>
             <h3>{copy.roles}</h3>
@@ -549,7 +586,11 @@ function ServerSettingsRolesTab({
                           "--server-role-color": role.color || "#7F8EA3"
                         }}
                       >
-                        <span>{getRoleIcon(role) || "#"}</span>
+                        {getRoleIconUrl(role) ? (
+                          <img alt={getRoleDisplayName(role)} src={resolveAssetUrl(getRoleIconUrl(role))} />
+                        ) : (
+                          <span>{getRoleIcon(role) || "#"}</span>
+                        )}
                       </span>
                       <div className="server-settings-role-copy">
                         <strong>{getRoleDisplayName(role)}</strong>
@@ -595,7 +636,11 @@ function ServerSettingsRolesTab({
                     "--server-role-color": normalizeColorInput(roleForm.color, "#9AA4B2")
                   }}
                 >
-                  <span>{roleForm.icon || "#"}</span>
+                  {resolvedRoleIconUrl ? (
+                    <img alt={roleForm.name || "Rol"} src={resolveAssetUrl(resolvedRoleIconUrl)} />
+                  ) : (
+                    <span>{roleForm.icon || "#"}</span>
+                  )}
                 </span>
                 <div className="server-settings-role-copy">
                   <strong
@@ -612,6 +657,42 @@ function ServerSettingsRolesTab({
               <div className="server-settings-role-form-grid">
                 <label className="settings-field">
                   <span>{copy.roleIcon}</span>
+                  <div className="server-settings-role-visual-field">
+                    <button
+                      className="server-settings-role-artwork"
+                      disabled={roleForm.isSystem}
+                      onClick={() => roleIconInputRef.current?.click()}
+                      type="button"
+                    >
+                      {resolvedRoleIconUrl ? (
+                        <img alt={roleForm.name || "Rol"} src={resolveAssetUrl(resolvedRoleIconUrl)} />
+                      ) : (
+                        <span>{roleForm.icon || "#"}</span>
+                      )}
+                    </button>
+                    <div className="server-settings-role-visual-actions">
+                      <div className="server-settings-member-actions compact">
+                        <button
+                          className="ghost-button small"
+                          disabled={roleForm.isSystem}
+                          onClick={() => roleIconInputRef.current?.click()}
+                          type="button"
+                        >
+                          <Icon name="image" />
+                          <span>Subir imagen</span>
+                        </button>
+                        <button
+                          className="ghost-button small"
+                          disabled={roleForm.isSystem || (!resolvedRoleIconUrl && !roleForm.icon)}
+                          onClick={onClearRoleIcon}
+                          type="button"
+                        >
+                          <Icon name="close" />
+                          <span>Quitar</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                   <input
                     disabled={roleForm.isSystem}
                     maxLength={4}
@@ -896,13 +977,17 @@ export function ServerSettingsModalContent({
             copy={copy}
             filteredRoles={state.filteredRoles}
             language={language}
+            onClearRoleIcon={state.clearRoleIconPreview}
             onCreateRoleDraft={state.handleCreateRoleDraft}
             onRoleFieldChange={state.updateRoleForm}
+            onRoleIconSelection={state.handleRoleIconSelection}
             onRolePermissionToggle={state.handleToggleRolePermission}
             onRolesQueryChange={state.setRolesQuery}
             onSaveRole={state.handleSaveRole}
             onSelectRole={state.handleSelectRole}
             permissionOptions={getRolePermissionOptions(language)}
+            roleIconInputRef={state.roleIconInputRef}
+            roleIconPreview={state.roleIconPreview}
             roleForm={state.roleForm}
             roleSaving={state.roleSaving}
             rolesQuery={state.rolesQuery}

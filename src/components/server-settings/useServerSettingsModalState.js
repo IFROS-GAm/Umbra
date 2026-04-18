@@ -9,6 +9,7 @@ import {
   getServerSettingsCopy,
   getRoleDisplayName,
   getRoleIcon,
+  getRoleIconUrl,
   normalizeColorInput,
   replaceName
 } from "../serverSettingsModalHelpers.js";
@@ -44,6 +45,7 @@ function buildInitialRoleForm() {
   return {
     color: "#9AA4B2",
     icon: "",
+    iconUrl: "",
     id: null,
     isSystem: false,
     name: "",
@@ -59,6 +61,7 @@ function buildRoleForm(role, language) {
   return {
     color: role.color || "#9AA4B2",
     icon: getRoleIcon(role),
+    iconUrl: getRoleIconUrl(role),
     id: role.id,
     isSystem: Boolean(role.is_default_role || role.is_owner_role),
     name: getRoleDisplayName(role),
@@ -97,6 +100,7 @@ export function useServerSettingsModalState({
 }) {
   const iconInputRef = useRef(null);
   const bannerInputRef = useRef(null);
+  const roleIconInputRef = useRef(null);
 
   const [form, setForm] = useState(() => buildInitialForm(guild));
   const [iconFile, setIconFile] = useState(null);
@@ -116,6 +120,8 @@ export function useServerSettingsModalState({
   const [selectedRoleId, setSelectedRoleId] = useState(null);
   const [roleForm, setRoleForm] = useState(buildInitialRoleForm);
   const [roleSaving, setRoleSaving] = useState(false);
+  const [roleIconFile, setRoleIconFile] = useState(null);
+  const [roleIconPreview, setRoleIconPreview] = useState("");
   const [invitesState, setInvitesState] = useState(buildInitialInvitesState);
   const [memberActionState, setMemberActionState] = useState(buildInitialMemberActionState);
   const [banDraft, setBanDraft] = useState(buildInitialBanDraft);
@@ -139,6 +145,8 @@ export function useServerSettingsModalState({
     setSelectedRoleId(null);
     setRoleForm(buildInitialRoleForm());
     setRoleSaving(false);
+    setRoleIconFile(null);
+    setRoleIconPreview("");
     setInvitesState(buildInitialInvitesState());
     setMemberActionState(buildInitialMemberActionState());
     setBanDraft(buildInitialBanDraft());
@@ -152,8 +160,11 @@ export function useServerSettingsModalState({
       if (bannerPreview.startsWith("blob:")) {
         URL.revokeObjectURL(bannerPreview);
       }
+      if (roleIconPreview.startsWith("blob:")) {
+        URL.revokeObjectURL(roleIconPreview);
+      }
     },
-    [bannerPreview, iconPreview]
+    [bannerPreview, iconPreview, roleIconPreview]
   );
 
   const normalizedBannerColor = normalizeColorInput(
@@ -405,12 +416,26 @@ export function useServerSettingsModalState({
     setCreatingRoleDraft(false);
     setSelectedRoleId(role.id);
     setRoleForm(buildRoleForm(role, language));
+    setRoleIconFile(null);
+    setRoleIconPreview((previous) => {
+      if (previous?.startsWith("blob:")) {
+        URL.revokeObjectURL(previous);
+      }
+      return "";
+    });
   }
 
   function handleCreateRoleDraft() {
     setCreatingRoleDraft(true);
     setSelectedRoleId(null);
     setRoleForm(buildInitialRoleForm());
+    setRoleIconFile(null);
+    setRoleIconPreview((previous) => {
+      if (previous?.startsWith("blob:")) {
+        URL.revokeObjectURL(previous);
+      }
+      return "";
+    });
     setSaved("");
     setError("");
   }
@@ -437,6 +462,15 @@ export function useServerSettingsModalState({
       return URL.createObjectURL(file);
     });
     resetClear(false);
+  }
+
+  function rememberRoleIconPreview(file) {
+    setRoleIconPreview((previous) => {
+      if (previous?.startsWith("blob:")) {
+        URL.revokeObjectURL(previous);
+      }
+      return URL.createObjectURL(file);
+    });
   }
 
   function handleIconSelection(event) {
@@ -473,6 +507,28 @@ export function useServerSettingsModalState({
     rememberPreview(file, setBannerPreview, setClearBanner);
   }
 
+  function handleRoleIconSelection(event) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      setError(copy.invalidIcon);
+      return;
+    }
+
+    setError("");
+    setSaved("");
+    setRoleIconFile(file);
+    rememberRoleIconPreview(file);
+    setRoleForm((previous) => ({
+      ...previous,
+      icon: "",
+      iconUrl: ""
+    }));
+  }
+
   function clearIconPreview() {
     setIconFile(null);
     setIconPreview((previous) => {
@@ -493,6 +549,20 @@ export function useServerSettingsModalState({
       return "";
     });
     setClearBanner(true);
+  }
+
+  function clearRoleIconPreview() {
+    setRoleIconFile(null);
+    setRoleIconPreview((previous) => {
+      if (previous?.startsWith("blob:")) {
+        URL.revokeObjectURL(previous);
+      }
+      return "";
+    });
+    setRoleForm((previous) => ({
+      ...previous,
+      iconUrl: ""
+    }));
   }
 
   async function persistGuildSettings(nextPatch, { successMessage } = {}) {
@@ -579,12 +649,20 @@ export function useServerSettingsModalState({
     setSaved("");
 
     try {
+      let nextIconUrl = roleForm.iconUrl;
+      if (roleIconFile) {
+        const uploadPayload = await api.uploadAttachments([roleIconFile]);
+        nextIconUrl =
+          uploadPayload?.attachments?.[0]?.url || uploadPayload?.attachments?.[0]?.path || "";
+      }
+
       const permissions = buildRolePermissionBits(roleForm.permissionKeys, language);
       const payload = roleForm.id
         ? await api.updateGuildRole({
             color: normalizeColorInput(roleForm.color, "#9AA4B2"),
             guildId: guild.id,
             icon: roleForm.icon,
+            iconUrl: nextIconUrl,
             name: roleForm.name,
             permissions,
             roleId: roleForm.id
@@ -593,6 +671,7 @@ export function useServerSettingsModalState({
             color: normalizeColorInput(roleForm.color, "#9AA4B2"),
             guildId: guild.id,
             icon: roleForm.icon,
+            iconUrl: nextIconUrl,
             name: roleForm.name,
             permissions
           });
@@ -608,6 +687,14 @@ export function useServerSettingsModalState({
         setSelectedRoleId(nextSelectedRole.id);
         setRoleForm(buildRoleForm(nextSelectedRole, language));
       }
+
+      setRoleIconFile(null);
+      setRoleIconPreview((previous) => {
+        if (previous?.startsWith("blob:")) {
+          URL.revokeObjectURL(previous);
+        }
+        return "";
+      });
 
       await refreshWorkspaceSnapshot();
       setSaved(roleForm.id ? copy.roleSaved : copy.roleCreated);
@@ -842,6 +929,7 @@ export function useServerSettingsModalState({
     canManageMembers,
     canManageRoles,
     clearBannerPreview,
+    clearRoleIconPreview,
     clearIconPreview,
     closeBanDraft,
     error,
@@ -856,6 +944,7 @@ export function useServerSettingsModalState({
     handleIconSelection,
     handleBannerSelection,
     handleKickMemberAction,
+    handleRoleIconSelection,
     handleSaveRole,
     handleSelectRole,
     handleSubmit,
@@ -870,6 +959,9 @@ export function useServerSettingsModalState({
     previewBanner,
     previewCardStyle,
     previewIcon,
+    roleIconFile,
+    roleIconInputRef,
+    roleIconPreview,
     roleForm,
     roleSaving,
     rolesQuery,

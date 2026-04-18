@@ -29,6 +29,7 @@ function decorateGuildRole(role, guildMembers) {
     ...role,
     display_name: presentation.name || role?.name || "Rol",
     icon_emoji: presentation.icon,
+    icon_url: presentation.iconUrl,
     is_admin: Boolean(Number(role?.permissions || 0) & PERMISSIONS.ADMINISTRATOR),
     is_default_role: role?.name === "@everyone",
     is_owner_role: role?.name === "Owner",
@@ -542,7 +543,15 @@ export const demoStoreGuildChannelMethods = {
       .map((role) => decorateGuildRole(role, this.db.guild_members));
   }
 ,
-  async createGuildRole({ color = "#9AA4B2", guildId, icon = "", name, permissions = 0, userId }) {
+  async createGuildRole({
+    color = "#9AA4B2",
+    guildId,
+    icon = "",
+    iconUrl = "",
+    name,
+    permissions = 0,
+    userId
+  }) {
     const guild = this.db.guilds.find((item) => item.id === guildId);
     if (!guild) {
       throw createError("Servidor no encontrado.", 404);
@@ -552,6 +561,7 @@ export const demoStoreGuildChannelMethods = {
 
     const storedName = buildStoredRoleName({
       icon,
+      iconUrl,
       name
     });
 
@@ -609,6 +619,7 @@ export const demoStoreGuildChannelMethods = {
     color = "#9AA4B2",
     guildId,
     icon = "",
+    iconUrl = "",
     name,
     permissions = 0,
     roleId,
@@ -632,6 +643,7 @@ export const demoStoreGuildChannelMethods = {
 
     const storedName = buildStoredRoleName({
       icon,
+      iconUrl,
       name
     });
 

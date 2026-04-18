@@ -48,6 +48,7 @@ function decorateGuildRole(role, guildMembers) {
     ...role,
     display_name: presentation.name || role?.name || "Rol",
     icon_emoji: presentation.icon,
+    icon_url: presentation.iconUrl,
     is_admin: Boolean(Number(role?.permissions || 0) & PERMISSIONS.ADMINISTRATOR),
     is_default_role: role?.name === "@everyone",
     is_owner_role: role?.name === "Owner",
@@ -665,7 +666,15 @@ export const supabaseStoreRuntimeGuildMethods = {
     return roles.map((role) => decorateGuildRole(role, guildMembers));
   }
 ,
-  async createGuildRole({ color = "#9AA4B2", guildId, icon = "", name, permissions = 0, userId }) {
+  async createGuildRole({
+    color = "#9AA4B2",
+    guildId,
+    icon = "",
+    iconUrl = "",
+    name,
+    permissions = 0,
+    userId
+  }) {
     const guildRows = await expectData(
       this.client.from("guilds").select("id").eq("id", guildId).limit(1)
     );
@@ -678,7 +687,7 @@ export const supabaseStoreRuntimeGuildMethods = {
       throw createError("No tienes permisos para crear roles en este servidor.", 403);
     }
 
-    const storedName = buildStoredRoleName({ icon, name });
+    const storedName = buildStoredRoleName({ icon, iconUrl, name });
     if (!storedName) {
       throw createError("El rol necesita un nombre.", 400);
     }
@@ -737,6 +746,7 @@ export const supabaseStoreRuntimeGuildMethods = {
     color = "#9AA4B2",
     guildId,
     icon = "",
+    iconUrl = "",
     name,
     permissions = 0,
     roleId,
@@ -765,7 +775,7 @@ export const supabaseStoreRuntimeGuildMethods = {
       throw createError("Ese rol del sistema no se puede editar desde este panel.", 403);
     }
 
-    const storedName = buildStoredRoleName({ icon, name });
+    const storedName = buildStoredRoleName({ icon, iconUrl, name });
     if (!storedName) {
       throw createError("El rol necesita un nombre.", 400);
     }

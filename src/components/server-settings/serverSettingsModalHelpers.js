@@ -193,12 +193,25 @@ export function splitRolePresentation(candidate = "") {
   if (!raw) {
     return {
       icon: "",
+      iconUrl: "",
       name: ""
     };
   }
 
-  const [firstToken = ""] = raw.split(/\s+/, 1);
-  const remainder = raw.slice(firstToken.length).trim();
+  const iconUrlMatch = raw.match(/^\[\[icon-url:(.+?)\]\]\s*/i);
+  const iconUrl = iconUrlMatch ? String(iconUrlMatch[1] || "").trim() : "";
+  const withoutIconUrl = iconUrlMatch ? raw.slice(iconUrlMatch[0].length).trim() : raw;
+
+  if (!withoutIconUrl) {
+    return {
+      icon: "",
+      iconUrl,
+      name: ""
+    };
+  }
+
+  const [firstToken = ""] = withoutIconUrl.split(/\s+/, 1);
+  const remainder = withoutIconUrl.slice(firstToken.length).trim();
   const looksLikeIcon =
     firstToken.length > 0 &&
     firstToken.length <= 4 &&
@@ -207,13 +220,15 @@ export function splitRolePresentation(candidate = "") {
   if (looksLikeIcon && remainder) {
     return {
       icon: firstToken,
+      iconUrl,
       name: remainder
     };
   }
 
   return {
     icon: "",
-    name: raw
+    iconUrl,
+    name: withoutIconUrl
   };
 }
 
@@ -231,6 +246,14 @@ export function getRoleIcon(role) {
   }
 
   return role.icon_emoji || splitRolePresentation(role.name).icon || "";
+}
+
+export function getRoleIconUrl(role) {
+  if (!role) {
+    return "";
+  }
+
+  return role.icon_url || splitRolePresentation(role.name).iconUrl || "";
 }
 
 export function getRolePermissionOptions(language) {

@@ -163,12 +163,25 @@ export function splitStoredRoleName(candidate = "") {
   if (!raw) {
     return {
       icon: "",
+      iconUrl: "",
       name: ""
     };
   }
 
-  const [firstToken = ""] = raw.split(/\s+/, 1);
-  const remainder = raw.slice(firstToken.length).trim();
+  const iconUrlMatch = raw.match(/^\[\[icon-url:(.+?)\]\]\s*/i);
+  const iconUrl = iconUrlMatch ? String(iconUrlMatch[1] || "").trim() : "";
+  const withoutIconUrl = iconUrlMatch ? raw.slice(iconUrlMatch[0].length).trim() : raw;
+
+  if (!withoutIconUrl) {
+    return {
+      icon: "",
+      iconUrl,
+      name: ""
+    };
+  }
+
+  const [firstToken = ""] = withoutIconUrl.split(/\s+/, 1);
+  const remainder = withoutIconUrl.slice(firstToken.length).trim();
   const looksLikeIcon =
     firstToken.length > 0 &&
     firstToken.length <= 4 &&
@@ -177,13 +190,15 @@ export function splitStoredRoleName(candidate = "") {
   if (looksLikeIcon && remainder) {
     return {
       icon: firstToken,
+      iconUrl,
       name: remainder
     };
   }
 
   return {
     icon: "",
-    name: raw
+    iconUrl,
+    name: withoutIconUrl
   };
 }
 
@@ -191,15 +206,17 @@ export function normalizeRoleIcon(candidate = "") {
   return String(candidate || "").trim().slice(0, 4);
 }
 
-export function buildStoredRoleName({ icon = "", name = "" } = {}) {
+export function buildStoredRoleName({ icon = "", iconUrl = "", name = "" } = {}) {
   const normalizedName = String(name || "").trim().slice(0, 40);
   const normalizedIcon = normalizeRoleIcon(icon);
+  const normalizedIconUrl = String(iconUrl || "").trim();
 
   if (!normalizedName) {
     return "";
   }
 
-  return normalizedIcon ? `${normalizedIcon} ${normalizedName}` : normalizedName;
+  const roleName = normalizedIcon ? `${normalizedIcon} ${normalizedName}` : normalizedName;
+  return normalizedIconUrl ? `[[icon-url:${normalizedIconUrl}]] ${roleName}` : roleName;
 }
 
 export function computePermissionBits({
