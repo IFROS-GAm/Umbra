@@ -158,6 +158,50 @@ export function getRolesForMember(roles, member) {
     .sort((a, b) => Number(b.position) - Number(a.position));
 }
 
+export function splitStoredRoleName(candidate = "") {
+  const raw = String(candidate || "").trim();
+  if (!raw) {
+    return {
+      icon: "",
+      name: ""
+    };
+  }
+
+  const [firstToken = ""] = raw.split(/\s+/, 1);
+  const remainder = raw.slice(firstToken.length).trim();
+  const looksLikeIcon =
+    firstToken.length > 0 &&
+    firstToken.length <= 4 &&
+    /[^\p{L}\p{N}_-]/u.test(firstToken);
+
+  if (looksLikeIcon && remainder) {
+    return {
+      icon: firstToken,
+      name: remainder
+    };
+  }
+
+  return {
+    icon: "",
+    name: raw
+  };
+}
+
+export function normalizeRoleIcon(candidate = "") {
+  return String(candidate || "").trim().slice(0, 4);
+}
+
+export function buildStoredRoleName({ icon = "", name = "" } = {}) {
+  const normalizedName = String(name || "").trim().slice(0, 40);
+  const normalizedIcon = normalizeRoleIcon(icon);
+
+  if (!normalizedName) {
+    return "";
+  }
+
+  return normalizedIcon ? `${normalizedIcon} ${normalizedName}` : normalizedName;
+}
+
 export function computePermissionBits({
   guilds,
   guildId,
@@ -624,10 +668,10 @@ export function buildBootstrapState(db, userId) {
             return null;
           }
 
-          return {
-            id: profile.id,
-            username: profile.username,
-            discriminator: profile.discriminator,
+        return {
+          id: profile.id,
+          username: profile.username,
+          discriminator: profile.discriminator,
             avatar_hue: profile.avatar_hue,
             avatar_url: profile.avatar_url || "",
             profile_banner_url: profile.profile_banner_url || "",
@@ -641,7 +685,8 @@ export function buildBootstrapState(db, userId) {
               guildMembers: db.guild_members,
               roles: db.roles,
               userId: profile.id
-            })
+            }),
+            role_ids: Array.isArray(member.role_ids) ? [...member.role_ids] : []
           };
         })
         .filter(Boolean)
@@ -668,14 +713,14 @@ export function buildBootstrapState(db, userId) {
         permissions: {
           bits: permissionBits,
           is_admin: hasPermission(permissionBits, PERMISSIONS.ADMINISTRATOR),
-          can_manage_channels: hasPermission(permissionBits, PERMISSIONS.ADMINISTRATOR),
+          can_manage_channels: hasPermission(permissionBits, PERMISSIONS.MANAGE_CHANNELS),
           can_manage_messages: hasPermission(
             permissionBits,
             PERMISSIONS.MANAGE_MESSAGES
           ),
           can_create_invite: hasPermission(permissionBits, PERMISSIONS.CREATE_INVITE),
-          can_manage_roles: hasPermission(permissionBits, PERMISSIONS.ADMINISTRATOR),
-          can_manage_guild: hasPermission(permissionBits, PERMISSIONS.ADMINISTRATOR)
+          can_manage_roles: hasPermission(permissionBits, PERMISSIONS.MANAGE_ROLES),
+          can_manage_guild: hasPermission(permissionBits, PERMISSIONS.MANAGE_GUILD)
         },
         channels,
         members,

@@ -5,7 +5,10 @@ import { useWorkspaceNavigationState } from "../useWorkspaceNavigationState.jsx"
 
 export function WorkspaceNavigation(props) {
   const canManageStructure = Boolean(props.activeGuild?.permissions?.can_manage_channels);
-  const canManageGuild = Boolean(props.activeGuild?.permissions?.can_manage_guild);
+  const canManageGuild = Boolean(
+    props.activeGuild?.permissions?.can_manage_guild ||
+      props.activeGuild?.permissions?.can_manage_roles
+  );
   const canInviteGuild = Boolean(props.activeGuild?.permissions?.can_create_invite);
 
   const navigation = useWorkspaceNavigationState({

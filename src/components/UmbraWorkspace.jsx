@@ -300,6 +300,7 @@ export function UmbraWorkspace({
     handleCopyDmId,
     handleCopyGuildId,
     handleEditMessage,
+    handleRefreshWorkspace,
     handleKickGuildMember,
     handleLeaveGuild,
     handleMarkDmRead,
@@ -791,6 +792,7 @@ export function UmbraWorkspace({
           handleKickGuildMember={handleKickGuildMember}
           handleOpenDmFromCard={handleOpenDmFromCard}
           handleProfileUpdate={handleProfileUpdate}
+          handleRefreshWorkspace={handleRefreshWorkspace}
           handleRemoveFriend={handleRemoveFriend}
           handleReportUser={handleReportUser}
           handleSaveGuildProfile={handleSaveGuildProfile}

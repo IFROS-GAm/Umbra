@@ -15,6 +15,7 @@ import {
   buildGuildMovePatchPlan,
   buildInviteCode,
   buildInvitePreview,
+  buildStoredRoleName,
   buildMessagePreview,
   buildChannelMovePatchPlan,
   buildDefaultGuildStickerRows,
@@ -27,6 +28,7 @@ import {
   normalizeBanExpiration,
   normalizePrivacySettings,
   normalizeProfileColor,
+  splitStoredRoleName,
   normalizeRecoveryAccount,
   normalizeRecoveryProvider,
   normalizeSocialLinks,
@@ -39,6 +41,21 @@ import {
   sortByDateDesc,
   sortGuildStickers
 } from "./shared.js";
+
+function decorateGuildRole(role, guildMembers) {
+  const presentation = splitStoredRoleName(role?.name);
+  return {
+    ...role,
+    display_name: presentation.name || role?.name || "Rol",
+    icon_emoji: presentation.icon,
+    is_admin: Boolean(Number(role?.permissions || 0) & PERMISSIONS.ADMINISTRATOR),
+    is_default_role: role?.name === "@everyone",
+    is_owner_role: role?.name === "Owner",
+    member_count: guildMembers.filter((member) =>
+      Array.isArray(member.role_ids) && member.role_ids.includes(role.id)
+    ).length
+  };
+}
 
 export const supabaseStoreRuntimeGuildMethods = {
   async createGuild({ description = "", name, ownerId, templateId = "default" }) {
@@ -194,8 +211,8 @@ export const supabaseStoreRuntimeGuildMethods = {
     }
 
     const permissionBits = await this.getPermissionBits(guildId, createdBy);
-    if ((permissionBits & PERMISSIONS.ADMINISTRATOR) !== PERMISSIONS.ADMINISTRATOR) {
-      throw createError("Solo el administrador puede cambiar la estructura del servidor.", 403);
+    if ((permissionBits & PERMISSIONS.MANAGE_CHANNELS) !== PERMISSIONS.MANAGE_CHANNELS) {
+      throw createError("No tienes permisos para cambiar la estructura del servidor.", 403);
     }
 
     const trimmed = sanitizeChannelName(name);
@@ -253,8 +270,8 @@ export const supabaseStoreRuntimeGuildMethods = {
     }
 
     const permissionBits = await this.getPermissionBits(guildId, createdBy);
-    if ((permissionBits & PERMISSIONS.ADMINISTRATOR) !== PERMISSIONS.ADMINISTRATOR) {
-      throw createError("Solo el administrador puede cambiar la estructura del servidor.", 403);
+    if ((permissionBits & PERMISSIONS.MANAGE_CHANNELS) !== PERMISSIONS.MANAGE_CHANNELS) {
+      throw createError("No tienes permisos para cambiar la estructura del servidor.", 403);
     }
 
     const trimmed = sanitizeCategoryName(name);
@@ -316,8 +333,8 @@ export const supabaseStoreRuntimeGuildMethods = {
     }
 
     const permissionBits = await this.getPermissionBits(guildId, createdBy);
-    if ((permissionBits & PERMISSIONS.ADMINISTRATOR) !== PERMISSIONS.ADMINISTRATOR) {
-      throw createError("Solo el administrador puede cambiar la estructura del servidor.", 403);
+    if ((permissionBits & PERMISSIONS.MANAGE_CHANNELS) !== PERMISSIONS.MANAGE_CHANNELS) {
+      throw createError("No tienes permisos para cambiar la estructura del servidor.", 403);
     }
 
     const channels = await expectData(
@@ -439,8 +456,8 @@ export const supabaseStoreRuntimeGuildMethods = {
     }
 
     const permissionBits = await this.getPermissionBits(guildId, userId);
-    if ((permissionBits & PERMISSIONS.ADMINISTRATOR) !== PERMISSIONS.ADMINISTRATOR) {
-      throw createError("Solo el administrador puede editar este servidor.", 403);
+    if ((permissionBits & PERMISSIONS.MANAGE_GUILD) !== PERMISSIONS.MANAGE_GUILD) {
+      throw createError("No tienes permisos para editar este servidor.", 403);
     }
 
     const trimmed = String(name || "").trim();
@@ -539,8 +556,8 @@ export const supabaseStoreRuntimeGuildMethods = {
     }
 
     const permissionBits = await this.getPermissionBits(guildId, userId);
-    if ((permissionBits & PERMISSIONS.ADMINISTRATOR) !== PERMISSIONS.ADMINISTRATOR) {
-      throw createError("Solo el administrador puede crear stickers del servidor.", 403);
+    if ((permissionBits & PERMISSIONS.MANAGE_GUILD) !== PERMISSIONS.MANAGE_GUILD) {
+      throw createError("No tienes permisos para crear stickers del servidor.", 403);
     }
 
     const trimmedName = sanitizeStickerName(name);
@@ -593,8 +610,8 @@ export const supabaseStoreRuntimeGuildMethods = {
     }
 
     const permissionBits = await this.getPermissionBits(guildId, userId);
-    if ((permissionBits & PERMISSIONS.ADMINISTRATOR) !== PERMISSIONS.ADMINISTRATOR) {
-      throw createError("Solo el administrador puede eliminar stickers del servidor.", 403);
+    if ((permissionBits & PERMISSIONS.MANAGE_GUILD) !== PERMISSIONS.MANAGE_GUILD) {
+      throw createError("No tienes permisos para eliminar stickers del servidor.", 403);
     }
 
     const sticker = await this.getGuildStickerById(stickerId);
@@ -630,8 +647,8 @@ export const supabaseStoreRuntimeGuildMethods = {
     }
 
     const permissionBits = await this.getPermissionBits(guildId, userId);
-    if ((permissionBits & PERMISSIONS.ADMINISTRATOR) !== PERMISSIONS.ADMINISTRATOR) {
-      throw createError("Solo el administrador puede ver los roles del servidor.", 403);
+    if ((permissionBits & PERMISSIONS.MANAGE_ROLES) !== PERMISSIONS.MANAGE_ROLES) {
+      throw createError("No tienes permisos para ver los roles del servidor.", 403);
     }
 
     const [roles, guildMembers] = await Promise.all([
@@ -645,13 +662,208 @@ export const supabaseStoreRuntimeGuildMethods = {
       expectData(this.client.from("guild_members").select("role_ids").eq("guild_id", guildId))
     ]);
 
-    return roles.map((role) => ({
-      ...role,
-      is_admin: Boolean(role.permissions & PERMISSIONS.ADMINISTRATOR),
-      member_count: guildMembers.filter((member) =>
-        Array.isArray(member.role_ids) && member.role_ids.includes(role.id)
-      ).length
-    }));
+    return roles.map((role) => decorateGuildRole(role, guildMembers));
+  }
+,
+  async createGuildRole({ color = "#9AA4B2", guildId, icon = "", name, permissions = 0, userId }) {
+    const guildRows = await expectData(
+      this.client.from("guilds").select("id").eq("id", guildId).limit(1)
+    );
+    if (!guildRows[0]) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    const permissionBits = await this.getPermissionBits(guildId, userId);
+    if ((permissionBits & PERMISSIONS.MANAGE_ROLES) !== PERMISSIONS.MANAGE_ROLES) {
+      throw createError("No tienes permisos para crear roles en este servidor.", 403);
+    }
+
+    const storedName = buildStoredRoleName({ icon, name });
+    if (!storedName) {
+      throw createError("El rol necesita un nombre.", 400);
+    }
+
+    const normalizedName = splitStoredRoleName(storedName).name.toLowerCase();
+    if (["@everyone", "owner"].includes(normalizedName)) {
+      throw createError("Ese nombre de rol esta reservado.", 400);
+    }
+
+    const existingRoles = await expectData(
+      this.client.from("roles").select(ROLE_PERMISSION_SELECT).eq("guild_id", guildId)
+    );
+    const duplicateRole = existingRoles.find((role) => {
+      return splitStoredRoleName(role.name).name.toLowerCase() === normalizedName;
+    });
+    if (duplicateRole) {
+      throw createError("Ya existe un rol con ese nombre.", 400);
+    }
+
+    const ownerRole = existingRoles.find((role) => role.name === "Owner");
+    const nextPosition = Math.max(1, Number(ownerRole?.position || 1));
+
+    await Promise.all(
+      existingRoles
+        .filter((role) => Number(role.position || 0) >= nextPosition)
+        .map((role) =>
+          expectData(
+            this.client
+              .from("roles")
+              .update({ position: Number(role.position || 0) + 1 })
+              .eq("id", role.id)
+          )
+        )
+    );
+
+    const rolePayload = {
+      id: createId(),
+      guild_id: guildId,
+      name: storedName,
+      color: normalizeProfileColor(color, "#9AA4B2"),
+      position: nextPosition,
+      permissions: Number(permissions || 0),
+      hoist: false,
+      mentionable: false,
+      created_at: new Date().toISOString()
+    };
+
+    const rows = await expectData(this.client.from("roles").insert(rolePayload).select("*"));
+    const guildMembers = await expectData(
+      this.client.from("guild_members").select("role_ids").eq("guild_id", guildId)
+    );
+    return decorateGuildRole(rows[0] || rolePayload, guildMembers);
+  }
+,
+  async updateGuildRole({
+    color = "#9AA4B2",
+    guildId,
+    icon = "",
+    name,
+    permissions = 0,
+    roleId,
+    userId
+  }) {
+    const guildRows = await expectData(
+      this.client.from("guilds").select("id").eq("id", guildId).limit(1)
+    );
+    if (!guildRows[0]) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    const permissionBits = await this.getPermissionBits(guildId, userId);
+    if ((permissionBits & PERMISSIONS.MANAGE_ROLES) !== PERMISSIONS.MANAGE_ROLES) {
+      throw createError("No tienes permisos para editar roles en este servidor.", 403);
+    }
+
+    const roleRows = await expectData(
+      this.client.from("roles").select(ROLE_PERMISSION_SELECT).eq("id", roleId).limit(1)
+    );
+    const role = roleRows[0] || null;
+    if (!role || role.guild_id !== guildId) {
+      throw createError("Rol no encontrado.", 404);
+    }
+    if (role.name === "@everyone" || role.name === "Owner") {
+      throw createError("Ese rol del sistema no se puede editar desde este panel.", 403);
+    }
+
+    const storedName = buildStoredRoleName({ icon, name });
+    if (!storedName) {
+      throw createError("El rol necesita un nombre.", 400);
+    }
+
+    const normalizedName = splitStoredRoleName(storedName).name.toLowerCase();
+    const existingRoles = await expectData(
+      this.client.from("roles").select(ROLE_PERMISSION_SELECT).eq("guild_id", guildId)
+    );
+    const duplicateRole = existingRoles.find((item) => {
+      if (item.id === role.id) {
+        return false;
+      }
+
+      return splitStoredRoleName(item.name).name.toLowerCase() === normalizedName;
+    });
+    if (duplicateRole) {
+      throw createError("Ya existe un rol con ese nombre.", 400);
+    }
+
+    const rows = await expectData(
+      this.client
+        .from("roles")
+        .update({
+          color: normalizeProfileColor(color, role.color || "#9AA4B2"),
+          name: storedName,
+          permissions: Number(permissions || 0)
+        })
+        .eq("id", role.id)
+        .select("*")
+    );
+    const guildMembers = await expectData(
+      this.client.from("guild_members").select("role_ids").eq("guild_id", guildId)
+    );
+    return decorateGuildRole(rows[0] || role, guildMembers);
+  }
+,
+  async updateGuildMemberRole({ guildId, roleId = null, targetUserId, userId }) {
+    const guildRows = await expectData(
+      this.client.from("guilds").select("id,owner_id").eq("id", guildId).limit(1)
+    );
+    const guild = guildRows[0] || null;
+    if (!guild) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    const permissionBits = await this.getPermissionBits(guildId, userId);
+    if ((permissionBits & PERMISSIONS.MANAGE_ROLES) !== PERMISSIONS.MANAGE_ROLES) {
+      throw createError("No tienes permisos para asignar roles en este servidor.", 403);
+    }
+    if (targetUserId === guild.owner_id) {
+      throw createError("No puedes cambiar el rol del owner desde este panel.", 403);
+    }
+
+    const membershipRows = await expectData(
+      this.client
+        .from("guild_members")
+        .select("guild_id,user_id,role_ids")
+        .eq("guild_id", guildId)
+        .eq("user_id", targetUserId)
+        .limit(1)
+    );
+    const membership = membershipRows[0] || null;
+    if (!membership) {
+      throw createError("Ese miembro ya no pertenece a este servidor.", 404);
+    }
+
+    const roleRows = await expectData(
+      this.client.from("roles").select(ROLE_PERMISSION_SELECT).eq("guild_id", guildId)
+    );
+    const everyoneRole = roleRows.find((role) => role.name === "@everyone");
+    const nextRoleIds = everyoneRole ? [everyoneRole.id] : [];
+
+    if (roleId) {
+      const targetRole = roleRows.find((role) => role.id === roleId);
+      if (!targetRole) {
+        throw createError("El rol seleccionado no existe.", 404);
+      }
+      if (targetRole.name === "@everyone" || targetRole.name === "Owner") {
+        throw createError("Ese rol no se puede asignar desde este panel.", 400);
+      }
+      nextRoleIds.push(targetRole.id);
+    }
+
+    await expectData(
+      this.client
+        .from("guild_members")
+        .update({
+          role_ids: nextRoleIds
+        })
+        .eq("guild_id", guildId)
+        .eq("user_id", targetUserId)
+    );
+
+    return {
+      guild_id: guildId,
+      role_ids: nextRoleIds,
+      user_id: targetUserId
+    };
   }
 ,
   async listGuildInvites({ guildId, userId }) {
@@ -663,8 +875,8 @@ export const supabaseStoreRuntimeGuildMethods = {
     }
 
     const permissionBits = await this.getPermissionBits(guildId, userId);
-    if ((permissionBits & PERMISSIONS.ADMINISTRATOR) !== PERMISSIONS.ADMINISTRATOR) {
-      throw createError("Solo el administrador puede ver las invitaciones del servidor.", 403);
+    if ((permissionBits & PERMISSIONS.MANAGE_GUILD) !== PERMISSIONS.MANAGE_GUILD) {
+      throw createError("No tienes permisos para ver las invitaciones del servidor.", 403);
     }
 
     const invites = await expectData(

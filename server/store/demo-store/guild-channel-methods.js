@@ -13,13 +13,30 @@ import {
   upsertChannelMembership
 } from "../helpers.js";
 import {
+  buildStoredRoleName,
   createError,
   normalizeProfileColor,
+  splitStoredRoleName,
   normalizeStickerEmoji,
   sanitizeCategoryName,
   sanitizeChannelName,
   sanitizeStickerName
 } from "./shared.js";
+
+function decorateGuildRole(role, guildMembers) {
+  const presentation = splitStoredRoleName(role?.name);
+  return {
+    ...role,
+    display_name: presentation.name || role?.name || "Rol",
+    icon_emoji: presentation.icon,
+    is_admin: Boolean(Number(role?.permissions || 0) & PERMISSIONS.ADMINISTRATOR),
+    is_default_role: role?.name === "@everyone",
+    is_owner_role: role?.name === "Owner",
+    member_count: guildMembers.filter((member) =>
+      Array.isArray(member.role_ids) && member.role_ids.includes(role.id)
+    ).length
+  };
+}
 
 export const demoStoreGuildChannelMethods = {
   async createGuild({ description = "", name, ownerId, templateId = "default" }) {
@@ -517,18 +534,130 @@ export const demoStoreGuildChannelMethods = {
       throw createError("Servidor no encontrado.", 404);
     }
 
-    this.assertCanManageGuild(guildId, userId);
+    this.assertCanManageRoles(guildId, userId);
 
     return this.db.roles
       .filter((role) => role.guild_id === guildId)
       .sort((left, right) => Number(right.position || 0) - Number(left.position || 0))
-      .map((role) => ({
-        ...role,
-        is_admin: Boolean(role.permissions & PERMISSIONS.ADMINISTRATOR),
-        member_count: this.db.guild_members.filter((member) =>
-          Array.isArray(member.role_ids) && member.role_ids.includes(role.id)
-        ).length
-      }));
+      .map((role) => decorateGuildRole(role, this.db.guild_members));
+  }
+,
+  async createGuildRole({ color = "#9AA4B2", guildId, icon = "", name, permissions = 0, userId }) {
+    const guild = this.db.guilds.find((item) => item.id === guildId);
+    if (!guild) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    this.assertCanManageRoles(guildId, userId);
+
+    const storedName = buildStoredRoleName({
+      icon,
+      name
+    });
+
+    if (!storedName) {
+      throw createError("El rol necesita un nombre.", 400);
+    }
+
+    const normalizedName = splitStoredRoleName(storedName).name.toLowerCase();
+    if (["@everyone", "owner"].includes(normalizedName)) {
+      throw createError("Ese nombre de rol esta reservado.", 400);
+    }
+
+    const duplicateRole = this.db.roles.find((role) => {
+      if (role.guild_id !== guildId) {
+        return false;
+      }
+
+      return splitStoredRoleName(role.name).name.toLowerCase() === normalizedName;
+    });
+
+    if (duplicateRole) {
+      throw createError("Ya existe un rol con ese nombre.", 400);
+    }
+
+    const ownerRole = this.db.roles.find(
+      (role) => role.guild_id === guildId && role.name === "Owner"
+    );
+    const nextPosition = Math.max(1, Number(ownerRole?.position || 1));
+
+    this.db.roles
+      .filter((role) => role.guild_id === guildId && Number(role.position || 0) >= nextPosition)
+      .forEach((role) => {
+        role.position = Number(role.position || 0) + 1;
+      });
+
+    const role = {
+      id: createId(),
+      guild_id: guildId,
+      name: storedName,
+      color: normalizeProfileColor(color, "#9AA4B2"),
+      position: nextPosition,
+      permissions: Number(permissions || 0),
+      hoist: false,
+      mentionable: false,
+      created_at: new Date().toISOString()
+    };
+
+    this.db.roles.push(role);
+    await this.save();
+
+    return decorateGuildRole(role, this.db.guild_members);
+  }
+,
+  async updateGuildRole({
+    color = "#9AA4B2",
+    guildId,
+    icon = "",
+    name,
+    permissions = 0,
+    roleId,
+    userId
+  }) {
+    const guild = this.db.guilds.find((item) => item.id === guildId);
+    if (!guild) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    this.assertCanManageRoles(guildId, userId);
+
+    const role = this.db.roles.find((item) => item.id === roleId && item.guild_id === guildId);
+    if (!role) {
+      throw createError("Rol no encontrado.", 404);
+    }
+
+    if (role.name === "@everyone" || role.name === "Owner") {
+      throw createError("Ese rol del sistema no se puede editar desde este panel.", 403);
+    }
+
+    const storedName = buildStoredRoleName({
+      icon,
+      name
+    });
+
+    if (!storedName) {
+      throw createError("El rol necesita un nombre.", 400);
+    }
+
+    const normalizedName = splitStoredRoleName(storedName).name.toLowerCase();
+    const duplicateRole = this.db.roles.find((item) => {
+      if (item.id === role.id || item.guild_id !== guildId) {
+        return false;
+      }
+
+      return splitStoredRoleName(item.name).name.toLowerCase() === normalizedName;
+    });
+
+    if (duplicateRole) {
+      throw createError("Ya existe un rol con ese nombre.", 400);
+    }
+
+    role.name = storedName;
+    role.color = normalizeProfileColor(color, role.color || "#9AA4B2");
+    role.permissions = Number(permissions || 0);
+
+    await this.save();
+    return decorateGuildRole(role, this.db.guild_members);
   }
 ,
   async listGuildInvites({ guildId, userId }) {

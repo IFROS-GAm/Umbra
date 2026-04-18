@@ -8,6 +8,7 @@ import {
 import {
   buildInvitePreview,
   buildChannelMovePatchPlan,
+  buildStoredRoleName,
   buildDefaultGuildStickerRows,
   buildGuildMovePatchPlan,
   buildMessagePreview,
@@ -15,7 +16,9 @@ import {
   enrichMessages,
   getDefaultGuildChannel,
   isGuildVoiceChannel,
+  normalizeRoleIcon,
   resolveMentionUserIds,
+  splitStoredRoleName,
   sortByDateDesc
 } from "../helpers.js";
 
@@ -27,6 +30,7 @@ export {
   SYSTEM_REACTIONS,
   buildInvitePreview,
   buildChannelMovePatchPlan,
+  buildStoredRoleName,
   buildDefaultGuildStickerRows,
   buildGuildMovePatchPlan,
   buildMessagePreview,
@@ -34,7 +38,9 @@ export {
   enrichMessages,
   getDefaultGuildChannel,
   isGuildVoiceChannel,
+  normalizeRoleIcon,
   resolveMentionUserIds,
+  splitStoredRoleName,
   sortByDateDesc
 };
 

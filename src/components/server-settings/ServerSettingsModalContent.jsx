@@ -6,8 +6,12 @@ import { Icon } from "../Icon.jsx";
 import { ServerStickersPanel } from "../ServerStickersPanel.jsx";
 import {
   buildGuildInitials,
+  getRoleDisplayName,
+  getRoleIcon,
+  getRolePermissionOptions,
   buildRoleSummary,
   formatRelativeDate,
+  normalizeColorInput,
   replaceCount,
   replaceName
 } from "../serverSettingsModalHelpers.js";
@@ -212,6 +216,7 @@ function ServerSettingsProfileTab({
 function ServerSettingsMembersTab({
   banDraft,
   canManageMembers,
+  canManageRoles,
   copy,
   currentUserId,
   filteredMembers,
@@ -219,12 +224,14 @@ function ServerSettingsMembersTab({
   language,
   memberActionState,
   membersQuery,
+  assignableRoles,
   onBanDraftChange,
   onBanMember,
   onCloseBanDraft,
   onKickMember,
   onMembersQueryChange,
   onOpenBanDraft,
+  onAssignRole,
   sortedMembers
 }) {
   return (
@@ -263,9 +270,16 @@ function ServerSettingsMembersTab({
             filteredMembers.map((member) => {
               const isBusy =
                 memberActionState.memberId === member.id &&
-                (memberActionState.mode === "kick" || memberActionState.mode === "ban");
+                (memberActionState.mode === "kick" ||
+                  memberActionState.mode === "ban" ||
+                  memberActionState.mode === "role");
               const canModerateMember =
                 canManageMembers && member.id !== guild.owner_id && member.id !== currentUserId;
+              const canAssignRole = canManageRoles && member.id !== guild.owner_id;
+              const selectedRoleId =
+                (member.role_ids || []).find((roleId) =>
+                  assignableRoles.some((role) => role.id === roleId)
+                ) || "";
 
               return (
                 <div className="server-settings-list-stack" key={member.id}>
@@ -334,6 +348,25 @@ function ServerSettingsMembersTab({
                             <span>{copy.banAction}</span>
                           </button>
                         </div>
+                      ) : null}
+
+                      {canAssignRole ? (
+                        <label className="server-settings-member-role-select">
+                          <span>{copy.assignRole}</span>
+                          <select
+                            disabled={Boolean(memberActionState.mode)}
+                            onChange={(event) => onAssignRole(member, event.target.value)}
+                            value={selectedRoleId}
+                          >
+                            <option value="">{copy.noExtraRole}</option>
+                            {assignableRoles.map((role) => (
+                              <option key={role.id} value={role.id}>
+                                {role.icon_emoji ? `${role.icon_emoji} ` : ""}
+                                {getRoleDisplayName(role)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
                       ) : null}
                     </div>
                   </div>
@@ -444,10 +477,19 @@ function ServerSettingsMembersTab({
 }
 
 function ServerSettingsRolesTab({
+  canManageRoles,
   copy,
   filteredRoles,
   language,
+  onCreateRoleDraft,
+  onRoleFieldChange,
+  onRolePermissionToggle,
   onRolesQueryChange,
+  onSaveRole,
+  onSelectRole,
+  permissionOptions,
+  roleForm,
+  roleSaving,
   rolesQuery,
   rolesState
 }) {
@@ -455,8 +497,19 @@ function ServerSettingsRolesTab({
     <div className="server-settings-body single-column">
       <div className="server-settings-tab-panel">
         <div className="server-settings-list-header">
-          <h3>{copy.roles}</h3>
-          <span>{copy.rolesSubtitle}</span>
+          <div>
+            <h3>{copy.roles}</h3>
+            <span>{copy.rolesSubtitle}</span>
+          </div>
+          <button
+            className="primary-button small"
+            disabled={!canManageRoles}
+            onClick={onCreateRoleDraft}
+            type="button"
+          >
+            <Icon name="add" />
+            <span>{copy.createRole}</span>
+          </button>
         </div>
 
         <label className="settings-search server-settings-search">
@@ -477,39 +530,161 @@ function ServerSettingsRolesTab({
         ) : null}
 
         {!rolesState.loading && !rolesState.error ? (
-          <div className="server-settings-list">
-            {filteredRoles.length ? (
-              filteredRoles.map((role) => (
-                <div className="server-settings-list-row role-row" key={role.id}>
-                  <div className="server-settings-role-main">
-                    <span
-                      className="server-settings-role-dot"
-                      style={{ background: role.color || "#7F8EA3" }}
-                    />
-                    <div className="server-settings-role-copy">
-                      <strong>{role.name}</strong>
-                      <span>{buildRoleSummary(role, language)}</span>
+          <div className="server-settings-roles-shell">
+            <div className="server-settings-list server-settings-roles-list">
+              {filteredRoles.length ? (
+                filteredRoles.map((role) => (
+                  <button
+                    className={`server-settings-list-row role-row ${
+                      roleForm.id === role.id ? "active" : ""
+                    }`.trim()}
+                    key={role.id}
+                    onClick={() => onSelectRole(role)}
+                    type="button"
+                  >
+                    <div className="server-settings-role-main">
+                      <span
+                        className="server-settings-role-icon"
+                        style={{
+                          "--server-role-color": role.color || "#7F8EA3"
+                        }}
+                      >
+                        <span>{getRoleIcon(role) || "#"}</span>
+                      </span>
+                      <div className="server-settings-role-copy">
+                        <strong>{getRoleDisplayName(role)}</strong>
+                        <span>{buildRoleSummary(role, language)}</span>
+                      </div>
                     </div>
-                  </div>
-                  <div className="server-settings-badges">
-                    <span className="server-settings-pill">
-                      {replaceCount(
-                        copy.rolesMemberCount,
-                        role.member_count || 0,
-                        `${role.member_count || 0} miembros`
-                      )}
-                    </span>
-                    {role.is_admin ? (
-                      <span className="server-settings-pill accent">{copy.admin}</span>
-                    ) : null}
-                  </div>
+                    <div className="server-settings-badges">
+                      <span className="server-settings-pill">
+                        {replaceCount(
+                          copy.rolesMemberCount,
+                          role.member_count || 0,
+                          `${role.member_count || 0} miembros`
+                        )}
+                      </span>
+                      {role.is_admin ? (
+                        <span className="server-settings-pill accent">{copy.admin}</span>
+                      ) : null}
+                    </div>
+                  </button>
+                ))
+              ) : (
+                <div className="server-settings-empty">
+                  {rolesState.roles.length ? copy.noRolesMatch : copy.noRoles}
                 </div>
-              ))
-            ) : (
-              <div className="server-settings-empty">
-                {rolesState.roles.length ? copy.noRolesMatch : copy.noRoles}
+              )}
+            </div>
+
+            <div className="server-settings-role-editor">
+              <div className="server-settings-list-header role-editor-header">
+                <div>
+                  <h3>{roleForm.id ? getRoleDisplayName(roleForm) : copy.createRole}</h3>
+                  <span>{copy.roleEditorHint}</span>
+                </div>
+                {roleForm.isSystem ? (
+                  <span className="server-settings-pill">{copy.roleSystemLocked}</span>
+                ) : null}
               </div>
-            )}
+
+              <div className="server-settings-role-preview-card">
+                <span
+                  className="server-settings-role-icon large"
+                  style={{
+                    "--server-role-color": normalizeColorInput(roleForm.color, "#9AA4B2")
+                  }}
+                >
+                  <span>{roleForm.icon || "#"}</span>
+                </span>
+                <div className="server-settings-role-copy">
+                  <strong
+                    style={{
+                      color: normalizeColorInput(roleForm.color, "#9AA4B2")
+                    }}
+                  >
+                    {roleForm.name || "Nuevo rol"}
+                  </strong>
+                  <span>{copy.roleEditorHint}</span>
+                </div>
+              </div>
+
+              <div className="server-settings-role-form-grid">
+                <label className="settings-field">
+                  <span>{copy.roleIcon}</span>
+                  <input
+                    disabled={roleForm.isSystem}
+                    maxLength={4}
+                    onChange={(event) => onRoleFieldChange("icon", event.target.value)}
+                    placeholder="✨"
+                    value={roleForm.icon}
+                  />
+                </label>
+
+                <label className="settings-field">
+                  <span>{copy.roleName}</span>
+                  <input
+                    disabled={roleForm.isSystem}
+                    maxLength={40}
+                    onChange={(event) => onRoleFieldChange("name", event.target.value)}
+                    placeholder="Moderador"
+                    value={roleForm.name}
+                  />
+                </label>
+
+                <label className="settings-field">
+                  <span>{copy.roleColor}</span>
+                  <div className="server-settings-role-color-row">
+                    <input
+                      disabled={roleForm.isSystem}
+                      onChange={(event) => onRoleFieldChange("color", event.target.value)}
+                      type="color"
+                      value={normalizeColorInput(roleForm.color, "#9AA4B2")}
+                    />
+                    <span>{normalizeColorInput(roleForm.color, "#9AA4B2")}</span>
+                  </div>
+                </label>
+              </div>
+
+              <div className="server-settings-role-permissions">
+                <strong>{copy.rolePermissions}</strong>
+                <div className="server-settings-role-permission-grid">
+                  {permissionOptions.map((permission) => {
+                    const selected = roleForm.permissionKeys.includes(permission.key);
+                    return (
+                      <button
+                        className={`server-settings-role-permission ${
+                          selected ? "active" : ""
+                        }`.trim()}
+                        disabled={roleForm.isSystem || !canManageRoles}
+                        key={permission.key}
+                        onClick={() => onRolePermissionToggle(permission.key)}
+                        type="button"
+                      >
+                        <span>{permission.label}</span>
+                        {selected ? <Icon name="check" size={16} /> : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="settings-form-actions">
+                <button
+                  className="primary-button"
+                  disabled={roleSaving || roleForm.isSystem || !canManageRoles}
+                  onClick={onSaveRole}
+                  type="button"
+                >
+                  <Icon name="save" />
+                  <span>{roleSaving ? copy.saving : copy.saveChanges}</span>
+                </button>
+                <button className="ghost-button" onClick={onCreateRoleDraft} type="button">
+                  <Icon name="add" />
+                  <span>{copy.createRole}</span>
+                </button>
+              </div>
+            </div>
           </div>
         ) : null}
       </div>
@@ -695,6 +870,7 @@ export function ServerSettingsModalContent({
           <ServerSettingsMembersTab
             banDraft={state.banDraft}
             canManageMembers={state.canManageMembers}
+            canManageRoles={state.canManageRoles}
             copy={copy}
             currentUserId={currentUserId}
             filteredMembers={state.filteredMembers}
@@ -702,22 +878,33 @@ export function ServerSettingsModalContent({
             language={language}
             memberActionState={state.memberActionState}
             membersQuery={state.membersQuery}
+            assignableRoles={state.assignableRoles}
             onBanDraftChange={state.setBanDraft}
             onBanMember={state.handleBanMemberAction}
             onCloseBanDraft={state.closeBanDraft}
             onKickMember={state.handleKickMemberAction}
             onMembersQueryChange={state.setMembersQuery}
             onOpenBanDraft={state.openBanDraft}
+            onAssignRole={state.handleAssignRoleToMember}
             sortedMembers={state.sortedMembers}
           />
         ) : null}
 
         {activeTab === "roles" ? (
           <ServerSettingsRolesTab
+            canManageRoles={state.canManageRoles}
             copy={copy}
             filteredRoles={state.filteredRoles}
             language={language}
+            onCreateRoleDraft={state.handleCreateRoleDraft}
+            onRoleFieldChange={state.updateRoleForm}
+            onRolePermissionToggle={state.handleToggleRolePermission}
             onRolesQueryChange={state.setRolesQuery}
+            onSaveRole={state.handleSaveRole}
+            onSelectRole={state.handleSelectRole}
+            permissionOptions={getRolePermissionOptions(language)}
+            roleForm={state.roleForm}
+            roleSaving={state.roleSaving}
             rolesQuery={state.rolesQuery}
             rolesState={state.rolesState}
           />

@@ -71,6 +71,10 @@ export function createWorkspaceNavigationActions({
     });
   }
 
+  async function handleRefreshWorkspace() {
+    await loadBootstrap(activeSelectionRef.current);
+  }
+
   function handleSelectGuild(guild) {
     const defaultChannel =
       guild.channels.find((channel) => !channel.is_voice && !channel.is_category) ||
@@ -649,6 +653,7 @@ export function createWorkspaceNavigationActions({
     handleOpenGuildPrivacy,
     handleOpenGuildSettings,
     handleSaveGuildProfile,
+    handleRefreshWorkspace,
     handleSelectDirectLink,
     handleSelectGuild,
     handleSelectHome,

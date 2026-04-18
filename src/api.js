@@ -292,6 +292,36 @@ export const api = {
   listGuildRoles({ guildId }) {
     return request(`/api/guilds/${guildId}/roles`);
   },
+  createGuildRole({ color, guildId, icon, name, permissions }) {
+    return request(`/api/guilds/${guildId}/roles`, {
+      method: "POST",
+      body: JSON.stringify({
+        color,
+        icon,
+        name,
+        permissions
+      })
+    });
+  },
+  updateGuildRole({ color, guildId, icon, name, permissions, roleId }) {
+    return request(`/api/guilds/${guildId}/roles/${roleId}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        color,
+        icon,
+        name,
+        permissions
+      })
+    });
+  },
+  updateGuildMemberRole({ guildId, roleId = null, userId }) {
+    return request(`/api/guilds/${guildId}/members/${userId}/roles`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        roleId
+      })
+    });
+  },
   listGuildStickers({ guildId }) {
     return request(`/api/guilds/${guildId}/stickers`);
   },

@@ -11,6 +11,7 @@ export function ServerSettingsModal({
   onBanMember,
   onClose,
   onKickMember,
+  onRefresh,
   onSave
 }) {
   const copy = useServerSettingsCopy(language);
@@ -21,6 +22,7 @@ export function ServerSettingsModal({
     language,
     onBanMember,
     onKickMember,
+    onRefresh,
     onSave
   });
 

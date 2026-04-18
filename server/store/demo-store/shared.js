@@ -1,4 +1,11 @@
-import { buildDefaultGuildStickerRows } from "../helpers.js";
+import {
+  buildDefaultGuildStickerRows,
+  buildStoredRoleName,
+  normalizeRoleIcon,
+  splitStoredRoleName
+} from "../helpers.js";
+
+export { buildStoredRoleName, normalizeRoleIcon, splitStoredRoleName };
 
 export function createError(message, statusCode = 400) {
   const error = new Error(message);

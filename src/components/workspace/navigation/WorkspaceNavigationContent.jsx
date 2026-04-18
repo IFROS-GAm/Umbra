@@ -83,7 +83,10 @@ export function WorkspaceNavigationContent({
       {navigation.serverContextGuild ? (
         <ServerContextMenu
           canInviteGuild={Boolean(navigation.serverContextGuild?.permissions?.can_create_invite)}
-          canManageGuild={Boolean(navigation.serverContextGuild?.permissions?.can_manage_guild)}
+          canManageGuild={Boolean(
+            navigation.serverContextGuild?.permissions?.can_manage_guild ||
+              navigation.serverContextGuild?.permissions?.can_manage_roles
+          )}
           guild={navigation.serverContextGuild}
           language={language}
           onClose={() => navigation.setServerContextMenu(null)}

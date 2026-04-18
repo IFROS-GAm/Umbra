@@ -26,6 +26,10 @@
     grid-template-columns: 1fr;
   }
 
+  .server-settings-roles-shell {
+    grid-template-columns: 1fr;
+  }
+
   .server-settings-preview {
     justify-content: flex-start;
   }
@@ -66,6 +70,11 @@
   }
 
   .server-banner-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .server-settings-role-form-grid,
+  .server-settings-role-permission-grid {
     grid-template-columns: 1fr;
   }
 

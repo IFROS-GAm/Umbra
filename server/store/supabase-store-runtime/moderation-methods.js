@@ -246,8 +246,8 @@ export const supabaseStoreRuntimeModerationMethods = {
     }
 
     const permissionBits = await this.getPermissionBits(guildId, actorId);
-    if ((permissionBits & PERMISSIONS.ADMINISTRATOR) !== PERMISSIONS.ADMINISTRATOR) {
-      throw createError("Solo el administrador puede moderar miembros del servidor.", 403);
+    if ((permissionBits & PERMISSIONS.MANAGE_GUILD) !== PERMISSIONS.MANAGE_GUILD) {
+      throw createError("No tienes permisos para moderar miembros del servidor.", 403);
     }
 
     if (targetUserId === actorId) {

@@ -229,4 +229,52 @@ export const demoStoreGuildMembershipMethods = {
       user_id: targetUserId
     };
   }
+,
+  async updateGuildMemberRole({ guildId, roleId = null, targetUserId, userId }) {
+    const guild = this.db.guilds.find((item) => item.id === guildId);
+    if (!guild) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    this.assertCanManageRoles(guildId, userId);
+
+    if (targetUserId === guild.owner_id) {
+      throw createError("No puedes cambiar el rol del owner desde este panel.", 403);
+    }
+
+    const membership = this.db.guild_members.find(
+      (member) => member.guild_id === guildId && member.user_id === targetUserId
+    );
+    if (!membership) {
+      throw createError("Ese miembro ya no pertenece a este servidor.", 404);
+    }
+
+    const everyoneRole = this.db.roles.find(
+      (role) => role.guild_id === guildId && role.name === "@everyone"
+    );
+    const nextRoleIds = everyoneRole ? [everyoneRole.id] : [];
+
+    if (roleId) {
+      const targetRole = this.db.roles.find(
+        (role) => role.id === roleId && role.guild_id === guildId
+      );
+      if (!targetRole) {
+        throw createError("El rol seleccionado no existe.", 404);
+      }
+      if (targetRole.name === "@everyone" || targetRole.name === "Owner") {
+        throw createError("Ese rol no se puede asignar desde este panel.", 400);
+      }
+
+      nextRoleIds.push(targetRole.id);
+    }
+
+    membership.role_ids = nextRoleIds;
+    await this.save();
+
+    return {
+      guild_id: guildId,
+      role_ids: nextRoleIds,
+      user_id: targetUserId
+    };
+  }
 };

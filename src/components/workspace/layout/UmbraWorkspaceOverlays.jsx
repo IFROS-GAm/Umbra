@@ -42,6 +42,7 @@ export function UmbraWorkspaceOverlays({
   handleKickGuildMember,
   handleOpenDmFromCard,
   handleProfileUpdate,
+  handleRefreshWorkspace,
   handleRemoveFriend,
   handleReportUser,
   handleSaveGuildProfile,
@@ -238,6 +239,7 @@ export function UmbraWorkspaceOverlays({
             onBanMember={handleBanGuildMember}
             onClose={() => setServerSettingsGuildId(null)}
             onKickMember={handleKickGuildMember}
+            onRefresh={handleRefreshWorkspace}
             onSave={handleSaveGuildProfile}
           />
         </Suspense>

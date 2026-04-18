@@ -163,13 +163,37 @@ export const demoStoreBaseMethods = {
       userId
     });
 
-    if ((permissionBits & PERMISSIONS.ADMINISTRATOR) !== PERMISSIONS.ADMINISTRATOR) {
-      throw createError("Solo el administrador puede cambiar la estructura del servidor.", 403);
+    if ((permissionBits & PERMISSIONS.MANAGE_CHANNELS) !== PERMISSIONS.MANAGE_CHANNELS) {
+      throw createError("No tienes permisos para cambiar la estructura del servidor.", 403);
     }
   }
 ,
   assertCanManageGuild(guildId, userId) {
-    this.assertCanManageChannels(guildId, userId);
+    const permissionBits = computePermissionBits({
+      guilds: this.db.guilds,
+      guildId,
+      guildMembers: this.db.guild_members,
+      roles: this.db.roles,
+      userId
+    });
+
+    if ((permissionBits & PERMISSIONS.MANAGE_GUILD) !== PERMISSIONS.MANAGE_GUILD) {
+      throw createError("No tienes permisos para editar este servidor.", 403);
+    }
+  }
+,
+  assertCanManageRoles(guildId, userId) {
+    const permissionBits = computePermissionBits({
+      guilds: this.db.guilds,
+      guildId,
+      guildMembers: this.db.guild_members,
+      roles: this.db.roles,
+      userId
+    });
+
+    if ((permissionBits & PERMISSIONS.MANAGE_ROLES) !== PERMISSIONS.MANAGE_ROLES) {
+      throw createError("No tienes permisos para gestionar roles en este servidor.", 403);
+    }
   }
 ,
   pruneExpiredGuildBans({ guildId = null, userId = null } = {}) {

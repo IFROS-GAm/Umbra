@@ -2,9 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { api, buildInviteUrl } from "../../api.js";
 import {
+  buildRolePermissionBits,
   buildGuildBannerStyle,
   buildRoleSummary,
+  extractRolePermissionKeys,
   getServerSettingsCopy,
+  getRoleDisplayName,
+  getRoleIcon,
   normalizeColorInput,
   replaceName
 } from "../serverSettingsModalHelpers.js";
@@ -36,6 +40,32 @@ function buildInitialRolesState() {
   };
 }
 
+function buildInitialRoleForm() {
+  return {
+    color: "#9AA4B2",
+    icon: "",
+    id: null,
+    isSystem: false,
+    name: "",
+    permissionKeys: ["readMessages", "sendMessages"]
+  };
+}
+
+function buildRoleForm(role, language) {
+  if (!role) {
+    return buildInitialRoleForm();
+  }
+
+  return {
+    color: role.color || "#9AA4B2",
+    icon: getRoleIcon(role),
+    id: role.id,
+    isSystem: Boolean(role.is_default_role || role.is_owner_role),
+    name: getRoleDisplayName(role),
+    permissionKeys: extractRolePermissionKeys(role.permissions, language)
+  };
+}
+
 function buildInitialInvitesState() {
   return {
     creating: false,
@@ -62,6 +92,7 @@ export function useServerSettingsModalState({
   language,
   onBanMember,
   onKickMember,
+  onRefresh,
   onSave
 }) {
   const iconInputRef = useRef(null);
@@ -81,6 +112,10 @@ export function useServerSettingsModalState({
   const [membersQuery, setMembersQuery] = useState("");
   const [rolesQuery, setRolesQuery] = useState("");
   const [rolesState, setRolesState] = useState(buildInitialRolesState);
+  const [creatingRoleDraft, setCreatingRoleDraft] = useState(false);
+  const [selectedRoleId, setSelectedRoleId] = useState(null);
+  const [roleForm, setRoleForm] = useState(buildInitialRoleForm);
+  const [roleSaving, setRoleSaving] = useState(false);
   const [invitesState, setInvitesState] = useState(buildInitialInvitesState);
   const [memberActionState, setMemberActionState] = useState(buildInitialMemberActionState);
   const [banDraft, setBanDraft] = useState(buildInitialBanDraft);
@@ -100,6 +135,10 @@ export function useServerSettingsModalState({
     setMembersQuery("");
     setRolesQuery("");
     setRolesState(buildInitialRolesState());
+    setCreatingRoleDraft(false);
+    setSelectedRoleId(null);
+    setRoleForm(buildInitialRoleForm());
+    setRoleSaving(false);
     setInvitesState(buildInitialInvitesState());
     setMemberActionState(buildInitialMemberActionState());
     setBanDraft(buildInitialBanDraft());
@@ -163,6 +202,10 @@ export function useServerSettingsModalState({
     () => guild.owner_id === currentUserId || Boolean(guild.permissions?.can_manage_guild),
     [currentUserId, guild.owner_id, guild.permissions?.can_manage_guild]
   );
+  const canManageRoles = useMemo(
+    () => guild.owner_id === currentUserId || Boolean(guild.permissions?.can_manage_roles),
+    [currentUserId, guild.owner_id, guild.permissions?.can_manage_roles]
+  );
 
   const filteredRoles = useMemo(() => {
     const normalizedQuery = String(rolesQuery || "").trim().toLowerCase();
@@ -171,14 +214,20 @@ export function useServerSettingsModalState({
     }
 
     return rolesState.roles.filter((role) =>
-      `${role.name || ""} ${buildRoleSummary(role, language)}`
+      `${getRoleDisplayName(role)} ${buildRoleSummary(role, language)}`
         .toLowerCase()
         .includes(normalizedQuery)
     );
   }, [language, rolesQuery, rolesState.roles]);
 
+  const assignableRoles = useMemo(
+    () =>
+      (rolesState.roles || []).filter((role) => !role.is_default_role && !role.is_owner_role),
+    [rolesState.roles]
+  );
+
   useEffect(() => {
-    if (activeTab !== "roles" || rolesState.loaded) {
+    if (!["members", "roles"].includes(activeTab) || rolesState.loaded) {
       return;
     }
 
@@ -220,6 +269,37 @@ export function useServerSettingsModalState({
       cancelled = true;
     };
   }, [activeTab, guild.id, rolesState.loaded]);
+
+  useEffect(() => {
+    if (creatingRoleDraft) {
+      return;
+    }
+
+    const availableRoles = rolesState.roles || [];
+    if (!availableRoles.length) {
+      if (selectedRoleId || roleForm.id) {
+        setSelectedRoleId(null);
+        setRoleForm(buildInitialRoleForm());
+      }
+      return;
+    }
+
+    const preferredRole =
+      availableRoles.find((role) => role.id === selectedRoleId) ||
+      availableRoles.find((role) => !role.is_default_role && !role.is_owner_role) ||
+      availableRoles[0];
+
+    if (!preferredRole) {
+      return;
+    }
+
+    if (preferredRole.id === roleForm.id && selectedRoleId === preferredRole.id) {
+      return;
+    }
+
+    setSelectedRoleId(preferredRole.id);
+    setRoleForm(buildRoleForm(preferredRole, language));
+  }, [creatingRoleDraft, language, roleForm.id, rolesState.roles, selectedRoleId]);
 
   useEffect(() => {
     if (activeTab !== "invites" || invitesState.loaded) {
@@ -272,6 +352,81 @@ export function useServerSettingsModalState({
       ...previous,
       [key]: value
     }));
+  }
+
+  async function refreshWorkspaceSnapshot() {
+    if (typeof onRefresh === "function") {
+      await onRefresh();
+    }
+  }
+
+  async function refreshRoles() {
+    setRolesState((previous) => ({
+      ...previous,
+      error: "",
+      loading: true
+    }));
+
+    try {
+      const payload = await api.listGuildRoles({ guildId: guild.id });
+      setRolesState({
+        error: "",
+        loaded: true,
+        loading: false,
+        roles: payload.roles || []
+      });
+      return payload.roles || [];
+    } catch (loadError) {
+      setRolesState({
+        error: loadError.message,
+        loaded: false,
+        loading: false,
+        roles: []
+      });
+      throw loadError;
+    }
+  }
+
+  function updateRoleForm(key, value) {
+    setRoleForm((previous) => ({
+      ...previous,
+      [key]: value
+    }));
+  }
+
+  function handleSelectRole(role) {
+    if (!role) {
+      setCreatingRoleDraft(false);
+      setSelectedRoleId(null);
+      setRoleForm(buildInitialRoleForm());
+      return;
+    }
+
+    setCreatingRoleDraft(false);
+    setSelectedRoleId(role.id);
+    setRoleForm(buildRoleForm(role, language));
+  }
+
+  function handleCreateRoleDraft() {
+    setCreatingRoleDraft(true);
+    setSelectedRoleId(null);
+    setRoleForm(buildInitialRoleForm());
+    setSaved("");
+    setError("");
+  }
+
+  function handleToggleRolePermission(permissionKey) {
+    setRoleForm((previous) => {
+      const hasPermission = previous.permissionKeys.includes(permissionKey);
+      const nextPermissionKeys = hasPermission
+        ? previous.permissionKeys.filter((key) => key !== permissionKey)
+        : [...previous.permissionKeys, permissionKey];
+
+      return {
+        ...previous,
+        permissionKeys: nextPermissionKeys
+      };
+    });
   }
 
   function rememberPreview(file, setter, resetClear) {
@@ -418,6 +573,53 @@ export function useServerSettingsModalState({
     }
   }
 
+  async function handleSaveRole() {
+    setRoleSaving(true);
+    setError("");
+    setSaved("");
+
+    try {
+      const permissions = buildRolePermissionBits(roleForm.permissionKeys, language);
+      const payload = roleForm.id
+        ? await api.updateGuildRole({
+            color: normalizeColorInput(roleForm.color, "#9AA4B2"),
+            guildId: guild.id,
+            icon: roleForm.icon,
+            name: roleForm.name,
+            permissions,
+            roleId: roleForm.id
+          })
+        : await api.createGuildRole({
+            color: normalizeColorInput(roleForm.color, "#9AA4B2"),
+            guildId: guild.id,
+            icon: roleForm.icon,
+            name: roleForm.name,
+            permissions
+          });
+
+      const nextRoles = await refreshRoles();
+      const nextSelectedRole =
+        nextRoles.find((role) => role.id === payload.role?.id) ||
+        nextRoles.find((role) => role.id === roleForm.id) ||
+        null;
+
+      if (nextSelectedRole) {
+        setCreatingRoleDraft(false);
+        setSelectedRoleId(nextSelectedRole.id);
+        setRoleForm(buildRoleForm(nextSelectedRole, language));
+      }
+
+      await refreshWorkspaceSnapshot();
+      setSaved(roleForm.id ? copy.roleSaved : copy.roleCreated);
+      return true;
+    } catch (saveError) {
+      setError(saveError.message);
+      return false;
+    } finally {
+      setRoleSaving(false);
+    }
+  }
+
   async function handleCreateInvite() {
     setInvitesState((previous) => ({
       ...previous,
@@ -443,6 +645,46 @@ export function useServerSettingsModalState({
         creating: false,
         error: inviteError.message
       }));
+    }
+  }
+
+  async function handleAssignRoleToMember(member, nextRoleId) {
+    if (!member?.id) {
+      return;
+    }
+
+    setMemberActionState({
+      error: "",
+      memberId: member.id,
+      mode: "role",
+      success: ""
+    });
+
+    try {
+      await api.updateGuildMemberRole({
+        guildId: guild.id,
+        roleId: nextRoleId || null,
+        userId: member.id
+      });
+      await refreshWorkspaceSnapshot();
+      await refreshRoles();
+      setMemberActionState({
+        error: "",
+        memberId: null,
+        mode: "",
+        success: replaceName(
+          copy.roleAssignedSuccess,
+          member.display_name || member.username,
+          `${member.display_name || member.username} ahora tiene el rol seleccionado.`
+        )
+      });
+    } catch (actionError) {
+      setMemberActionState({
+        error: actionError.message,
+        memberId: null,
+        mode: "",
+        success: ""
+      });
     }
   }
 
@@ -594,9 +836,11 @@ export function useServerSettingsModalState({
 
   return {
     activeTab,
+    assignableRoles,
     bannerInputRef,
     banDraft,
     canManageMembers,
+    canManageRoles,
     clearBannerPreview,
     clearIconPreview,
     closeBanDraft,
@@ -604,13 +848,18 @@ export function useServerSettingsModalState({
     filteredMembers,
     filteredRoles,
     form,
+    handleAssignRoleToMember,
     handleBanMemberAction,
     handleCopyInvite,
     handleCreateInvite,
+    handleCreateRoleDraft,
     handleIconSelection,
     handleBannerSelection,
     handleKickMemberAction,
+    handleSaveRole,
+    handleSelectRole,
     handleSubmit,
+    handleToggleRolePermission,
     handleToggleAllowMemberInvites,
     iconInputRef,
     invitesState,
@@ -621,6 +870,8 @@ export function useServerSettingsModalState({
     previewBanner,
     previewCardStyle,
     previewIcon,
+    roleForm,
+    roleSaving,
     rolesQuery,
     rolesState,
     saved,
@@ -630,7 +881,8 @@ export function useServerSettingsModalState({
     setMembersQuery,
     setRolesQuery,
     sortedMembers,
-    updateForm
+    updateForm,
+    updateRoleForm
   };
 }
 
