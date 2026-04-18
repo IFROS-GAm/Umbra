@@ -32,10 +32,11 @@ export function registerGuildRoutes({
 
   app.patch("/api/guilds/:guildId", requireViewer, async (req, res) => {
     try {
-      const guild = await store.updateGuild({
-        bannerColor: req.body.bannerColor,
-        bannerImageUrl: req.body.bannerImageUrl,
-        description: req.body.description || "",
+      const guild = await store.updateGuild({
+        allowMemberInvites: req.body.allowMemberInvites,
+        bannerColor: req.body.bannerColor,
+        bannerImageUrl: req.body.bannerImageUrl,
+        description: req.body.description || "",
         guildId: req.params.guildId,
         iconUrl: req.body.iconUrl,
         name: req.body.name,

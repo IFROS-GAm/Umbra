@@ -11,6 +11,7 @@ import {
 
 function buildInitialForm(guild) {
   return {
+    allowMemberInvites: Boolean(guild.allow_member_invites),
     bannerColor: guild.banner_color || "#5865F2",
     description: guild.description || "",
     name: guild.name || ""
@@ -339,14 +340,28 @@ export function useServerSettingsModalState({
     setClearBanner(true);
   }
 
-  async function handleSubmit(event) {
-    event.preventDefault();
+  async function persistGuildSettings(nextPatch, { successMessage } = {}) {
     setSaving(true);
     setError("");
     setSaved("");
 
     try {
-      await onSave({
+      await onSave(nextPatch);
+      setSaved(successMessage || copy.serverUpdated);
+      return true;
+    } catch (saveError) {
+      setError(saveError.message);
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    const didSave = await persistGuildSettings(
+      {
+        allowMemberInvites: Boolean(form.allowMemberInvites),
         bannerColor: normalizedBannerColor,
         bannerFile,
         bannerImageUrl: clearBanner ? "" : undefined,
@@ -356,18 +371,50 @@ export function useServerSettingsModalState({
         iconFile,
         iconUrl: clearIcon ? "" : undefined,
         name: form.name
-      });
-      setSaved(copy.serverUpdated);
+      },
+      {
+        successMessage: copy.serverUpdated
+      }
+    );
+
+    if (didSave) {
       setIconFile(null);
       setBannerFile(null);
       setIconPreview("");
       setBannerPreview("");
       setClearIcon(false);
       setClearBanner(false);
-    } catch (saveError) {
-      setError(saveError.message);
-    } finally {
-      setSaving(false);
+    }
+  }
+
+  async function handleToggleAllowMemberInvites() {
+    const nextAllowMemberInvites = !form.allowMemberInvites;
+    const previousAllowMemberInvites = form.allowMemberInvites;
+
+    setForm((previous) => ({
+      ...previous,
+      allowMemberInvites: nextAllowMemberInvites
+    }));
+
+    const didSave = await persistGuildSettings(
+      {
+        allowMemberInvites: nextAllowMemberInvites,
+        bannerColor: normalizedBannerColor,
+        description: form.description,
+        name: form.name
+      },
+      {
+        successMessage: nextAllowMemberInvites
+          ? copy.allowMemberInvitesEnabled
+          : copy.allowMemberInvitesDisabled
+      }
+    );
+
+    if (!didSave) {
+      setForm((previous) => ({
+        ...previous,
+        allowMemberInvites: previousAllowMemberInvites
+      }));
     }
   }
 
@@ -564,6 +611,7 @@ export function useServerSettingsModalState({
     handleBannerSelection,
     handleKickMemberAction,
     handleSubmit,
+    handleToggleAllowMemberInvites,
     iconInputRef,
     invitesState,
     memberActionState,

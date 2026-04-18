@@ -166,6 +166,9 @@ export const api = {
       signal
     });
   },
+  listPinnedMessages({ channelId }) {
+    return request(`/api/channels/${channelId}/pins`);
+  },
   createMessage({
     attachments = [],
     channelId,
@@ -217,6 +220,11 @@ export const api = {
       body: JSON.stringify({
         emoji
       })
+    });
+  },
+  togglePinnedMessage({ messageId }) {
+    return request(`/api/messages/${messageId}/pin`, {
+      method: "POST"
     });
   },
   createGuild({ description, name, templateId }) {
@@ -311,6 +319,7 @@ export const api = {
     });
   },
   updateGuild({
+    allowMemberInvites,
     bannerColor,
     bannerImageUrl,
     description,
@@ -321,6 +330,7 @@ export const api = {
     return request(`/api/guilds/${guildId}`, {
       method: "PATCH",
       body: JSON.stringify({
+        allowMemberInvites,
         bannerColor,
         bannerImageUrl,
         description,

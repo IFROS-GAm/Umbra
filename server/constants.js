@@ -21,6 +21,7 @@ export const USER_STATUSES = Object.freeze([
 ]);
 
 export const PERMISSIONS = Object.freeze({
+  CREATE_INVITE: 1 << 0,
   READ_MESSAGES: 1 << 10,
   SEND_MESSAGES: 1 << 11,
   MANAGE_MESSAGES: 1 << 13,
@@ -34,6 +35,10 @@ export const ALL_PERMISSIONS = Object.values(PERMISSIONS).reduce(
   (sum, permission) => sum | permission,
   0
 );
+
+export const SYSTEM_REACTIONS = Object.freeze({
+  PIN: "__umbra_pin__"
+});
 
 export const DEFAULT_REACTIONS = Object.freeze([
   "\uD83D\uDD25",

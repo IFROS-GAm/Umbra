@@ -4,7 +4,8 @@ import {
   ALL_PERMISSIONS,
   CHANNEL_TYPES,
   DEFAULT_GUILD_STICKERS,
-  PERMISSIONS
+  PERMISSIONS,
+  SYSTEM_REACTIONS
 } from "../constants.js";
 
 const statusOrder = {
@@ -188,6 +189,18 @@ export function computePermissionBits({
   }
 
   return bits;
+}
+
+function getEveryoneRole(roles = [], guildId) {
+  return roles.find((role) => role.guild_id === guildId && role.name === "@everyone") || null;
+}
+
+function guildAllowsMemberInvites({ guildId, roles = [] }) {
+  const everyoneRole = getEveryoneRole(roles, guildId);
+  return Boolean(
+    everyoneRole &&
+      hasPermission(Number(everyoneRole.permissions || 0), PERMISSIONS.CREATE_INVITE)
+  );
 }
 
 export function getDisplayName({ guildId, guildMembers, profiles, userId }) {
@@ -643,6 +656,10 @@ export function buildBootstrapState(db, userId) {
 
       return {
         ...guild,
+        allow_member_invites: guildAllowsMemberInvites({
+          guildId: guild.id,
+          roles: db.roles
+        }),
         position: Number(membership.position || 0),
         unread_count: channels.reduce(
           (sum, channel) => sum + Number(channel.unread_count || 0),
@@ -656,6 +673,7 @@ export function buildBootstrapState(db, userId) {
             permissionBits,
             PERMISSIONS.MANAGE_MESSAGES
           ),
+          can_create_invite: hasPermission(permissionBits, PERMISSIONS.CREATE_INVITE),
           can_manage_roles: hasPermission(permissionBits, PERMISSIONS.ADMINISTRATOR),
           can_manage_guild: hasPermission(permissionBits, PERMISSIONS.ADMINISTRATOR)
         },
@@ -832,9 +850,15 @@ export function enrichMessages({ channelId, db, messages, userId }) {
       const reactions = db.message_reactions.filter(
         (reaction) => reaction.message_id === message.id
       );
-      const reactionBuckets = [...new Set(reactions.map((reaction) => reaction.emoji))].map(
+      const pinReactions = reactions
+        .filter((reaction) => reaction.emoji === SYSTEM_REACTIONS.PIN)
+        .sort(sortByDateAsc);
+      const visibleReactions = reactions.filter(
+        (reaction) => reaction.emoji !== SYSTEM_REACTIONS.PIN
+      );
+      const reactionBuckets = [...new Set(visibleReactions.map((reaction) => reaction.emoji))].map(
         (emoji) => {
-          const bucket = reactions.filter((reaction) => reaction.emoji === emoji);
+          const bucket = visibleReactions.filter((reaction) => reaction.emoji === emoji);
           return {
             emoji,
             count: bucket.length,
@@ -868,6 +892,9 @@ export function enrichMessages({ channelId, db, messages, userId }) {
           message.author_id === userId ||
           hasPermission(permissionBits, PERMISSIONS.MANAGE_MESSAGES),
         attachments: message.attachments || [],
+        is_pinned: pinReactions.length > 0,
+        pinned_at: pinReactions.at(-1)?.created_at || null,
+        pinned_by: pinReactions.at(-1)?.user_id || null,
         sticker: sticker
           ? {
               id: sticker.id,

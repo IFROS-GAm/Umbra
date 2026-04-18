@@ -15,8 +15,32 @@ function buildTemplateName(template) {
   return `Servidor de ${template.label}`;
 }
 
+function describeForwardedMessagePreview(message) {
+  const content = String(message?.content || "").trim();
+  if (content) {
+    return content;
+  }
+
+  if (message?.sticker?.name) {
+    return `Sticker: ${message.sticker.name}`;
+  }
+
+  const attachmentCount = Array.isArray(message?.attachments) ? message.attachments.length : 0;
+  if (attachmentCount > 0) {
+    return attachmentCount === 1 ? "1 adjunto" : `${attachmentCount} adjuntos`;
+  }
+
+  return "Mensaje sin texto.";
+}
+
 function getDialogMeta(type) {
   switch (type) {
+    case "forward":
+      return {
+        heroIcon: "forward",
+        subtitle: "Elige a quien quieres reenviar este mensaje sin salir del workspace.",
+        title: "Reenviar mensaje"
+      };
     case "guild":
       return {
         heroIcon: "server",
@@ -405,21 +429,41 @@ export function Dialog({ dialog, guildChannels = [], onClose, onSubmit, users })
               </div>
             </>
           ) : (
-            <label className="dialog-field">
-              <span className="dialog-field-label">
-                <Icon name="friends" />
-                <em>Persona</em>
-              </span>
-              <select onChange={(event) => setRecipientId(event.target.value)} value={recipientId}>
-                {users
-                  .filter((user) => user.id !== dialog.currentUserId)
-                  .map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.username}
-                    </option>
-                  ))}
-              </select>
-            </label>
+            <>
+              {dialog.type === "forward" && dialog.forwardMessage ? (
+                <div className="dialog-field">
+                  <span className="dialog-field-label">
+                    <Icon name="mail" />
+                    <em>Vista previa</em>
+                  </span>
+                  <div className="dialog-forward-preview">
+                    <strong>
+                      {dialog.forwardMessage.display_name ||
+                        dialog.forwardMessage.author?.display_name ||
+                        dialog.forwardMessage.author?.username ||
+                        "Umbra"}
+                    </strong>
+                    <span>{describeForwardedMessagePreview(dialog.forwardMessage)}</span>
+                  </div>
+                </div>
+              ) : null}
+
+              <label className="dialog-field">
+                <span className="dialog-field-label">
+                  <Icon name="friends" />
+                  <em>{dialog.type === "forward" ? "Destino" : "Persona"}</em>
+                </span>
+                <select onChange={(event) => setRecipientId(event.target.value)} value={recipientId}>
+                  {users
+                    .filter((user) => user.id !== dialog.currentUserId)
+                    .map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.display_name || user.username}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            </>
           )}
 
           {error ? <p className="form-error">{error}</p> : null}
@@ -435,9 +479,23 @@ export function Dialog({ dialog, guildChannels = [], onClose, onSubmit, users })
               type="submit"
             >
               <Icon
-                name={dialog.type === "dm_group" ? "friends" : dialog.type === "dm" ? "mail" : "add"}
+                name={
+                  dialog.type === "dm_group"
+                    ? "friends"
+                    : dialog.type === "forward"
+                      ? "forward"
+                      : dialog.type === "dm"
+                        ? "mail"
+                        : "add"
+                }
               />
-              <span>{busy ? "Guardando..." : "Confirmar"}</span>
+              <span>
+                {busy
+                  ? "Guardando..."
+                  : dialog.type === "forward"
+                    ? "Reenviar"
+                    : "Confirmar"}
+              </span>
             </button>
           </div>
         </form>

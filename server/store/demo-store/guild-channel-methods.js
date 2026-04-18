@@ -52,13 +52,15 @@ export const demoStoreGuildChannelMethods = {
     });
 
     this.db.roles.push(
-      {
-        id: everyoneRoleId,
-        guild_id: guildId,
-        name: "@everyone",
-        color: "#9AA4B2",
-        position: 0,
-        permissions: PERMISSIONS.READ_MESSAGES | PERMISSIONS.SEND_MESSAGES,
+        {
+          id: everyoneRoleId,
+          guild_id: guildId,
+          name: "@everyone",
+          color: "#9AA4B2",
+          position: 0,
+          permissions:
+            PERMISSIONS.READ_MESSAGES |
+            PERMISSIONS.SEND_MESSAGES,
         hoist: false,
         mentionable: false,
         created_at: now
@@ -316,9 +318,10 @@ export const demoStoreGuildChannelMethods = {
     bannerImageUrl,
     description = "",
     guildId,
-    iconUrl,
-    name,
-    userId
+      iconUrl,
+      name,
+      allowMemberInvites,
+      userId
   }) {
     const guild = this.db.guilds.find((item) => item.id === guildId);
     if (!guild) {
@@ -347,6 +350,18 @@ export const demoStoreGuildChannelMethods = {
     }
     guild.banner_color = normalizeProfileColor(bannerColor, guild.banner_color || "#5865F2");
     guild.updated_at = new Date().toISOString();
+
+    if (allowMemberInvites !== undefined) {
+      const everyoneRole = this.db.roles.find(
+        (role) => role.guild_id === guildId && role.name === "@everyone"
+      );
+      if (everyoneRole) {
+        const currentPermissions = Number(everyoneRole.permissions || 0);
+        everyoneRole.permissions = allowMemberInvites
+          ? currentPermissions | PERMISSIONS.CREATE_INVITE
+          : currentPermissions & ~PERMISSIONS.CREATE_INVITE;
+      }
+    }
 
     await this.save();
     return guild;

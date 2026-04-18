@@ -41,6 +41,7 @@ export function MessageStage(props) {
     onCancelFriendRequest,
     onCancelReply,
     onEditMessage,
+    onForwardMessage,
     onReportUser,
     onSetComposerMenuOpen,
     onSetComposerPicker,
@@ -50,6 +51,7 @@ export function MessageStage(props) {
     onJumpToLatest,
     onAcceptInvite,
     onRetryMessages,
+    onTogglePinnedMessage,
     onToggleReplyMention,
     onShowNotice,
     openProfileCard,
@@ -92,7 +94,7 @@ export function MessageStage(props) {
         onSetReactionPickerFor((previous) => (previous === message.id ? null : message.id));
         return;
       case "forward":
-        showUiNotice(t("message.notice.forwardPending", "Reenviar llegara con mensajes compartidos en una siguiente pasada."));
+        onForwardMessage?.(message);
         return;
       case "thread":
         showUiNotice(t("message.notice.threadPending", "Los hilos del mensaje quedan listos para una siguiente capa."));
@@ -101,7 +103,7 @@ export function MessageStage(props) {
         await copyToClipboard(message.content, t("message.notice.textCopied", "Texto del mensaje copiado."));
         return;
       case "pin":
-        showUiNotice(t("message.notice.pinPending", "Fijar mensajes quedara conectado a backend en una siguiente pasada."));
+        await onTogglePinnedMessage?.(message);
         return;
       case "unread":
         showUiNotice(t("message.notice.unreadPending", "Marcar como no leido llega con tracking fino de lectura."));

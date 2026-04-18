@@ -518,11 +518,14 @@ function ServerSettingsRolesTab({
 }
 
 function ServerSettingsInvitesTab({
+  allowMemberInvites,
   copy,
   invitesState,
   language,
   onCopyInvite,
   onCreateInvite,
+  onToggleAllowMemberInvites,
+  saving,
   saved
 }) {
   return (
@@ -541,6 +544,21 @@ function ServerSettingsInvitesTab({
           >
             <Icon name="userAdd" />
             <span>{invitesState.creating ? copy.creating : copy.createInvite}</span>
+          </button>
+        </div>
+
+        <div className="server-settings-list-row invite-row invite-access-row">
+          <div className="server-settings-invite-copy">
+            <strong>{copy.allowMemberInvites}</strong>
+            <span>{copy.allowMemberInvitesHint}</span>
+          </div>
+          <button
+            className={`server-settings-pill-button ${allowMemberInvites ? "active" : ""}`.trim()}
+            disabled={saving}
+            onClick={onToggleAllowMemberInvites}
+            type="button"
+          >
+            {allowMemberInvites ? "Activado" : "Desactivado"}
           </button>
         </div>
 
@@ -707,11 +725,14 @@ export function ServerSettingsModalContent({
 
         {activeTab === "invites" ? (
           <ServerSettingsInvitesTab
+            allowMemberInvites={Boolean(state.form.allowMemberInvites)}
             copy={copy}
             invitesState={state.invitesState}
             language={language}
             onCopyInvite={state.handleCopyInvite}
             onCreateInvite={state.handleCreateInvite}
+            onToggleAllowMemberInvites={state.handleToggleAllowMemberInvites}
+            saving={state.saving}
             saved={state.saved}
           />
         ) : null}

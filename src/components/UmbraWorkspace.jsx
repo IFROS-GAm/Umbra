@@ -60,9 +60,9 @@ export function UmbraWorkspace({
     appError, attachmentInputRef, booting, cameraStatus, cameraStream, composer, composerAttachments, composerMenuOpen,
     composerPicker, composerRef, currentUserLabel, dialog, directUnreadCount, editingMessage,
     handleAttachmentSelection, handleComposerChange, handleComposerShortcut, handleDeleteMessage,
-    handleDialogSubmit, handlePickerInsert, handleProfileUpdate, handleReaction, handleRetryMessages, handleScroll, handleJumpToLatest,
+    handleDialogSubmit, handleForwardMessage, handlePickerInsert, handleProfileUpdate, handleReaction, handleRetryMessages, handleScroll, handleJumpToLatest,
     handleStickerSelect,
-    handleJoinDirectCall, joinVoiceChannelById, handleSelectGuildChannel, handleStatusChange, handleSubmitMessage, handleVoiceDeviceChange, handleVoiceLeave,
+    handleJoinDirectCall, joinVoiceChannelById, handleSelectGuildChannel, handleStatusChange, handleSubmitMessage, handleTogglePinnedMessage, handleVoiceDeviceChange, handleVoiceLeave,
     headerActionsRef, headerCopy, headerPanel, headerPanelRef, hoveredVoiceChannelId, inboxTab,
     isVoiceChannel, joinedVoiceChannelId, listRef, loadBootstrap, loadingHistoryMessages, loadingMessages, messageMenuFor, messages,
     membersPanelVisible, messageLoadError, profileCard, reactionPickerFor, removeComposerAttachment,
@@ -507,7 +507,13 @@ export function UmbraWorkspace({
     selectedVoiceDevices
   });
   const chatHeaderPanelNode = (
-    <ChatHeaderPanel headerPanel={headerPanel} headerPanelRef={headerPanelRef} />
+    <ChatHeaderPanel
+      activeChannel={activeChannel}
+      headerPanel={headerPanel}
+      headerPanelRef={headerPanelRef}
+      language={language}
+      messages={messages}
+    />
   );
 
   if (booting) {
@@ -657,6 +663,7 @@ export function UmbraWorkspace({
           composerMenuOpen={composerMenuOpen}
           composerPicker={composerPicker}
           composerRef={composerRef}
+          canInvitePeople={Boolean(activeGuild?.permissions?.can_create_invite)}
           directMessageProfile={directMessageProfile}
           editingMessage={editingMessage}
           effectiveMembersPanelVisible={effectiveMembersPanelVisible}
@@ -674,6 +681,7 @@ export function UmbraWorkspace({
           handleJumpToLatest={handleJumpToLatest}
           handleOpenDmFromCard={handleOpenDmFromCard}
           handleOpenDialog={openDialog}
+          handleOpenInviteModal={openInviteModal}
           handleOpenFullProfile={openFullProfile}
           handleOpenParticipantMenu={openVoiceParticipantMenu}
           handleOpenProfileCard={openProfileCard}
@@ -686,10 +694,12 @@ export function UmbraWorkspace({
           handleScroll={handleScroll}
           handleSelectGuildChannel={handleSelectGuildChannel}
           handleSendFriendRequest={handleSendFriendRequest}
+          handleForwardMessage={handleForwardMessage}
           handleStartMembersResize={handleStartMembersResize}
           handleStartReply={handleStartReply}
           handleStickerSelect={handleStickerSelect}
           handleSubmitMessage={handleSubmitMessage}
+          handleTogglePinnedMessage={handleTogglePinnedMessage}
           handleToggleScreenShare={handleToggleScreenShare}
           handleToggleVoiceMenu={toggleVoiceMenu}
           handleToggleVoiceState={toggleVoiceState}

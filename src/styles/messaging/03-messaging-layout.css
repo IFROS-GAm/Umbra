@@ -400,6 +400,94 @@
   min-height: 260px;
 }
 
+.pins-empty-state.compact {
+  min-height: 180px;
+}
+
+.header-panel-list {
+  display: flex;
+  flex-direction: column;
+  max-height: min(420px, calc(100vh - 220px));
+  overflow: auto;
+  padding: 10px 12px 14px;
+}
+
+.header-panel-row {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 14px;
+  color: var(--text-1);
+  cursor: pointer;
+  display: flex;
+  gap: 12px;
+  min-height: 72px;
+  padding: 12px;
+  text-align: left;
+  width: 100%;
+}
+
+.header-panel-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.header-panel-row-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.header-panel-row-head {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.header-panel-row-head strong {
+  color: var(--text-0);
+  font-size: 0.96rem;
+}
+
+.header-panel-row-head small {
+  color: var(--text-2);
+  flex-shrink: 0;
+}
+
+.header-panel-row-body {
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pin-row .umbra-icon {
+  color: var(--text-2);
+  flex-shrink: 0;
+}
+
+.dialog-forward-preview {
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  color: var(--text-1);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+}
+
+.dialog-forward-preview strong {
+  color: var(--text-0);
+}
+
+.dialog-forward-preview span {
+  color: var(--text-2);
+  line-height: 1.5;
+}
+
 .header-notification-menu {
   display: flex;
   flex-direction: column;

@@ -34,6 +34,22 @@ export function getServerSettingsCopy(language) {
     banPanelTitle: t("server.settings.members.banPanelTitle", "Configurar ban"),
     banSuccess: t("server.settings.members.banSuccess", "{name} fue baneado del servidor."),
     admin: t("server.settings.role.admin", "Admin"),
+    allowMemberInvites: t(
+      "server.settings.invites.allowMemberInvites",
+      "Cualquier persona puede invitar"
+    ),
+    allowMemberInvitesDisabled: t(
+      "server.settings.invites.allowMemberInvitesDisabled",
+      "Solo staff con permiso puede crear invitaciones."
+    ),
+    allowMemberInvitesEnabled: t(
+      "server.settings.invites.allowMemberInvitesEnabled",
+      "Ahora cualquier miembro puede invitar personas."
+    ),
+    allowMemberInvitesHint: t(
+      "server.settings.invites.allowMemberInvitesHint",
+      "Si lo desactivas, el boton de invitar desaparece para quienes no tengan permiso."
+    ),
     banner: t("server.settings.profile.banner", "Cartel"),
     changeBanner: t("server.settings.profile.changeBanner", "Cambiar imagen del cartel"),
     changeIcon: t("server.settings.profile.changeIcon", "Cambiar icono del servidor"),

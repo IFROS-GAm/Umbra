@@ -425,9 +425,10 @@ export const supabaseStoreRuntimeGuildMethods = {
     bannerImageUrl,
     description = "",
     guildId,
-    iconUrl,
-    name,
-    userId
+      iconUrl,
+      name,
+      allowMemberInvites,
+      userId
   }) {
     const guildRows = await expectData(
       this.client.from("guilds").select("*").eq("id", guildId).limit(1)
@@ -469,6 +470,31 @@ export const supabaseStoreRuntimeGuildMethods = {
         .eq("id", guildId)
         .select("*")
     );
+
+    if (allowMemberInvites !== undefined) {
+      const everyoneRoles = await expectData(
+        this.client
+          .from("roles")
+          .select("id,permissions")
+          .eq("guild_id", guildId)
+          .eq("name", "@everyone")
+          .limit(1)
+      );
+      const everyoneRole = everyoneRoles[0] || null;
+      if (everyoneRole) {
+        const currentPermissions = Number(everyoneRole.permissions || 0);
+        await expectData(
+          this.client
+            .from("roles")
+            .update({
+              permissions: allowMemberInvites
+                ? currentPermissions | PERMISSIONS.CREATE_INVITE
+                : currentPermissions & ~PERMISSIONS.CREATE_INVITE
+            })
+            .eq("id", everyoneRole.id)
+        );
+      }
+    }
 
     this.invalidateGuildMessageContext(guildId);
 

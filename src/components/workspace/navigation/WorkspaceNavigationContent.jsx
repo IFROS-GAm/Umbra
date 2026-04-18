@@ -13,6 +13,7 @@ import { WorkspaceServerRail } from "../WorkspaceServerRail.jsx";
 export function WorkspaceNavigationContent({
   activeGuild,
   activeSelection,
+  canInviteGuild,
   canManageGuild,
   canManageStructure,
   currentUserLabel,
@@ -81,6 +82,7 @@ export function WorkspaceNavigationContent({
 
       {navigation.serverContextGuild ? (
         <ServerContextMenu
+          canInviteGuild={Boolean(navigation.serverContextGuild?.permissions?.can_create_invite)}
           canManageGuild={Boolean(navigation.serverContextGuild?.permissions?.can_manage_guild)}
           guild={navigation.serverContextGuild}
           language={language}
@@ -144,6 +146,7 @@ export function WorkspaceNavigationContent({
                 <div className="navigator-server-header-copy">
                   <small>UMBRA VEIL</small>
                   <ServerAdminMenu
+                    canInviteGuild={canInviteGuild}
                     canManageGuild={canManageGuild}
                     guild={activeGuild}
                     language={language}
@@ -156,7 +159,7 @@ export function WorkspaceNavigationContent({
                 </div>
               </div>
               <div className="navigator-top-actions">
-                {canManageGuild ? (
+                {canInviteGuild ? (
                   <button
                     className="ghost-button icon-only tooltip-anchor"
                     data-tooltip="Invitar al servidor"

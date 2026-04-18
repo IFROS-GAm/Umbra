@@ -45,6 +45,7 @@ function getDirectFriendAction(profile) {
 
 export function ChatHeader({
   activeChannel,
+  canInvitePeople,
   directMessageProfile,
   headerActionsRef,
   headerPanel,
@@ -55,6 +56,7 @@ export function ChatHeader({
   membersPanelVisible,
   onAddFriend,
   onOpenDialog,
+  onOpenInviteModal,
   onStartDirectCall,
   onStartDirectVideoCall,
   onShowNotice,
@@ -195,16 +197,18 @@ export function ChatHeader({
                 >
                   <Icon name="pin" />
                 </button>
-                <button
-                  aria-label="Invitar"
-                  className="ghost-button icon-only tooltip-anchor"
-                  data-tooltip="Invitar personas"
-                  data-tooltip-position="bottom"
-                  onClick={() => onOpenDialog("dm")}
-                  type="button"
-                >
-                  <Icon name="userAdd" />
-                </button>
+                {canInvitePeople ? (
+                  <button
+                    aria-label="Invitar"
+                    className="ghost-button icon-only tooltip-anchor"
+                    data-tooltip="Invitar personas"
+                    data-tooltip-position="bottom"
+                    onClick={() => onOpenInviteModal?.()}
+                    type="button"
+                  >
+                    <Icon name="userAdd" />
+                  </button>
+                ) : null}
                 <button
                   aria-label={
                     membersPanelVisible

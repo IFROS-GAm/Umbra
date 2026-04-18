@@ -1,4 +1,5 @@
-import { CHANNEL_TYPES } from "../../constants.js";
+import { CHANNEL_TYPES, PERMISSIONS } from "../../constants.js";
+import { computePermissionBits } from "../helpers.js";
 import {
   buildInvitePreview,
   createId,
@@ -20,7 +21,17 @@ export const demoStoreGuildMembershipMethods = {
       throw createError("Servidor no encontrado.", 404);
     }
 
-    this.assertCanManageGuild(guildId, userId);
+    const permissionBits = computePermissionBits({
+      guilds: this.db.guilds,
+      guildId,
+      guildMembers: this.db.guild_members,
+      roles: this.db.roles,
+      userId
+    });
+
+    if ((permissionBits & PERMISSIONS.CREATE_INVITE) !== PERMISSIONS.CREATE_INVITE) {
+      throw createError("No tienes permisos para invitar personas a este servidor.", 403);
+    }
 
     const invite = {
       id: createId(),

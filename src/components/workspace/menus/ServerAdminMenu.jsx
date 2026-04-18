@@ -13,6 +13,7 @@ function truncateServerName(name) {
 }
 
 export function ServerAdminMenu({
+  canInviteGuild,
   canManageGuild,
   guild,
   language = "es",
@@ -26,12 +27,19 @@ export function ServerAdminMenu({
   const rootRef = useRef(null);
   const guildIcon = resolveGuildIcon(guild);
   const t = (key, fallback) => translate(language, key, fallback);
+  const canOpenMenu = canManageGuild || canInviteGuild;
   const menuItems = [
-    { id: "invite", icon: "userAdd", label: t("server.admin.invite", "Invitar al servidor") },
-    { id: "settings", icon: "settings", label: t("server.admin.settings", "Ajustes del servidor") },
-    { id: "channel", icon: "add", label: t("server.admin.channel", "Crear un canal") },
-    { id: "category", icon: "threads", label: t("server.admin.category", "Crear categoria") },
-    { id: "profile", icon: "edit", label: t("server.admin.profile", "Editar perfil de servidor") },
+    ...(canInviteGuild
+      ? [{ id: "invite", icon: "userAdd", label: t("server.admin.invite", "Invitar al servidor") }]
+      : []),
+    ...(canManageGuild
+      ? [
+          { id: "settings", icon: "settings", label: t("server.admin.settings", "Ajustes del servidor") },
+          { id: "channel", icon: "add", label: t("server.admin.channel", "Crear un canal") },
+          { id: "category", icon: "threads", label: t("server.admin.category", "Crear categoria") },
+          { id: "profile", icon: "edit", label: t("server.admin.profile", "Editar perfil de servidor") }
+        ]
+      : []),
     { id: "copy-id", icon: "copy", label: t("server.admin.copyId", "Copiar ID del servidor") }
   ];
 
@@ -81,7 +89,7 @@ export function ServerAdminMenu({
       <button
         className="navigator-server-trigger"
         onClick={() => {
-          if (canManageGuild) {
+          if (canOpenMenu) {
             setOpen((previous) => !previous);
           }
         }}
@@ -95,14 +103,16 @@ export function ServerAdminMenu({
           )}
         </span>
         <strong title={guild.name}>{truncateServerName(guild.name)}</strong>
-        {canManageGuild ? <Icon name="chevronDown" size={15} /> : null}
+        {canOpenMenu ? <Icon name="chevronDown" size={15} /> : null}
       </button>
 
       {open ? (
         <div className="floating-surface server-admin-menu">
           {menuItems.map((item, index) => (
             <React.Fragment key={item.id}>
-              {index === 1 || index === 5 ? <div className="server-admin-divider" /> : null}
+              {(item.id === "settings" || item.id === "copy-id") && index > 0 ? (
+                <div className="server-admin-divider" />
+              ) : null}
               <button
                 className="server-admin-row"
                 onClick={() => handleAction(item.id)}

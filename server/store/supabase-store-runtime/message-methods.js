@@ -8,6 +8,7 @@ import {
   PROFILE_MESSAGE_SELECT,
   REACTION_SELECT,
   ROLE_PERMISSION_SELECT,
+  SYSTEM_REACTIONS,
   assertInviteUsable,
   buildDirectDmKey,
   buildFriendshipPair,
@@ -379,5 +380,159 @@ export const supabaseStoreRuntimeMessageMethods = {
     }
 
     return this.getChannelSnapshot(message.channel_id, userId, messageId);
+  }
+,
+  async togglePinnedMessage({ messageId, userId }) {
+    const message = await this.getMessage(messageId);
+    if (!message || message.deleted_at) {
+      throw createError("Mensaje no encontrado.", 404);
+    }
+
+    if (!(await this.canAccessChannel({ channelId: message.channel_id, userId }))) {
+      throw createError("No puedes acceder a este canal.", 403);
+    }
+
+    if (message.guild_id) {
+      const permissionBits = await this.getPermissionBits(message.guild_id, userId);
+      const canPin =
+        (permissionBits & PERMISSIONS.MANAGE_MESSAGES) === PERMISSIONS.MANAGE_MESSAGES ||
+        message.author_id === userId;
+
+      if (!canPin) {
+        throw createError("No tienes permisos para fijar mensajes en este canal.", 403);
+      }
+    }
+
+    const existing = await expectData(
+      this.client
+        .from("message_reactions")
+        .select("message_id")
+        .eq("message_id", messageId)
+        .eq("emoji", SYSTEM_REACTIONS.PIN)
+        .limit(1)
+    );
+
+    if (existing[0]) {
+      await expectData(
+        this.client
+          .from("message_reactions")
+          .delete()
+          .eq("message_id", messageId)
+          .eq("emoji", SYSTEM_REACTIONS.PIN)
+      );
+    } else {
+      await expectData(
+        this.client.from("message_reactions").insert({
+          message_id: messageId,
+          user_id: userId,
+          emoji: SYSTEM_REACTIONS.PIN,
+          created_at: new Date().toISOString()
+        })
+      );
+    }
+
+    return this.getChannelSnapshot(message.channel_id, userId, messageId);
+  }
+,
+  async listPinnedMessages({ channelId, userId }) {
+    const channel = await this.getChannel(channelId);
+    if (!channel) {
+      throw createError("Canal no encontrado.", 404);
+    }
+
+    if (!(await this.canAccessChannel({ channelId, userId }))) {
+      throw createError("No puedes acceder a este canal.", 403);
+    }
+
+    const reactions = await expectData(
+      this.client
+        .from("message_reactions")
+        .select(REACTION_SELECT)
+        .eq("emoji", SYSTEM_REACTIONS.PIN)
+    );
+    const pinnedMessageIds = [
+      ...new Set(
+        reactions
+          .map((reaction) => reaction.message_id)
+          .filter(Boolean)
+      )
+    ];
+
+    if (!pinnedMessageIds.length) {
+      return { messages: [] };
+    }
+
+    const messages = await expectData(
+      this.client
+        .from("messages")
+        .select("*")
+        .eq("channel_id", channelId)
+        .is("deleted_at", null)
+        .in("id", pinnedMessageIds)
+    );
+    const replyIds = messages.map((message) => message.reply_to).filter(Boolean);
+    const [replyMessages, guildMessageContext] = await Promise.all([
+      replyIds.length
+        ? expectData(
+            this.client.from("messages").select("*").in("id", replyIds)
+          )
+        : Promise.resolve([]),
+      this.loadGuildMessageContext(channel.guild_id)
+    ]);
+    const roles = guildMessageContext?.roles || [];
+    const guilds = guildMessageContext?.guilds || [];
+    const guildStickers = guildMessageContext?.guild_stickers || [];
+    const relatedProfileIds = [
+      ...new Set(
+        [userId, ...messages.map((message) => message.author_id), ...replyMessages.map((message) => message.author_id)]
+          .filter(Boolean)
+      )
+    ];
+    const [profiles, guildMembers] = await Promise.all([
+      relatedProfileIds.length
+        ? expectData(
+            this.client.from("profiles").select(PROFILE_MESSAGE_SELECT).in("id", relatedProfileIds)
+          )
+        : Promise.resolve([]),
+      channel.guild_id && relatedProfileIds.length
+        ? expectData(
+            this.client
+              .from("guild_members")
+              .select(GUILD_MEMBER_MESSAGE_SELECT)
+              .eq("guild_id", channel.guild_id)
+              .in("user_id", relatedProfileIds)
+          )
+        : Promise.resolve([])
+    ]);
+
+    const snapshot = {
+      profiles,
+      guilds,
+      roles,
+      guild_members: guildMembers,
+      guild_stickers: guildStickers,
+      channels: [channel],
+      channel_members: [],
+      messages: [...messages, ...replyMessages].filter(
+        (message, index, collection) =>
+          collection.findIndex((item) => item.id === message.id) === index
+      ),
+      message_reactions: reactions
+    };
+
+    const enrichedMessages = enrichMessages({
+      channelId,
+      db: snapshot,
+      messages,
+      userId
+    }).sort(
+      (left, right) =>
+        new Date(right.pinned_at || right.created_at).getTime() -
+        new Date(left.pinned_at || left.created_at).getTime()
+    );
+
+    return {
+      messages: enrichedMessages
+    };
   }
 };

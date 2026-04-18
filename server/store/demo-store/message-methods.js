@@ -1,5 +1,6 @@
-import { CHANNEL_TYPES } from "../../constants.js";
+import { CHANNEL_TYPES, PERMISSIONS, SYSTEM_REACTIONS } from "../../constants.js";
 import {
+  computePermissionBits,
   createId,
   enrichMessages,
   isGuildVoiceChannel,
@@ -267,6 +268,106 @@ export const demoStoreMessageMethods = {
       messages: [message],
       userId
     })[0];
+  }
+,
+  async togglePinnedMessage({ messageId, userId }) {
+    const message = this.getMessage(messageId);
+    if (!message || message.deleted_at) {
+      throw createError("Mensaje no encontrado.", 404);
+    }
+
+    const channel = this.getChannel(message.channel_id);
+    if (!channel || !this.canAccessChannel({ channelId: message.channel_id, userId })) {
+      throw createError("No puedes acceder a este canal.", 403);
+    }
+
+    if (channel.guild_id) {
+      const permissionBits = computePermissionBits({
+        guilds: this.db.guilds,
+        guildId: channel.guild_id,
+        guildMembers: this.db.guild_members,
+        roles: this.db.roles,
+        userId
+      });
+
+      const canPin =
+        (permissionBits & PERMISSIONS.MANAGE_MESSAGES) === PERMISSIONS.MANAGE_MESSAGES ||
+        message.author_id === userId;
+
+      if (!canPin) {
+        throw createError("No tienes permisos para fijar mensajes en este canal.", 403);
+      }
+    }
+
+    const existingPins = this.db.message_reactions.filter(
+      (reaction) =>
+        reaction.message_id === messageId && reaction.emoji === SYSTEM_REACTIONS.PIN
+    );
+
+    if (existingPins.length) {
+      this.db.message_reactions = this.db.message_reactions.filter(
+        (reaction) =>
+          !(reaction.message_id === messageId && reaction.emoji === SYSTEM_REACTIONS.PIN)
+      );
+    } else {
+      this.db.message_reactions.push({
+        message_id: messageId,
+        user_id: userId,
+        emoji: SYSTEM_REACTIONS.PIN,
+        created_at: new Date().toISOString()
+      });
+    }
+
+    await this.save();
+
+    return enrichMessages({
+      channelId: message.channel_id,
+      db: this.db,
+      messages: [message],
+      userId
+    })[0];
+  }
+,
+  async listPinnedMessages({ channelId, userId }) {
+    const channel = this.getChannel(channelId);
+    if (!channel) {
+      throw createError("Canal no encontrado.", 404);
+    }
+
+    if (!this.canAccessChannel({ channelId, userId })) {
+      throw createError("No puedes acceder a este canal.", 403);
+    }
+
+    const pinnedIds = new Set(
+      this.db.message_reactions
+        .filter(
+          (reaction) =>
+            reaction.emoji === SYSTEM_REACTIONS.PIN &&
+            reaction.message_id
+        )
+        .map((reaction) => reaction.message_id)
+    );
+    const pinnedMessages = this.db.messages
+      .filter(
+        (message) =>
+          message.channel_id === channelId &&
+          !message.deleted_at &&
+          pinnedIds.has(message.id)
+      )
+      .sort(sortByDateDesc);
+
+    return {
+      messages: enrichMessages({
+        channelId,
+        db: this.db,
+        messages: pinnedMessages,
+        userId
+      }).sort(
+        (left, right) =>
+          new Date(right.pinned_at || right.created_at).getTime() -
+          new Date(left.pinned_at || left.created_at).getTime()
+      )
+    };
   }
 ,
   async markChannelRead({ channelId, lastReadMessageId = null, userId }) {

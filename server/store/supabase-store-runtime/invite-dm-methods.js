@@ -50,8 +50,8 @@ export const supabaseStoreRuntimeInviteDmMethods = {
     }
 
     const permissionBits = await this.getPermissionBits(guildId, userId);
-    if ((permissionBits & PERMISSIONS.ADMINISTRATOR) !== PERMISSIONS.ADMINISTRATOR) {
-      throw createError("Solo el administrador puede invitar personas desde este menu.", 403);
+    if ((permissionBits & PERMISSIONS.CREATE_INVITE) !== PERMISSIONS.CREATE_INVITE) {
+      throw createError("No tienes permisos para invitar personas a este servidor.", 403);
     }
 
     const invite = {

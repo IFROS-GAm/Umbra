@@ -83,7 +83,13 @@ export function MessageActionMenu({
     ],
     [
       { id: "copy-text", label: t("message.menu.copyText", "Copiar texto"), icon: "copy", disabled: !message.content },
-      { id: "pin", label: t("message.menu.pin", "Fijar mensaje"), icon: "pin" },
+      {
+        id: "pin",
+        label: message.is_pinned
+          ? t("message.menu.unpin", "Desfijar mensaje")
+          : t("message.menu.pin", "Fijar mensaje"),
+        icon: "pin"
+      },
       { id: "unread", label: t("message.menu.unread", "Marcar como no leido"), icon: "mail" },
       { id: "copy-link", label: t("message.menu.copyLink", "Copiar enlace del mensaje"), icon: "link" }
     ],

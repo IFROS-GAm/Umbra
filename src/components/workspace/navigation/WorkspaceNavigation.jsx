@@ -6,6 +6,7 @@ import { useWorkspaceNavigationState } from "../useWorkspaceNavigationState.jsx"
 export function WorkspaceNavigation(props) {
   const canManageStructure = Boolean(props.activeGuild?.permissions?.can_manage_channels);
   const canManageGuild = Boolean(props.activeGuild?.permissions?.can_manage_guild);
+  const canInviteGuild = Boolean(props.activeGuild?.permissions?.can_create_invite);
 
   const navigation = useWorkspaceNavigationState({
     activeGuild: props.activeGuild,
@@ -54,6 +55,7 @@ export function WorkspaceNavigation(props) {
     <WorkspaceNavigationContent
       activeGuild={props.activeGuild}
       activeSelection={props.activeSelection}
+      canInviteGuild={canInviteGuild}
       canManageGuild={canManageGuild}
       canManageStructure={canManageStructure}
       currentUserLabel={props.currentUserLabel}

@@ -455,6 +455,33 @@ export function createWorkspaceComposerActions(context, shared) {
     }
   }
 
+  async function handleTogglePinnedMessage(message) {
+    if (!message?.id) {
+      return;
+    }
+
+    try {
+      const payload = await api.togglePinnedMessage({
+        messageId: message.id
+      });
+
+      if (payload?.message?.channel_id) {
+        patchChannelMessages(payload.message.channel_id, (previous) =>
+          previous.map((item) => (item.id === payload.message.id ? payload.message : item))
+        );
+      }
+
+      showUiNotice(
+        payload?.message?.is_pinned
+          ? "Mensaje fijado."
+          : "Mensaje desfijado."
+      );
+      setAppError("");
+    } catch (error) {
+      setAppError(error.message);
+    }
+  }
+
   async function handleStickerSelect(sticker) {
     if (!sticker?.id) {
       return;
@@ -555,6 +582,7 @@ export function createWorkspaceComposerActions(context, shared) {
     handleRetryMessages,
     handleScroll,
     handleStickerSelect,
-    handleSubmitMessage
+    handleSubmitMessage,
+    handleTogglePinnedMessage
   };
 }

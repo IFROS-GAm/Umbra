@@ -24,6 +24,7 @@ export function UmbraWorkspaceStage({
   composerMenuOpen,
   composerPicker,
   composerRef,
+  canInvitePeople,
   directMessageProfile,
   editingMessage,
   effectiveMembersPanelVisible,
@@ -41,6 +42,7 @@ export function UmbraWorkspaceStage({
   handleJumpToLatest,
   handleOpenDmFromCard,
   handleOpenDialog,
+  handleOpenInviteModal,
   handleOpenFullProfile,
   handleOpenParticipantMenu,
   handleOpenProfileCard,
@@ -53,10 +55,12 @@ export function UmbraWorkspaceStage({
   handleScroll,
   handleSelectGuildChannel,
   handleSendFriendRequest,
+  handleForwardMessage,
   handleStartMembersResize,
   handleStartReply,
   handleStickerSelect,
   handleSubmitMessage,
+  handleTogglePinnedMessage,
   handleToggleScreenShare,
   handleToggleVoiceMenu,
   handleToggleVoiceState,
@@ -153,8 +157,10 @@ export function UmbraWorkspaceStage({
               isDirectConversation={isDirectConversation}
               isDirectGroupConversation={isGroupDirectConversation}
               membersPanelVisible={effectiveMembersPanelVisible}
+              canInvitePeople={canInvitePeople}
               onAddFriend={handleSendFriendRequest}
               onOpenDialog={handleOpenDialog}
+              onOpenInviteModal={handleOpenInviteModal}
               onShowNotice={showUiNotice}
               onStartDirectCall={() => handleJoinDirectCall()}
               onStartDirectVideoCall={() => handleJoinDirectCall({ enableCamera: true })}
@@ -240,6 +246,7 @@ export function UmbraWorkspaceStage({
                     setReplyMentionEnabled(true);
                   }}
                   onEditMessage={handleEditMessage}
+                  onForwardMessage={handleForwardMessage}
                   onJumpToLatest={handleJumpToLatest}
                   onReportUser={handleReportUser}
                   onRetryMessages={handleRetryMessages}
@@ -249,6 +256,7 @@ export function UmbraWorkspaceStage({
                   onSetReactionPickerFor={setReactionPickerFor}
                   onShowNotice={showUiNotice}
                   onStartReply={handleStartReply}
+                  onTogglePinnedMessage={handleTogglePinnedMessage}
                   onToggleReplyMention={() => setReplyMentionEnabled((previous) => !previous)}
                   openProfileCard={handleOpenProfileCard}
                   reactionPickerFor={reactionPickerFor}

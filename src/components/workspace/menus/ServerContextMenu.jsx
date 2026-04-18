@@ -17,6 +17,7 @@ function getNotificationLabel(level, t) {
 }
 
 export function ServerContextMenu({
+  canInviteGuild,
   canManageGuild,
   guild,
   language = "es",
@@ -161,7 +162,7 @@ export function ServerContextMenu({
 
         <div className="server-context-divider" />
 
-        {canManageGuild ? (
+        {canInviteGuild ? (
           <button
             className="server-context-row"
             onClick={() => {
@@ -174,7 +175,7 @@ export function ServerContextMenu({
           </button>
         ) : null}
 
-        <div className="server-context-divider" />
+        {canInviteGuild ? <div className="server-context-divider" /> : null}
 
         <button
           className="server-context-row"

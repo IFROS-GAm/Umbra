@@ -2,7 +2,42 @@ import { api } from "../../../api.js";
 import { sanitizeUsername } from "../../../utils.js";
 import { findDirectDmByUserId } from "../workspaceHelpers.js";
 
-export function createWorkspaceDialogActions(context) {
+function sanitizeForwardedAttachment(attachment) {
+  if (!attachment) {
+    return attachment;
+  }
+
+  const {
+    preview_url: _previewUrl,
+    upload_error: _uploadError,
+    upload_status: _uploadStatus,
+    local_id: _localId,
+    ...sanitized
+  } = attachment;
+
+  return {
+    ...sanitized,
+    alt_text: String(sanitized.alt_text || "").trim(),
+    is_spoiler: Boolean(sanitized.is_spoiler),
+    name: String(sanitized.name || "Adjunto").trim() || "Adjunto"
+  };
+}
+
+function buildForwardedContent(message = {}) {
+  const sourceName =
+    message.display_name ||
+    message.author?.display_name ||
+    message.author?.username ||
+    "Umbra";
+  const body =
+    String(message.content || "").trim() ||
+    (message.sticker?.name ? `[Sticker] ${message.sticker.name}` : "");
+  const heading = `**Reenviado de ${sourceName}**`;
+
+  return body ? `${heading}\n${body}` : heading;
+}
+
+export function createWorkspaceDialogActions(context, shared = {}) {
   const {
     accessToken,
     activeGuild,
@@ -17,6 +52,7 @@ export function createWorkspaceDialogActions(context) {
     setProfileCard,
     workspace
   } = context;
+  const { showUiNotice = () => {} } = shared;
 
   async function handleStatusChange(status) {
     try {
@@ -211,6 +247,30 @@ export function createWorkspaceDialogActions(context) {
         }
       }
 
+      if (dialog.type === "forward") {
+        const recipientId = values.recipientId;
+        const targetMessage = dialog.forwardMessage || null;
+
+        if (!recipientId || !targetMessage) {
+          throw new Error("No se pudo preparar el reenvio.");
+        }
+
+        const payload = await api.createDm({
+          recipientId
+        });
+
+        await api.createMessage({
+          attachments: (targetMessage.attachments || []).map(sanitizeForwardedAttachment),
+          channelId: payload.channel.id,
+          content: buildForwardedContent(targetMessage),
+          replyMentionUserId: null,
+          replyTo: null
+        });
+
+        await loadBootstrap(activeSelectionRef.current);
+        showUiNotice("Mensaje reenviado.");
+      }
+
       if (dialog.type === "dm_group") {
         const payload = await api.createGroupDm({
           name: values.name,
@@ -236,7 +296,27 @@ export function createWorkspaceDialogActions(context) {
     }
   }
 
+  function handleForwardMessage(message) {
+    if (!message?.id) {
+      return;
+    }
+
+    setDialog({
+      currentUserId: workspace.current_user.id,
+      forwardMessage: {
+        attachments: message.attachments || [],
+        author: message.author || null,
+        content: message.content || "",
+        display_name: message.display_name || "",
+        id: message.id,
+        sticker: message.sticker || null
+      },
+      type: "forward"
+    });
+  }
+
   return {
+    handleForwardMessage,
     handleDialogSubmit,
     handleProfileUpdate,
     handleStatusChange

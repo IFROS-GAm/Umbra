@@ -235,6 +235,7 @@ export function createWorkspaceNavigationActions({
 
       await api.updateGuild({
         ...guildPatch,
+        allowMemberInvites: guildPatch.allowMemberInvites,
         bannerImageUrl,
         guildId: serverSettingsGuild.id,
         iconUrl

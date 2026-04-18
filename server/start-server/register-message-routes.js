@@ -9,7 +9,7 @@ export function registerMessageRoutes({
   store,
   upload
 }) {
-  app.get("/api/channels/:channelId/messages", requireViewer, async (req, res) => {
+  app.get("/api/channels/:channelId/messages", requireViewer, async (req, res) => {
     try {
       const payload = await store.listChannelMessages({
         before: req.query.before || null,
@@ -22,7 +22,20 @@ export function registerMessageRoutes({
     } catch (error) {
       sendError(res, error);
     }
-  });
+  });
+
+  app.get("/api/channels/:channelId/pins", requireViewer, async (req, res) => {
+    try {
+      const payload = await store.listPinnedMessages({
+        channelId: req.params.channelId,
+        userId: req.viewer.id
+      });
+
+      res.json(payload);
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
 
   app.post("/api/channels/:channelId/messages", requireViewer, async (req, res) => {
     try {
@@ -114,7 +127,7 @@ export function registerMessageRoutes({
     }
   });
 
-  app.post("/api/messages/:messageId/reactions", requireViewer, async (req, res) => {
+  app.post("/api/messages/:messageId/reactions", requireViewer, async (req, res) => {
     try {
       const message = await store.toggleReaction({
         emoji: req.body.emoji,
@@ -123,9 +136,23 @@ export function registerMessageRoutes({
       });
 
       emitChannelEvent(message.channel_id, "reaction:update", { message }).catch(() => {});
-      res.json({ message });
-    } catch (error) {
-      sendError(res, error);
-    }
+      res.json({ message });
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.post("/api/messages/:messageId/pin", requireViewer, async (req, res) => {
+    try {
+      const message = await store.togglePinnedMessage({
+        messageId: req.params.messageId,
+        userId: req.viewer.id
+      });
+
+      emitChannelEvent(message.channel_id, "message:update", { message }).catch(() => {});
+      res.json({ message });
+    } catch (error) {
+      sendError(res, error);
+    }
   });
 }
