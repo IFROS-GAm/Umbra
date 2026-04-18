@@ -163,18 +163,24 @@ button {
 .boot-orbit-ring-outer,
 .boot-orbit-path-outer {
   height: 112px;
+  margin-left: -56px;
+  margin-top: -56px;
   width: 112px;
 }
 
 .boot-orbit-ring-middle,
 .boot-orbit-path-middle {
   height: 82px;
+  margin-left: -41px;
+  margin-top: -41px;
   width: 82px;
 }
 
 .boot-orbit-ring-inner,
 .boot-orbit-path-inner {
   height: 52px;
+  margin-left: -26px;
+  margin-top: -26px;
   width: 52px;
 }
 
@@ -204,9 +210,13 @@ button {
 .boot-orbit-path {
   left: 50%;
   top: 50%;
-  transform: translate(-50%, -50%);
   transform-origin: center center;
   will-change: transform;
+}
+
+.boot-orbit-ring {
+  left: 50%;
+  top: 50%;
 }
 
 .boot-orbit-dot {
@@ -217,7 +227,8 @@ button {
   height: 12px;
   position: absolute;
   right: -6px;
-  top: calc(50% - 6px);
+  top: 50%;
+  margin-top: -6px;
   width: 12px;
 }
 
@@ -258,31 +269,31 @@ button {
 
 @keyframes boot-orbit-spin-outer {
   from {
-    transform: translate(-50%, -50%) rotate(0deg);
+    transform: rotate(0deg);
   }
 
   to {
-    transform: translate(-50%, -50%) rotate(360deg);
+    transform: rotate(360deg);
   }
 }
 
 @keyframes boot-orbit-spin-middle {
   from {
-    transform: translate(-50%, -50%) rotate(28deg);
+    transform: rotate(28deg);
   }
 
   to {
-    transform: translate(-50%, -50%) rotate(388deg);
+    transform: rotate(388deg);
   }
 }
 
 @keyframes boot-orbit-spin-inner {
   from {
-    transform: translate(-50%, -50%) rotate(64deg);
+    transform: rotate(64deg);
   }
 
   to {
-    transform: translate(-50%, -50%) rotate(424deg);
+    transform: rotate(424deg);
   }
 }
 
