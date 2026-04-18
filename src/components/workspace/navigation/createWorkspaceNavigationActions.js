@@ -13,6 +13,7 @@ export function createWorkspaceNavigationActions({
   activeSelectionRef,
   composerRef,
   currentUserId,
+  deleteGuildTarget,
   ensureDirectDmChannel,
   leaveGuildTarget,
   loadBootstrap,
@@ -22,6 +23,8 @@ export function createWorkspaceNavigationActions({
   setAppError,
   setComposer,
   setComposerAttachments,
+  setDeleteGuildTarget,
+  setDeletingGuild,
   setDmMenuPrefs,
   setDialog,
   setEditingMessage,
@@ -37,6 +40,28 @@ export function createWorkspaceNavigationActions({
   showUiNotice,
   workspace
 }) {
+  function buildGuildFallbackSelection(excludedGuildId) {
+    const fallbackGuild =
+      workspace.guilds.find((item) => item.id !== excludedGuildId) || null;
+    const fallbackChannel =
+      fallbackGuild?.channels.find((channel) => !channel.is_voice && !channel.is_category) ||
+      fallbackGuild?.channels.find((channel) => channel.is_voice) ||
+      fallbackGuild?.channels[0] ||
+      null;
+
+    return fallbackGuild
+      ? {
+          channelId: fallbackChannel?.id || null,
+          guildId: fallbackGuild.id,
+          kind: "guild"
+        }
+      : {
+          channelId: null,
+          guildId: null,
+          kind: "home"
+        };
+  }
+
   function handleStartReply(message) {
     setReplyTarget(message);
     setReplyMentionEnabled(true);
@@ -537,6 +562,16 @@ export function createWorkspaceNavigationActions({
     setLeaveGuildTarget(guild);
   }
 
+  function handleDeleteGuild(guild) {
+    if (!guild?.id) {
+      return;
+    }
+
+    setServerSettingsGuildId((previous) => (previous === guild.id ? null : previous));
+    setLeaveGuildTarget((previous) => (previous?.id === guild.id ? null : previous));
+    setDeleteGuildTarget(guild);
+  }
+
   async function confirmLeaveGuild() {
     if (!leaveGuildTarget?.id) {
       return;
@@ -549,24 +584,7 @@ export function createWorkspaceNavigationActions({
         guildId: leaveGuildTarget.id
       });
 
-      const fallbackGuild =
-        workspace.guilds.find((item) => item.id !== leaveGuildTarget.id) || null;
-      const fallbackChannel =
-        fallbackGuild?.channels.find((channel) => !channel.is_voice && !channel.is_category) ||
-        fallbackGuild?.channels.find((channel) => channel.is_voice) ||
-        fallbackGuild?.channels[0] ||
-        null;
-      const fallbackSelection = fallbackGuild
-        ? {
-            channelId: fallbackChannel?.id || null,
-            guildId: fallbackGuild.id,
-            kind: "guild"
-          }
-        : {
-            channelId: null,
-            guildId: null,
-            kind: "home"
-          };
+      const fallbackSelection = buildGuildFallbackSelection(leaveGuildTarget.id);
 
       setServerSettingsGuildId((previous) => (previous === leaveGuildTarget.id ? null : previous));
       setInviteModalState((previous) =>
@@ -589,6 +607,45 @@ export function createWorkspaceNavigationActions({
       setAppError(error.message);
     } finally {
       setLeavingGuild(false);
+    }
+  }
+
+  async function confirmDeleteGuild() {
+    if (!deleteGuildTarget?.id) {
+      return;
+    }
+
+    setDeletingGuild(true);
+
+    try {
+      await api.deleteGuild({
+        guildId: deleteGuildTarget.id
+      });
+
+      const fallbackSelection = buildGuildFallbackSelection(deleteGuildTarget.id);
+
+      setServerSettingsGuildId((previous) => (previous === deleteGuildTarget.id ? null : previous));
+      setInviteModalState((previous) =>
+        previous.guildId === deleteGuildTarget.id
+          ? {
+              error: "",
+              guildId: null,
+              invite: null,
+              loading: false,
+              open: false
+            }
+          : previous
+      );
+      setDeleteGuildTarget(null);
+      setLeaveGuildTarget((previous) => (previous?.id === deleteGuildTarget.id ? null : previous));
+      await loadBootstrap(fallbackSelection, {
+        selectionMode: "target"
+      });
+      showUiNotice(`Eliminaste ${deleteGuildTarget.name}.`);
+    } catch (error) {
+      setAppError(error.message);
+    } finally {
+      setDeletingGuild(false);
     }
   }
 
@@ -638,7 +695,9 @@ export function createWorkspaceNavigationActions({
   }
 
   return {
+    confirmDeleteGuild,
     confirmLeaveGuild,
+    handleDeleteGuild,
     handleAcceptInviteFromMessage,
     handleBanGuildMember,
     handleCloseDm,

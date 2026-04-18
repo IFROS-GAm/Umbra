@@ -875,9 +875,11 @@ export function ServerSettingsModalContent({
   language,
   memberCount,
   onClose,
+  onDeleteServer,
   state
 }) {
   const headerMeta = buildHeaderMeta(activeTab, copy);
+  const canDeleteServer = guild.owner_id === currentUserId;
   const navItems = [
     { id: "profile", label: copy.editProfile },
     { id: "members", label: copy.members },
@@ -908,6 +910,20 @@ export function ServerSettingsModalContent({
             </button>
           ))}
         </div>
+
+        {canDeleteServer ? (
+          <div className="server-settings-sidebar-footer">
+            <span>{copy.deleteServerHint}</span>
+            <button
+              className="server-settings-danger-trigger"
+              onClick={() => onDeleteServer?.(guild)}
+              type="button"
+            >
+              <Icon name="trash" />
+              <span>{copy.deleteServer}</span>
+            </button>
+          </div>
+        ) : null}
       </aside>
 
       <section className="server-settings-panel">

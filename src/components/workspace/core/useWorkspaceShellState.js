@@ -24,6 +24,8 @@ export function useWorkspaceShellState({
   const [serverSettingsGuildId, setServerSettingsGuildId] = useState(null);
   const [leaveGuildTarget, setLeaveGuildTarget] = useState(null);
   const [leavingGuild, setLeavingGuild] = useState(false);
+  const [deleteGuildTarget, setDeleteGuildTarget] = useState(null);
+  const [deletingGuild, setDeletingGuild] = useState(false);
   const [inviteModalState, setInviteModalState] = useState({
     error: "",
     guildId: null,
@@ -195,6 +197,8 @@ export function useWorkspaceShellState({
 
   return {
     appShellRef,
+    deleteGuildTarget,
+    deletingGuild,
     desktopShellRef,
     dmMenuPrefs,
     fullProfile,
@@ -208,6 +212,8 @@ export function useWorkspaceShellState({
     membersResizeRef,
     serverFolders,
     serverSettingsGuildId,
+    setDeleteGuildTarget,
+    setDeletingGuild,
     setDmMenuPrefs,
     setFullProfile,
     setGuildMenuPrefs,

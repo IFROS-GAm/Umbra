@@ -307,7 +307,7 @@ export function registerSocialRoutes({
     try {
       const payload = await store.leaveGuild({
         guildId: req.params.guildId,
-        userId: req.viewer.id
+        userId: req.viewer.id
       });
 
       emitNavigationUpdate({
@@ -315,6 +315,25 @@ export function registerSocialRoutes({
         type: "guild:leave",
         userId: req.viewer.id
       });
+      res.json(payload);
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  app.delete("/api/guilds/:guildId", requireViewer, async (req, res) => {
+    try {
+      const payload = await store.deleteGuild({
+        guildId: req.params.guildId,
+        userId: req.viewer.id
+      });
+
+      emitNavigationUpdateToUsers(payload?.affected_user_ids || [req.viewer.id], {
+        guildId: req.params.guildId,
+        type: "guild:update",
+        userId: req.viewer.id
+      });
+
       res.json(payload);
     } catch (error) {
       sendError(res, error);

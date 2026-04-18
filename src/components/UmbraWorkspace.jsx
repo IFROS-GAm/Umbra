@@ -81,6 +81,8 @@ export function UmbraWorkspace({
   const openingDmRequestsRef = useRef(new Map());
   const {
     appShellRef,
+    deleteGuildTarget,
+    deletingGuild,
     desktopShellRef,
     dmMenuPrefs,
     fullProfile,
@@ -293,12 +295,14 @@ export function UmbraWorkspace({
     workspace
   });
   const {
+    confirmDeleteGuild,
     confirmLeaveGuild,
     handleAcceptInviteFromMessage,
     handleBanGuildMember,
     handleCloseDm,
     handleCopyDmId,
     handleCopyGuildId,
+    handleDeleteGuild,
     handleEditMessage,
     handleRefreshWorkspace,
     handleKickGuildMember,
@@ -326,6 +330,7 @@ export function UmbraWorkspace({
     activeSelectionRef,
     composerRef,
     currentUserId,
+    deleteGuildTarget,
     ensureDirectDmChannel,
     leaveGuildTarget,
     loadBootstrap,
@@ -335,6 +340,8 @@ export function UmbraWorkspace({
     setAppError,
     setComposer,
     setComposerAttachments,
+    setDeleteGuildTarget,
+    setDeletingGuild,
     setDmMenuPrefs,
     setDialog,
     setEditingMessage,
@@ -769,7 +776,10 @@ export function UmbraWorkspace({
           accountManagerOpen={accountManagerOpen}
           activeChannel={activeChannel}
           activeGuild={activeGuild}
+          confirmDeleteGuild={confirmDeleteGuild}
           confirmLeaveGuild={confirmLeaveGuild}
+          deleteGuildTarget={deleteGuildTarget}
+          deletingGuild={deletingGuild}
           currentUser={currentUser}
           currentUserId={currentUserId}
           currentUserMenuAnchorRect={currentUserMenuAnchorRect}
@@ -788,6 +798,7 @@ export function UmbraWorkspace({
           handleConfirmScreenShare={handleConfirmScreenShare}
           handleCurrentUserExit={handleCurrentUserExit}
           handleCurrentUserStatusChange={handleCurrentUserStatusChange}
+          handleDeleteGuild={handleDeleteGuild}
           handleDialogSubmit={handleDialogSubmit}
           handleKickGuildMember={handleKickGuildMember}
           handleOpenDmFromCard={handleOpenDmFromCard}
@@ -825,6 +836,7 @@ export function UmbraWorkspace({
           setAccountManagerOpen={setAccountManagerOpen}
           setCurrentUserMenuAnchorRect={setCurrentUserMenuAnchorRect}
           setDialog={setDialog}
+          setDeleteGuildTarget={setDeleteGuildTarget}
           setFullProfile={setFullProfile}
           setInviteModalState={setInviteModalState}
           setLeaveGuildTarget={setLeaveGuildTarget}

@@ -15,6 +15,56 @@ import {
 } from "./shared.js";
 
 export const demoStoreGuildMembershipMethods = {
+  async deleteGuild({ guildId, userId }) {
+    const guild = this.db.guilds.find((item) => item.id === guildId);
+    if (!guild) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    if (guild.owner_id !== userId) {
+      throw createError("Solo el owner puede eliminar este servidor.", 403);
+    }
+
+    const guildMemberUserIds = this.db.guild_members
+      .filter((membership) => membership.guild_id === guildId)
+      .map((membership) => membership.user_id);
+    const guildChannelIds = new Set(
+      this.db.channels
+        .filter((channel) => channel.guild_id === guildId)
+        .map((channel) => channel.id)
+    );
+    const guildMessageIds = new Set(
+      this.db.messages
+        .filter((message) => message.guild_id === guildId || guildChannelIds.has(message.channel_id))
+        .map((message) => message.id)
+    );
+
+    this.db.message_reactions = this.db.message_reactions.filter(
+      (reaction) => !guildMessageIds.has(reaction.message_id)
+    );
+    this.db.messages = this.db.messages.filter(
+      (message) => !guildMessageIds.has(message.id)
+    );
+    this.db.channel_members = this.db.channel_members.filter(
+      (membership) => !guildChannelIds.has(membership.channel_id)
+    );
+    this.db.channels = this.db.channels.filter((channel) => channel.guild_id !== guildId);
+    this.db.roles = this.db.roles.filter((role) => role.guild_id !== guildId);
+    this.db.guild_members = this.db.guild_members.filter((membership) => membership.guild_id !== guildId);
+    this.db.invites = this.db.invites.filter((invite) => invite.guild_id !== guildId);
+    this.db.guild_stickers = this.db.guild_stickers.filter((sticker) => sticker.guild_id !== guildId);
+    this.db.guild_bans = this.db.guild_bans.filter((ban) => ban.guild_id !== guildId);
+    this.db.guilds = this.db.guilds.filter((item) => item.id !== guildId);
+
+    await this.save();
+
+    return {
+      affected_user_ids: [...new Set(guildMemberUserIds)],
+      deleted: true,
+      guild_id: guildId
+    };
+  }
+,
   async createInvite({ guildId, userId }) {
     const guild = this.db.guilds.find((item) => item.id === guildId);
     if (!guild) {
@@ -157,6 +207,51 @@ export const demoStoreGuildMembershipMethods = {
       throw createError("No perteneces a este servidor.", 403);
     }
 
+    const remainingMembers = this.db.guild_members.filter(
+      (membership) => membership.guild_id === guildId && membership.user_id !== userId
+    );
+    const guildMemberUserIds = [
+      userId,
+      ...remainingMembers.map((membership) => membership.user_id)
+    ];
+
+    if (guild.owner_id === userId) {
+      if (!remainingMembers.length) {
+        return this.deleteGuild({ guildId, userId });
+      }
+
+      const nextOwnerMembership =
+        remainingMembers[Math.floor(Math.random() * remainingMembers.length)] || null;
+      const ownerRole = this.db.roles.find(
+        (role) => role.guild_id === guildId && role.name === "Owner"
+      );
+      const everyoneRole = this.db.roles.find(
+        (role) => role.guild_id === guildId && role.name === "@everyone"
+      );
+
+      guild.owner_id = nextOwnerMembership.user_id;
+      guild.updated_at = new Date().toISOString();
+
+      if (ownerRole) {
+        this.db.guild_members.forEach((member) => {
+          if (member.guild_id !== guildId) {
+            return;
+          }
+
+          member.role_ids = Array.isArray(member.role_ids)
+            ? member.role_ids.filter((roleId) => roleId !== ownerRole.id)
+            : [];
+        });
+
+        const nextOwnerRoleIds = new Set(nextOwnerMembership.role_ids || []);
+        if (everyoneRole?.id) {
+          nextOwnerRoleIds.add(everyoneRole.id);
+        }
+        nextOwnerRoleIds.add(ownerRole.id);
+        nextOwnerMembership.role_ids = [...nextOwnerRoleIds];
+      }
+    }
+
     this.db.guild_members.splice(membershipIndex, 1);
     const guildChannelIds = new Set(
       this.db.channels
@@ -171,8 +266,10 @@ export const demoStoreGuildMembershipMethods = {
     await this.save();
 
     return {
+      affected_user_ids: [...new Set(guildMemberUserIds)],
       guild_id: guildId,
-      left: true
+      left: true,
+      transferred_owner_id: guild.owner_id !== userId ? guild.owner_id : null
     };
   }
 ,

@@ -30,6 +30,11 @@ export function getServerSettingsCopy(language) {
   return {
     assignRole: t("server.settings.members.assignRole", "Rol"),
     createRole: t("server.settings.roles.create", "Crear rol"),
+    deleteServer: t("server.settings.delete.action", "Eliminar servidor"),
+    deleteServerHint: t(
+      "server.settings.delete.hint",
+      "Disponible solo para el owner. Borra el servidor y todo su contenido."
+    ),
     noExtraRole: t("server.settings.members.noExtraRole", "Sin rol extra"),
     banAction: t("server.settings.members.ban", "Banear"),
     banDurationDays: t("server.settings.members.duration.days", "dias"),

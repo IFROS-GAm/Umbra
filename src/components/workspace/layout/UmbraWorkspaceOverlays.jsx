@@ -20,7 +20,10 @@ export function UmbraWorkspaceOverlays({
   accountManagerOpen,
   activeChannel,
   activeGuild,
+  confirmDeleteGuild,
   confirmLeaveGuild,
+  deleteGuildTarget,
+  deletingGuild,
   currentUser,
   currentUserId,
   currentUserMenuAnchorRect,
@@ -38,6 +41,7 @@ export function UmbraWorkspaceOverlays({
   handleConfirmScreenShare,
   handleCurrentUserExit,
   handleCurrentUserStatusChange,
+  handleDeleteGuild,
   handleDialogSubmit,
   handleKickGuildMember,
   handleOpenDmFromCard,
@@ -74,6 +78,7 @@ export function UmbraWorkspaceOverlays({
   serverSettingsGuild,
   setAccountManagerOpen,
   setCurrentUserMenuAnchorRect,
+  setDeleteGuildTarget,
   setDialog,
   setFullProfile,
   setInviteModalState,
@@ -238,9 +243,29 @@ export function UmbraWorkspaceOverlays({
             memberCount={serverSettingsGuild.members?.length || 0}
             onBanMember={handleBanGuildMember}
             onClose={() => setServerSettingsGuildId(null)}
+            onDeleteServer={handleDeleteGuild}
             onKickMember={handleKickGuildMember}
             onRefresh={handleRefreshWorkspace}
             onSave={handleSaveGuildProfile}
+          />
+        </Suspense>
+      ) : null}
+
+      {deleteGuildTarget ? (
+        <Suspense fallback={<WorkspacePanelFallback compact />}>
+          <ConfirmActionModal
+            cancelLabel="Cancelar"
+            confirmLabel="Eliminar servidor"
+            description={`Esta accion borrara ${deleteGuildTarget.name} para todos sus miembros. No se puede deshacer.`}
+            loading={deletingGuild}
+            loadingLabel="Eliminando..."
+            onClose={() => {
+              if (!deletingGuild) {
+                setDeleteGuildTarget(null);
+              }
+            }}
+            onConfirm={confirmDeleteGuild}
+            title={`Eliminar ${deleteGuildTarget.name}?`}
           />
         </Suspense>
       ) : null}
@@ -274,6 +299,7 @@ export function UmbraWorkspaceOverlays({
             confirmLabel="Abandonar"
             description={`Perderas acceso a ${leaveGuildTarget.name} hasta que alguien vuelva a invitarte.`}
             loading={leavingGuild}
+            loadingLabel="Saliendo..."
             onClose={() => {
               if (!leavingGuild) {
                 setLeaveGuildTarget(null);

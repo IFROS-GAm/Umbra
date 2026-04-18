@@ -10,6 +10,7 @@ export function ServerSettingsModal({
   memberCount = 0,
   onBanMember,
   onClose,
+  onDeleteServer,
   onKickMember,
   onRefresh,
   onSave
@@ -37,6 +38,7 @@ export function ServerSettingsModal({
           language={language}
           memberCount={memberCount}
           onClose={onClose}
+          onDeleteServer={onDeleteServer}
           state={state}
         />
       </div>

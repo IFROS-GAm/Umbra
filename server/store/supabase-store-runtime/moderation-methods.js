@@ -41,6 +41,30 @@ import {
 } from "./shared.js";
 
 export const supabaseStoreRuntimeModerationMethods = {
+  async deleteGuild({ guildId, userId }) {
+    const [guildRows, memberRows] = await Promise.all([
+      expectData(this.client.from("guilds").select("id,owner_id").eq("id", guildId).limit(1)),
+      expectData(this.client.from("guild_members").select("user_id").eq("guild_id", guildId))
+    ]);
+
+    const guild = guildRows[0] || null;
+    if (!guild) {
+      throw createError("Servidor no encontrado.", 404);
+    }
+
+    if (guild.owner_id !== userId) {
+      throw createError("Solo el owner puede eliminar este servidor.", 403);
+    }
+
+    await expectData(this.client.from("guilds").delete().eq("id", guildId));
+
+    return {
+      affected_user_ids: [...new Set(memberRows.map((row) => row.user_id).filter(Boolean))],
+      deleted: true,
+      guild_id: guildId
+    };
+  }
+,
   async markChannelRead({ channelId, lastReadMessageId = null, userId }) {
     const channel = await this.getChannel(channelId);
     if (!channel) {
@@ -180,25 +204,105 @@ export const supabaseStoreRuntimeModerationMethods = {
   }
 ,
   async leaveGuild({ guildId, userId }) {
-    const [guildRows, membershipRows, channels] = await Promise.all([
-      expectData(this.client.from("guilds").select("id").eq("id", guildId).limit(1)),
+    const [guildRows, membershipRows, channels, allMembers, roles] = await Promise.all([
+      expectData(this.client.from("guilds").select("id,owner_id").eq("id", guildId).limit(1)),
       expectData(
         this.client
           .from("guild_members")
-          .select("guild_id,user_id")
+          .select("guild_id,user_id,role_ids")
           .eq("guild_id", guildId)
           .eq("user_id", userId)
           .limit(1)
       ),
-      expectData(this.client.from("channels").select("id").eq("guild_id", guildId))
+      expectData(this.client.from("channels").select("id").eq("guild_id", guildId)),
+      expectData(
+        this.client
+          .from("guild_members")
+          .select("guild_id,user_id,role_ids")
+          .eq("guild_id", guildId)
+      ),
+      expectData(this.client.from("roles").select("id,name").eq("guild_id", guildId))
     ]);
 
-    if (!guildRows[0]) {
+    const guild = guildRows[0] || null;
+    if (!guild) {
       throw createError("Servidor no encontrado.", 404);
     }
 
     if (!membershipRows[0]) {
       throw createError("No perteneces a este servidor.", 403);
+    }
+
+    const remainingMembers = allMembers.filter((member) => member.user_id !== userId);
+    const affectedUserIds = [...new Set(allMembers.map((member) => member.user_id).filter(Boolean))];
+
+    let transferredOwnerId = null;
+
+    if (guild.owner_id === userId) {
+      if (!remainingMembers.length) {
+        return this.deleteGuild({ guildId, userId });
+      }
+
+      const nextOwnerMembership =
+        remainingMembers[Math.floor(Math.random() * remainingMembers.length)] || null;
+      transferredOwnerId = nextOwnerMembership?.user_id || null;
+      const ownerRole = roles.find((role) => role.name === "Owner") || null;
+      const everyoneRole = roles.find((role) => role.name === "@everyone") || null;
+      const nextOwnerRoleIds = new Set(nextOwnerMembership?.role_ids || []);
+
+      if (everyoneRole?.id) {
+        nextOwnerRoleIds.add(everyoneRole.id);
+      }
+      if (ownerRole?.id) {
+        nextOwnerRoleIds.add(ownerRole.id);
+      }
+
+      await expectData(
+        this.client
+          .from("guilds")
+          .update({
+            owner_id: transferredOwnerId,
+            updated_at: new Date().toISOString()
+          })
+          .eq("id", guildId)
+      );
+
+      if (ownerRole?.id) {
+        const memberIdsToStrip = remainingMembers
+          .map((member) => member.user_id)
+          .filter((memberId) => memberId !== nextOwnerMembership.user_id);
+
+        if (memberIdsToStrip.length) {
+          await Promise.all(
+            memberIdsToStrip.map((memberId) => {
+              const member = remainingMembers.find((entry) => entry.user_id === memberId);
+              const nextRoleIds = Array.isArray(member?.role_ids)
+                ? member.role_ids.filter((roleId) => roleId !== ownerRole.id)
+                : [];
+
+              return expectData(
+                this.client
+                  .from("guild_members")
+                  .update({
+                    role_ids: nextRoleIds
+                  })
+                  .eq("guild_id", guildId)
+                  .eq("user_id", memberId)
+              );
+            })
+          );
+        }
+
+        await expectData(
+          this.client
+            .from("guild_members")
+            .update({
+              role_ids: [...nextOwnerRoleIds]
+            })
+            .eq("guild_id", guildId)
+            .eq("user_id", nextOwnerMembership.user_id)
+        );
+      }
     }
 
     const guildChannelIds = channels.map((channel) => channel.id);
@@ -222,8 +326,10 @@ export const supabaseStoreRuntimeModerationMethods = {
     );
 
     return {
+      affected_user_ids: affectedUserIds,
       guild_id: guildId,
-      left: true
+      left: true,
+      transferred_owner_id: transferredOwnerId
     };
   }
 ,

@@ -43,6 +43,42 @@
   gap: 6px;
 }
 
+.server-settings-sidebar-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 16px;
+}
+
+.server-settings-sidebar-footer span {
+  color: var(--text-2);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.server-settings-danger-trigger {
+  align-items: center;
+  background: linear-gradient(180deg, rgba(71, 23, 31, 0.92), rgba(53, 16, 24, 0.92));
+  border: 1px solid rgba(245, 99, 99, 0.22);
+  border-radius: 12px;
+  color: #ffb8b8;
+  display: inline-flex;
+  font: inherit;
+  font-weight: 700;
+  gap: 10px;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 14px;
+}
+
+.server-settings-danger-trigger:hover {
+  background: linear-gradient(180deg, rgba(94, 29, 40, 0.96), rgba(69, 19, 29, 0.96));
+  border-color: rgba(255, 138, 138, 0.28);
+  color: #ffd4d4;
+}
+
 .server-settings-nav-item {
   background: rgba(255, 255, 255, 0.035);
   border: 1px solid rgba(255, 255, 255, 0.04);

@@ -7,6 +7,7 @@ export function ConfirmActionModal({
   confirmLabel = "Aceptar",
   description,
   loading = false,
+  loadingLabel = null,
   onClose,
   onConfirm,
   title
@@ -46,7 +47,7 @@ export function ConfirmActionModal({
             onClick={onConfirm}
             type="button"
           >
-            {loading ? "Saliendo..." : confirmLabel}
+            {loading ? loadingLabel || confirmLabel : confirmLabel}
           </button>
         </div>
       </div>

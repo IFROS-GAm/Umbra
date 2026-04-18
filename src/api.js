@@ -523,6 +523,11 @@ export const api = {
       method: "POST"
     });
   },
+  deleteGuild({ guildId }) {
+    return request(`/api/guilds/${guildId}`, {
+      method: "DELETE"
+    });
+  },
   leaveGuild({ guildId }) {
     return request(`/api/guilds/${guildId}/members/me`, {
       method: "DELETE"
