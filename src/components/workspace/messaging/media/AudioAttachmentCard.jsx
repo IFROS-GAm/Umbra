@@ -127,7 +127,14 @@ export function AudioAttachmentCard({
   }
 
   const progressMax = Math.max(duration || 0, 0.01);
+  const progressPercent = Math.max(
+    0,
+    Math.min(100, (Math.min(currentTime, progressMax) / progressMax) * 100)
+  );
   const sizeLabel = useMemo(() => formatFileSize(size), [size]);
+  const timeLabel = duration
+    ? `${formatDuration(currentTime)} / ${formatDuration(duration)}`
+    : formatDuration(currentTime);
 
   return (
     <div className={`audio-attachment-card ${variant} ${className}`.trim()}>
@@ -161,8 +168,7 @@ export function AudioAttachmentCard({
 
         <div className="audio-attachment-card-timeline">
           <div className="audio-attachment-card-time">
-            <span>{formatDuration(currentTime)}</span>
-            <span>{formatDuration(duration)}</span>
+            <span>{timeLabel}</span>
           </div>
           <input
             className="audio-attachment-card-seek"
@@ -170,6 +176,9 @@ export function AudioAttachmentCard({
             min="0"
             onChange={handleSeek}
             step="0.01"
+            style={{
+              "--audio-progress": `${progressPercent}%`
+            }}
             type="range"
             value={Math.min(currentTime, progressMax)}
           />
