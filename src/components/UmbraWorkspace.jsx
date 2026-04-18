@@ -96,6 +96,7 @@ export function UmbraWorkspace({
     membersResizeRef,
     serverFolders,
     serverSettingsGuildId,
+    setDeleteGuildTarget,
     setDmMenuPrefs,
     setFullProfile,
     setGuildMenuPrefs,
