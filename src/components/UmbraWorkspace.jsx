@@ -120,23 +120,6 @@ export function UmbraWorkspace({
     guilds: workspace?.guilds
   });
 
-  const {
-    acceptIncomingCall,
-    incomingCall,
-    rejectIncomingCall
-  } = useWorkspaceDesktopNotifications({
-    accessToken,
-    dmMenuPrefs,
-    guildMenuPrefs,
-    handleVoiceLeave: handleLeaveVoiceSession,
-    joinVoiceChannelById,
-    joinedVoiceChannelId,
-    language,
-    showUiNotice,
-    voiceSessions,
-    workspace
-  });
-
   const currentUser = workspace?.current_user || null;
   const currentUserId = currentUser?.id || "";
   const {
@@ -427,6 +410,22 @@ export function UmbraWorkspace({
     voiceMenu,
     voiceOutputPanel,
     voiceState
+  });
+  const {
+    acceptIncomingCall,
+    incomingCall,
+    rejectIncomingCall
+  } = useWorkspaceDesktopNotifications({
+    accessToken,
+    dmMenuPrefs,
+    guildMenuPrefs,
+    handleVoiceLeave: handleLeaveVoiceSession,
+    joinVoiceChannelById,
+    joinedVoiceChannelId,
+    language,
+    showUiNotice,
+    voiceSessions,
+    workspace
   });
   const voiceStageParticipants = useMemo(
     () =>
