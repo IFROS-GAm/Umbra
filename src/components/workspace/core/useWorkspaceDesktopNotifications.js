@@ -72,6 +72,7 @@ export function useWorkspaceDesktopNotifications({
   accessToken,
   dmMenuPrefs,
   guildMenuPrefs,
+  handleVoiceLeave,
   joinVoiceChannelById,
   joinedVoiceChannelId,
   language = "es",
@@ -504,6 +505,7 @@ export function useWorkspaceDesktopNotifications({
   const handleIncomingCallResponse = useCallback(
     (payload = {}) => {
       const callId = String(payload.callId || "").trim();
+      const channelId = String(payload.channelId || "").trim();
       const status = String(payload.status || "").trim();
       const responderName =
         payload.responder?.display_name ||
@@ -514,6 +516,15 @@ export function useWorkspaceDesktopNotifications({
         return;
       }
 
+      const activeChannel = channelId
+        ? findChannelInSession(stateRef.current.workspace, channelId)?.channel || null
+        : null;
+      const shouldCloseDirectCall =
+        ["missed", "rejected"].includes(status) &&
+        channelId &&
+        stateRef.current.joinedVoiceChannelId === channelId &&
+        activeChannel?.type === "dm";
+
       playUmbraSound("notification");
       if (status === "accepted") {
         showUiNotice?.(`${responderName} acepto la llamada.`);
@@ -521,13 +532,19 @@ export function useWorkspaceDesktopNotifications({
       }
 
       if (status === "missed") {
+        if (shouldCloseDirectCall) {
+          handleVoiceLeave?.();
+        }
         showUiNotice?.(`${responderName} no respondio la llamada.`);
         return;
       }
 
+      if (shouldCloseDirectCall) {
+        handleVoiceLeave?.();
+      }
       showUiNotice?.(`${responderName} rechazo la llamada.`);
     },
-    [showUiNotice]
+    [handleVoiceLeave, showUiNotice]
   );
 
   useEffect(() => {

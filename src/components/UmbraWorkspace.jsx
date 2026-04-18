@@ -128,6 +128,7 @@ export function UmbraWorkspace({
     accessToken,
     dmMenuPrefs,
     guildMenuPrefs,
+    handleVoiceLeave: handleLeaveVoiceSession,
     joinVoiceChannelById,
     joinedVoiceChannelId,
     language,
