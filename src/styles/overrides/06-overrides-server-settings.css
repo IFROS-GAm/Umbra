@@ -170,7 +170,7 @@
 .server-settings-list-stack {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .server-settings-list-row {
@@ -184,6 +184,11 @@
   padding: 14px 16px;
 }
 
+.server-settings-list-row.member-row {
+  gap: 12px;
+  padding: 12px 14px;
+}
+
 .server-settings-list-row.role-row {
   text-align: left;
   width: 100%;
@@ -195,10 +200,12 @@
 }
 
 .server-settings-member-side {
-  align-items: flex-end;
+  align-items: center;
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  flex: 0 1 420px;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  justify-content: flex-end;
 }
 
 .server-settings-empty {
@@ -227,17 +234,22 @@
   gap: 14px;
 }
 
+.server-settings-member-main {
+  flex: 1 1 auto;
+  gap: 12px;
+}
+
 .server-settings-member-avatar {
   align-items: center;
   background: linear-gradient(180deg, #1a1d27, #14161d);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
+  border-radius: 14px;
   display: inline-flex;
   flex: 0 0 auto;
-  height: 48px;
+  height: 42px;
   justify-content: center;
   overflow: hidden;
-  width: 48px;
+  width: 42px;
 }
 
 .server-settings-member-avatar img {
@@ -258,29 +270,34 @@
 .server-settings-member-copy strong,
 .server-settings-role-copy strong {
   color: var(--text-0);
-  font-size: 1rem;
+  font-size: 0.95rem;
 }
 
 .server-settings-member-copy span,
 .server-settings-role-copy span,
 .server-settings-invite-copy span {
   color: var(--text-2);
-  font-size: 0.88rem;
+  font-size: 0.82rem;
 }
 
 .server-settings-badges {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
   justify-content: flex-end;
 }
 
 .server-settings-member-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
   justify-content: flex-end;
+}
+
+.server-settings-member-actions .ghost-button.small {
+  min-height: 34px;
+  padding: 0 10px;
 }
 
 .server-settings-member-actions .ghost-button.small.accent {
@@ -300,19 +317,21 @@
   align-items: stretch;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 16px;
+  border-radius: 14px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  min-width: 220px;
-  padding: 10px;
+  flex: 1 1 210px;
+  gap: 4px;
+  max-width: 246px;
+  min-width: 190px;
+  padding: 8px 10px;
 }
 
 .server-settings-member-role-select span {
   color: var(--text-2);
-  font-size: 0.76rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  text-align: right;
+  text-align: left;
 }
 
 .server-settings-member-role-current {
@@ -324,7 +343,7 @@
 
 .server-settings-member-role-current strong {
   color: var(--text-0);
-  font-size: 0.92rem;
+  font-size: 0.88rem;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -339,8 +358,9 @@
   border: 1px solid rgba(160, 176, 255, 0.14);
   border-radius: 12px;
   color: var(--text-0);
+  font-size: 0.85rem;
   font-weight: 600;
-  min-height: 40px;
+  min-height: 36px;
   padding: 0 36px 0 12px;
 }
 
@@ -359,9 +379,9 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 999px;
   color: var(--text-1);
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   font-weight: 700;
-  padding: 6px 10px;
+  padding: 5px 9px;
 }
 
 .server-settings-pill.accent {
@@ -622,6 +642,28 @@
   flex-direction: column;
   gap: 14px;
   padding: 16px;
+}
+
+.confirm-action-modal p {
+  line-height: 1.55;
+}
+
+@media (max-width: 1100px) {
+  .server-settings-member-side {
+    align-items: flex-start;
+    flex: 1 1 100%;
+    justify-content: flex-start;
+  }
+
+  .server-settings-list-row.member-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .server-settings-member-role-select {
+    max-width: none;
+    width: 100%;
+  }
 }
 
 .server-settings-member-transfer-copy {

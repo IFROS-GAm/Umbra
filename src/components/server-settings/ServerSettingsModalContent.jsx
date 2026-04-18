@@ -3,6 +3,7 @@ import React from "react";
 import { buildInviteUrl, resolveAssetUrl } from "../../api.js";
 import { translate } from "../../i18n.js";
 import { Icon } from "../Icon.jsx";
+import { ConfirmActionModal } from "../modals/ConfirmActionModal.jsx";
 import { ServerStickersPanel } from "../ServerStickersPanel.jsx";
 import {
   buildGuildInitials,
@@ -239,9 +240,18 @@ function ServerSettingsMembersTab({
   onTransferOwner,
   sortedMembers
 }) {
+  const transferTarget =
+    ownerTransferDraft.memberId
+      ? sortedMembers.find((member) => member.id === ownerTransferDraft.memberId) || null
+      : null;
+  const transferBusy =
+    memberActionState.memberId === transferTarget?.id &&
+    memberActionState.mode === "owner-transfer";
+
   return (
-    <div className="server-settings-body single-column">
-      <div className="server-settings-tab-panel">
+    <>
+      <div className="server-settings-body single-column">
+        <div className="server-settings-tab-panel">
         <div className="server-settings-list-header">
           <h3>{copy.members}</h3>
           <span>
@@ -277,7 +287,8 @@ function ServerSettingsMembersTab({
                 memberActionState.memberId === member.id &&
                 (memberActionState.mode === "kick" ||
                   memberActionState.mode === "ban" ||
-                  memberActionState.mode === "role");
+                  memberActionState.mode === "role" ||
+                  memberActionState.mode === "owner-transfer");
               const canModerateMember =
                 canManageMembers && member.id !== guild.owner_id && member.id !== currentUserId;
               const canAssignRole = canManageRoles && member.id !== guild.owner_id;
@@ -294,7 +305,7 @@ function ServerSettingsMembersTab({
 
               return (
                 <div className="server-settings-list-stack" key={member.id}>
-                  <div className="server-settings-list-row">
+                  <div className="server-settings-list-row member-row">
                     <div className="server-settings-member-main">
                       <div className="server-settings-member-avatar">
                         {member.avatar_url ? (
@@ -360,9 +371,7 @@ function ServerSettingsMembersTab({
                           </button>
                           {canTransferOwner ? (
                             <button
-                              className={`ghost-button small accent ${
-                                ownerTransferDraft.memberId === member.id ? "active" : ""
-                              }`.trim()}
+                              className="ghost-button small accent"
                               disabled={Boolean(memberActionState.mode)}
                               onClick={() =>
                                 ownerTransferDraft.memberId === member.id
@@ -513,58 +522,6 @@ function ServerSettingsMembersTab({
                       </div>
                     </div>
                   ) : null}
-
-                  {ownerTransferDraft.memberId === member.id ? (
-                    <div className="server-settings-member-transfer-panel">
-                      <div className="server-settings-member-ban-header">
-                        <div>
-                          <strong>{copy.transferOwnerTitle}</strong>
-                          <span>
-                            {replaceName(
-                              copy.transferOwnerDescription,
-                              member.display_name || member.username,
-                              `Vas a transferir el owner a ${member.display_name || member.username}.`
-                            )}
-                          </span>
-                        </div>
-                        <button
-                          className="ghost-button small"
-                          disabled={isBusy}
-                          onClick={onCloseOwnerTransferDraft}
-                          type="button"
-                        >
-                          <span>{copy.banPanelCancel}</span>
-                        </button>
-                      </div>
-
-                      <div className="server-settings-member-transfer-copy">
-                        <span>{copy.transferOwnerHint}</span>
-                      </div>
-
-                      <div className="server-settings-member-actions">
-                        <button
-                          className="ghost-button small"
-                          disabled={isBusy}
-                          onClick={onCloseOwnerTransferDraft}
-                          type="button"
-                        >
-                          <span>{copy.banPanelCancel}</span>
-                        </button>
-                        <button
-                          className="ghost-button small danger"
-                          disabled={isBusy}
-                          onClick={() => onTransferOwner(member)}
-                          type="button"
-                        >
-                          <span>
-                            {isBusy && memberActionState.mode === "owner-transfer"
-                              ? copy.membersModerating
-                              : copy.transferOwnerConfirm}
-                          </span>
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
                 </div>
               );
             })
@@ -572,8 +529,26 @@ function ServerSettingsMembersTab({
             <div className="server-settings-empty">{copy.membersEmpty}</div>
           )}
         </div>
+        </div>
       </div>
-    </div>
+
+      {transferTarget ? (
+        <ConfirmActionModal
+          cancelLabel={copy.banPanelCancel}
+          confirmLabel={copy.transferOwnerConfirm}
+          description={`${replaceName(
+            copy.transferOwnerDescription,
+            transferTarget.display_name || transferTarget.username,
+            `Vas a transferir el owner a ${transferTarget.display_name || transferTarget.username}.`
+          )} ${copy.transferOwnerHint}`}
+          loading={transferBusy}
+          loadingLabel={copy.membersModerating}
+          onClose={onCloseOwnerTransferDraft}
+          onConfirm={() => onTransferOwner(transferTarget)}
+          title={copy.transferOwnerTitle}
+        />
+      ) : null}
+    </>
   );
 }
 

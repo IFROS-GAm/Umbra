@@ -114,7 +114,9 @@
   background:
     radial-gradient(circle at top left, rgba(108, 126, 255, 0.12), transparent 38%),
     #12151c;
+  overflow: visible;
   padding: 12px;
+  position: relative;
 }
 
 .message-attachment.video video {
@@ -146,6 +148,7 @@
   border-radius: 18px;
   display: grid;
   gap: 12px;
+  overflow: visible;
   padding: 14px;
   position: relative;
 }
@@ -313,11 +316,13 @@
   box-shadow: 0 16px 32px rgba(0, 0, 0, 0.28);
   display: flex;
   justify-content: center;
+  right: -8px;
   opacity: 0;
   padding: 10px 8px;
   pointer-events: none;
   position: absolute;
   transform: translateY(6px);
+  transform-origin: bottom right;
   transition: opacity 160ms ease, transform 160ms ease;
   z-index: 4;
 }
