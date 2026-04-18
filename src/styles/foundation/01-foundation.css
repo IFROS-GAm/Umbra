@@ -138,121 +138,40 @@ button {
 
 .boot-loader {
   height: 128px;
-  position: relative;
   width: 128px;
 }
 
 .boot-loader-orbit {
   display: block;
+  overflow: visible;
 }
 
 .boot-orbit-core {
-  background: radial-gradient(circle at 35% 35%, #f7d7ff, #bc78ff 68%, #8f53f7 100%);
-  border-radius: 999px;
-  box-shadow:
-    0 0 32px rgba(162, 100, 255, 0.35),
-    0 0 0 8px rgba(147, 87, 247, 0.08);
-  height: 28px;
-  left: 50%;
-  margin-left: -14px;
-  margin-top: -14px;
-  position: absolute;
-  top: 50%;
-  width: 28px;
-}
-
-.boot-orbit-ring,
-.boot-orbiter,
-.boot-planet {
-  border-radius: 50%;
-  display: block;
-  position: absolute;
+  fill: url("#boot-core-gradient");
+  filter: url("#boot-core-glow");
 }
 
 .boot-orbit-ring {
-  border: 2px solid rgba(214, 206, 255, 0.72);
-  box-shadow: 0 0 0 1px rgba(133, 92, 255, 0.06);
-  left: 50%;
-  top: 50%;
-}
-
-.boot-orbit-ring-outer,
-.boot-orbiter-outer {
-  height: 112px;
-  left: 50%;
-  margin-left: -56px;
-  margin-top: -56px;
-  top: 50%;
-  width: 112px;
-}
-
-.boot-orbit-ring-middle,
-.boot-orbiter-middle {
-  height: 82px;
-  left: 50%;
-  margin-left: -41px;
-  margin-top: -41px;
-  top: 50%;
-  width: 82px;
-}
-
-.boot-orbit-ring-inner,
-.boot-orbiter-inner {
-  height: 52px;
-  left: 50%;
-  margin-left: -26px;
-  margin-top: -26px;
-  top: 50%;
-  width: 52px;
-}
-
-.boot-orbiter {
-  transform-origin: center center;
-  will-change: transform;
-}
-
-.boot-orbiter-outer {
-  animation: boot-orbit-spin 1.1s linear infinite;
-  animation-delay: -0.18s;
-}
-
-.boot-orbiter-middle {
-  animation: boot-orbit-spin 0.84s linear infinite reverse;
-  animation-delay: -0.41s;
-}
-
-.boot-orbiter-inner {
-  animation: boot-orbit-spin 0.62s linear infinite;
-  animation-delay: -0.27s;
+  fill: none;
+  stroke: rgba(214, 206, 255, 0.72);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
 }
 
 .boot-planet {
-  box-shadow: 0 0 18px rgba(160, 122, 255, 0.42);
-  height: 11px;
-  right: -6px;
-  top: 50%;
-  margin-top: -5.5px;
-  width: 11px;
+  filter: url("#boot-planet-glow");
 }
 
 .boot-planet-outer {
-  background: radial-gradient(circle at 35% 35%, #faf6ff, #a482ff 62%, #7a4dff 100%);
+  fill: url("#boot-planet-outer-gradient");
 }
 
 .boot-planet-middle {
-  background: radial-gradient(circle at 35% 35%, #f8ecff, #d991ff 60%, #a94dff 100%);
-  box-shadow: 0 0 18px rgba(217, 145, 255, 0.4);
-  height: 10px;
-  margin-top: -5px;
-  width: 10px;
+  fill: url("#boot-planet-middle-gradient");
 }
 
 .boot-planet-inner {
-  background: radial-gradient(circle at 35% 35%, #f1dbff, #7d66ff 60%, #5a3cff 100%);
-  box-shadow: 0 0 18px rgba(125, 102, 255, 0.4);
-  height: 9px;
-  margin-top: -4.5px;
-  width: 9px;
+  fill: url("#boot-planet-inner-gradient");
 }
 
 .boot-copy {
@@ -291,9 +210,8 @@ button {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .boot-orbiter {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
+  .boot-orbiter animateTransform {
+    display: none;
   }
 }
 
