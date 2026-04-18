@@ -3,6 +3,7 @@ import React, { lazy, useEffect, useMemo, useRef } from "react";
 import { translate } from "../i18n.js";
 import { ChatHeaderPanel } from "./workspace/ChatHeaderPanel.jsx";
 import { DesktopTopbar } from "./workspace/DesktopTopbar.jsx";
+import { UmbraBootScreen } from "./shared/UmbraBootScreen.jsx";
 import { UmbraWorkspaceOverlays } from "./workspace/UmbraWorkspaceOverlays.jsx";
 import { UmbraWorkspaceStage } from "./workspace/UmbraWorkspaceStage.jsx";
 import { WorkspaceNavigation } from "./workspace/WorkspaceNavigation.jsx";
@@ -510,7 +511,12 @@ export function UmbraWorkspace({
   );
 
   if (booting) {
-    return <div className="boot-screen">Despertando Umbra...</div>;
+    return (
+      <UmbraBootScreen
+        subtitle="Reconectando servidores, mensajes y presencia en tiempo real."
+        title="Despertando Umbra..."
+      />
+    );
   }
 
   if (!workspace) {

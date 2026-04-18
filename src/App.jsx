@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { AuthScreen } from "./components/AuthScreen.jsx";
 import { InviteJoinScreen } from "./components/InviteJoinScreen.jsx";
 import { UmbraWorkspace } from "./components/UmbraWorkspace.jsx";
+import { UmbraBootScreen } from "./components/shared/UmbraBootScreen.jsx";
 import { applyLanguageToDocument, getStoredLanguage, persistLanguage } from "./i18n.js";
 import { hasSupabaseBrowserConfig, supabase } from "./supabase-browser.js";
 
@@ -489,7 +490,12 @@ function AppContent() {
   }
 
   if (!ready) {
-    return <div className="boot-screen">Preparando Umbra...</div>;
+    return (
+      <UmbraBootScreen
+        subtitle="Cargando tu sesion, credenciales y acceso inicial."
+        title="Preparando Umbra..."
+      />
+    );
   }
 
   if (!hasSupabaseBrowserConfig || !supabase) {
