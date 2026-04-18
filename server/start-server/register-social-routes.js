@@ -308,13 +308,15 @@ export function registerSocialRoutes({
       const payload = await store.leaveGuild({
         guildId: req.params.guildId,
         userId: req.viewer.id
-      });
-
-      emitNavigationUpdate({
-        guildId: req.params.guildId,
-        type: "guild:leave",
-        userId: req.viewer.id
-      });
+      });
+
+      emitNavigationUpdateToUsers(payload?.affected_user_ids || [req.viewer.id], {
+        guildId: req.params.guildId,
+        transferredOwnerId: payload?.transferred_owner_id || null,
+        type: "guild:update",
+        userId: req.viewer.id
+      });
+
       res.json(payload);
     } catch (error) {
       sendError(res, error);
