@@ -43,9 +43,12 @@ export function AudioAttachmentCard({
   variant = "message"
 }) {
   const audioRef = useRef(null);
+  const previousVolumeRef = useRef(1);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [volume, setVolume] = useState(1);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -98,6 +101,16 @@ export function AudioAttachmentCard({
     setIsPlaying(false);
   }, [src]);
 
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) {
+      return;
+    }
+
+    audio.volume = Math.max(0, Math.min(1, volume));
+    audio.muted = isMuted || volume <= 0;
+  }, [isMuted, volume]);
+
   async function togglePlayback() {
     const audio = audioRef.current;
     if (!audio) {
@@ -127,15 +140,42 @@ export function AudioAttachmentCard({
     setCurrentTime(nextTime);
   }
 
+  function handleVolumeChange(event) {
+    const nextVolume = Math.max(0, Math.min(1, Number(event.target.value) || 0));
+    setVolume(nextVolume);
+
+    if (nextVolume > 0) {
+      previousVolumeRef.current = nextVolume;
+      setIsMuted(false);
+      return;
+    }
+
+    setIsMuted(true);
+  }
+
+  function toggleMute() {
+    if (isMuted || volume <= 0) {
+      const restoredVolume = Math.max(previousVolumeRef.current || 0.75, 0.05);
+      setVolume(restoredVolume);
+      setIsMuted(false);
+      return;
+    }
+
+    previousVolumeRef.current = volume;
+    setIsMuted(true);
+  }
+
   const progressMax = Math.max(duration || 0, 0.01);
   const progressPercent = Math.max(
     0,
     Math.min(100, (Math.min(currentTime, progressMax) / progressMax) * 100)
   );
+  const volumePercent = Math.max(0, Math.min(100, volume * 100));
   const sizeLabel = useMemo(() => formatFileSize(size), [size]);
   const timeLabel = duration
     ? `${formatDuration(currentTime)} / ${formatDuration(duration)}`
     : formatDuration(currentTime);
+  const volumeIconName = isMuted || volume <= 0 ? "deafen" : "volume";
 
   return (
     <div className={`audio-attachment-card ${variant} ${className}`.trim()}>
@@ -198,9 +238,32 @@ export function AudioAttachmentCard({
           />
         </div>
 
-        <span className="audio-attachment-card-volume" aria-hidden="true">
-          <Icon name="volume" size={18} />
-        </span>
+        <div className="audio-attachment-card-volume-control">
+          <button
+            aria-label={isMuted || volume <= 0 ? "Activar volumen" : "Silenciar audio"}
+            className="audio-attachment-card-volume-button"
+            onClick={toggleMute}
+            type="button"
+          >
+            <Icon name={volumeIconName} size={18} />
+          </button>
+
+          <div className="audio-attachment-card-volume-popover">
+            <input
+              aria-label="Ajustar volumen"
+              className="audio-attachment-card-volume-slider"
+              max="1"
+              min="0"
+              onChange={handleVolumeChange}
+              step="0.01"
+              style={{
+                "--audio-volume-progress": `${volumePercent}%`
+              }}
+              type="range"
+              value={volume}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );
