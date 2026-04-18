@@ -216,6 +216,41 @@ export function UserProfileModal({
             <p>{profile.memberSinceLabel || "Sin fecha visible por ahora."}</p>
           </section>
 
+          {profile.serverRole ? (
+            <section className="profile-detail-section">
+              <h4>Rol en este servidor</h4>
+              <div className="profile-detail-role-card">
+                <span
+                  className="profile-detail-role-icon"
+                  style={
+                    profile.serverRole.color
+                      ? { "--profile-role-color": profile.serverRole.color }
+                      : undefined
+                  }
+                >
+                  {profile.serverRole.iconUrl ? (
+                    <img
+                      alt={profile.serverRole.name}
+                      src={resolveAssetUrl(profile.serverRole.iconUrl)}
+                    />
+                  ) : profile.serverRole.icon ? (
+                    <span>{profile.serverRole.icon}</span>
+                  ) : (
+                    <Icon name="sparkles" size={16} />
+                  )}
+                </span>
+                <div className="profile-detail-role-copy">
+                  <strong
+                    style={profile.serverRole.color ? { color: profile.serverRole.color } : undefined}
+                  >
+                    {profile.serverRole.name}
+                  </strong>
+                  <small>{profile.serverRole.scope}</small>
+                </div>
+              </div>
+            </section>
+          ) : null}
+
           {profile.sharedGuilds?.length ? (
             <section className="profile-detail-section">
               <h4>Servidores en comun</h4>

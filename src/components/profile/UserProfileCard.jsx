@@ -301,6 +301,41 @@ export function UserProfileCard({
             <span className="user-profile-chip">{statusLabel(profile.status)}</span>
           </div>
 
+          {profile.serverRole ? (
+            <section className="user-profile-section user-profile-role-section">
+              <h4>Rol en este servidor</h4>
+              <div className="user-profile-role-card">
+                <div
+                  className="user-profile-role-icon"
+                  style={
+                    profile.serverRole.color
+                      ? { "--profile-role-color": profile.serverRole.color }
+                      : undefined
+                  }
+                >
+                  {profile.serverRole.iconUrl ? (
+                    <img
+                      alt={profile.serverRole.name}
+                      src={resolveAssetUrl(profile.serverRole.iconUrl)}
+                    />
+                  ) : profile.serverRole.icon ? (
+                    <span>{profile.serverRole.icon}</span>
+                  ) : (
+                    <Icon name="sparkles" size={16} />
+                  )}
+                </div>
+                <div className="user-profile-role-copy">
+                  <strong
+                    style={profile.serverRole.color ? { color: profile.serverRole.color } : undefined}
+                  >
+                    {profile.serverRole.name}
+                  </strong>
+                  <small>{profile.serverRole.scope}</small>
+                </div>
+              </div>
+            </section>
+          ) : null}
+
           <div className="user-profile-meta user-profile-meta-grid">
             {profile.sharedGuildCount ? (
               <div className="user-profile-meta-card">

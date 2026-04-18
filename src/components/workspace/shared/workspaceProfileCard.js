@@ -42,6 +42,37 @@ function normalizeProfilePrivacy(settings = {}) {
   };
 }
 
+function resolveServerRole(activeGuild, activeGuildMember) {
+  const roleIds = Array.isArray(activeGuildMember?.role_ids) ? activeGuildMember.role_ids : [];
+  const guildRoles = Array.isArray(activeGuild?.roles) ? activeGuild.roles : [];
+
+  if (!roleIds.length || !guildRoles.length) {
+    return null;
+  }
+
+  const memberRoles = guildRoles
+    .filter((role) => roleIds.includes(role.id))
+    .sort((left, right) => Number(right?.position || 0) - Number(left?.position || 0));
+
+  const preferredRole =
+    memberRoles.find((role) => !role?.is_default_role) ||
+    memberRoles[0] ||
+    null;
+
+  if (!preferredRole) {
+    return null;
+  }
+
+  return {
+    color: preferredRole.color || activeGuildMember?.role_color || null,
+    icon: preferredRole.icon_emoji || "",
+    iconUrl: preferredRole.icon_url || "",
+    id: preferredRole.id,
+    name: preferredRole.display_name || preferredRole.name || "Rol",
+    scope: activeGuild?.name || "Servidor actual"
+  };
+}
+
 export function buildWorkspaceProfileCardData({
   activeChannel,
   activeGuild,
@@ -59,6 +90,7 @@ export function buildWorkspaceProfileCardData({
 
   const activeGuildMember =
     activeGuild?.members.find((member) => member.id === targetUser.id) || null;
+  const activeServerRole = resolveServerRole(activeGuild, activeGuildMember);
   const activeParticipant =
     activeChannel?.participants?.find((participant) => participant.id === targetUser.id) || null;
   const sharedGuilds = workspace.guilds.filter((guild) =>
@@ -202,6 +234,7 @@ export function buildWorkspaceProfileCardData({
       fallbackProfile?.profile_color ||
       "#5865F2",
     roleColor: targetUser.role_color || activeGuildMember?.role_color || null,
+    serverRole: activeServerRole,
     sharedDmCount: sharedDms.length,
     sharedGuildCount: sharedGuilds.length,
     sharedGuilds: sharedGuildEntries,

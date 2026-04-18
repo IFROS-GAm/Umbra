@@ -306,7 +306,7 @@ export const VirtualMessageFeed = memo(function VirtualMessageFeed({
     updateViewportState
   ]);
 
-  if (!rows.length && loadingMessages && !messageLoadError) {
+  if (!rows.length && loadingMessages) {
     return (
       <section className="message-feed">
         <div className="message-feed-content">
@@ -317,7 +317,7 @@ export const VirtualMessageFeed = memo(function VirtualMessageFeed({
     );
   }
 
-  if (!rows.length && messageLoadError) {
+  if (!rows.length && messageLoadError && !loadingMessages) {
     return (
       <section className="message-feed">
         <div className="message-feed-content">
@@ -380,7 +380,7 @@ export const VirtualMessageFeed = memo(function VirtualMessageFeed({
         <div className="message-feed-content" ref={contentRef}>
           {headerContent ? <div className="message-feed-header">{headerContent}</div> : null}
 
-          {messageLoadError ? (
+          {messageLoadError && !loadingMessages ? (
             <MessageLoadState
               compact
               loading={loadingMessages}

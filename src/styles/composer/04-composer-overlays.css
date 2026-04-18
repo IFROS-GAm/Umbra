@@ -274,6 +274,66 @@
   line-height: 1.55;
 }
 
+.user-profile-role-section {
+  gap: 12px;
+}
+
+.user-profile-role-card {
+  align-items: center;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.04), rgba(88, 101, 242, 0.08));
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.user-profile-role-icon {
+  --profile-role-color: #9aa4b2;
+  align-items: center;
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--profile-role-color) 22%, rgba(255, 255, 255, 0.08)),
+      rgba(15, 16, 19, 0.94)
+    );
+  border: 1px solid color-mix(in srgb, var(--profile-role-color) 44%, rgba(255, 255, 255, 0.14));
+  border-radius: 14px;
+  color: var(--profile-role-color);
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 42px;
+  justify-content: center;
+  overflow: hidden;
+  width: 42px;
+}
+
+.user-profile-role-icon img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.user-profile-role-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.user-profile-role-copy strong {
+  color: var(--text-0);
+  font-size: 0.95rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-profile-role-copy small {
+  color: var(--text-2);
+}
+
 .user-profile-message-box {
   align-items: center;
   background: #111214;
