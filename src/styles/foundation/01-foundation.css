@@ -41,8 +41,11 @@
   --text-2: #74819b;
   --accent: #4f5ff2;
   --accent-2: #ec7d3f;
+  --accent-cold: #3ea7d8;
   --danger: #e0586a;
   --success: #1fb77b;
+  --shadow-brand: 0 22px 56px rgba(79, 98, 142, 0.14);
+  --shadow-elevated: 0 22px 48px rgba(90, 111, 156, 0.14);
 }
 
 *,
@@ -60,13 +63,25 @@ body,
 body {
   margin: 0;
   font-family: var(--font-sans);
+  background: var(--bg-0);
+  color: var(--text-0);
+  overflow: hidden;
+}
+
+:root[data-theme="dark"] body {
   background:
     radial-gradient(circle at 12% 8%, rgba(107, 124, 255, 0.1), transparent 20%),
     radial-gradient(circle at 86% 14%, rgba(123, 212, 255, 0.06), transparent 24%),
     radial-gradient(circle at 50% 120%, rgba(217, 163, 95, 0.08), transparent 28%),
     linear-gradient(180deg, #0f1013, #13151a 34%, #101114 100%);
-  color: var(--text-0);
-  overflow: hidden;
+}
+
+:root[data-theme="light"] body {
+  background:
+    radial-gradient(circle at 10% 10%, rgba(79, 95, 242, 0.16), transparent 22%),
+    radial-gradient(circle at 88% 12%, rgba(62, 167, 216, 0.12), transparent 24%),
+    radial-gradient(circle at 50% 115%, rgba(236, 125, 63, 0.08), transparent 30%),
+    linear-gradient(180deg, #edf3ff, #f7f9ff 36%, #eef3fb 100%);
 }
 
 button,
@@ -237,6 +252,32 @@ button {
   color: var(--text-2);
   line-height: 1.55;
   margin: 0;
+}
+
+:root[data-theme="light"] .boot-screen::before {
+  background: radial-gradient(circle, rgba(79, 95, 242, 0.18), transparent 68%);
+}
+
+:root[data-theme="light"] .boot-screen::after {
+  background: radial-gradient(circle, rgba(62, 167, 216, 0.12), transparent 70%);
+}
+
+:root[data-theme="light"] .boot-shell {
+  background:
+    radial-gradient(circle at top, rgba(79, 95, 242, 0.12), transparent 48%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(244, 247, 255, 0.98));
+  border-color: rgba(79, 95, 242, 0.12);
+  box-shadow: 0 26px 60px rgba(89, 110, 150, 0.18);
+}
+
+:root[data-theme="light"] .boot-copy small {
+  color: rgba(79, 95, 242, 0.82);
+}
+
+:root[data-theme="light"] .boot-failure-card {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(79, 95, 242, 0.12);
+  box-shadow: 0 18px 42px rgba(79, 98, 142, 0.14);
 }
 
 .auth-shell {
@@ -440,6 +481,37 @@ button {
   background: rgba(255, 109, 136, 0.12);
   border: 1px solid rgba(255, 109, 136, 0.2);
   color: #ffc0ce;
+}
+
+:root[data-theme="light"] .auth-brand,
+:root[data-theme="light"] .auth-card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(247, 250, 255, 0.96));
+  border-color: rgba(79, 95, 242, 0.1);
+  box-shadow: 0 24px 52px rgba(79, 98, 142, 0.14);
+}
+
+:root[data-theme="light"] .auth-highlights div,
+:root[data-theme="light"] .auth-tabs {
+  background: rgba(255, 255, 255, 0.68);
+  border-color: rgba(79, 95, 242, 0.1);
+}
+
+:root[data-theme="light"] .google-button {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(239, 244, 255, 0.94));
+  border-color: rgba(79, 95, 242, 0.12);
+  color: var(--text-0);
+}
+
+:root[data-theme="light"] .auth-message.success {
+  background: rgba(31, 183, 123, 0.12);
+  border-color: rgba(31, 183, 123, 0.18);
+  color: #187a55;
+}
+
+:root[data-theme="light"] .auth-message.error {
+  background: rgba(224, 88, 106, 0.1);
+  border-color: rgba(224, 88, 106, 0.16);
+  color: #9f3142;
 }
 
 .desktop-shell {

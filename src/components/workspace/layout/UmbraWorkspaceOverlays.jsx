@@ -112,8 +112,13 @@ export function UmbraWorkspaceOverlays({
             onClose={() => setSettingsOpen(false)}
             onSignOut={onSignOut}
             onToggleTheme={() => {
-              setTheme("dark");
-              showUiNotice("Umbra usa modo oscuro.");
+              const nextTheme = theme === "dark" ? "light" : "dark";
+              setTheme(nextTheme);
+              showUiNotice(
+                nextTheme === "light"
+                  ? "Modo blanco activado."
+                  : "Modo oscuro activado."
+              );
             }}
             onUpdateProfile={handleProfileUpdate}
             theme={theme}

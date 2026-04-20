@@ -113,14 +113,18 @@ export function useWorkspaceCoreEffects({
 
   useEffect(() => {
     if (workspace?.current_user?.id) {
-      setTheme("dark");
+      const savedTheme = localStorage.getItem(`umbra-theme-${workspace.current_user.id}`);
+      const nextTheme = savedTheme || workspace.current_user.theme || "dark";
+      setTheme(nextTheme === "light" ? "light" : "dark");
     }
   }, [setTheme, workspace?.current_user?.id, workspace?.current_user?.theme]);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = "dark";
+    const normalizedTheme = theme === "light" ? "light" : "dark";
+    document.documentElement.dataset.theme = normalizedTheme;
+    document.documentElement.style.colorScheme = normalizedTheme;
     if (workspace?.current_user?.id) {
-      localStorage.setItem(`umbra-theme-${workspace.current_user.id}`, "dark");
+      localStorage.setItem(`umbra-theme-${workspace.current_user.id}`, normalizedTheme);
     }
   }, [theme, workspace?.current_user?.id]);
 

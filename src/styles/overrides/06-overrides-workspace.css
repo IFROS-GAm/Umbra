@@ -303,3 +303,163 @@
   padding: 4px 12px 8px;
 }
 
+:root[data-theme="light"] .desktop-topbar {
+  background:
+    linear-gradient(180deg, rgba(253, 254, 255, 0.98), rgba(240, 246, 255, 0.98)),
+    radial-gradient(circle at center, rgba(79, 95, 242, 0.08), transparent 52%);
+  border-bottom-color: rgba(79, 95, 242, 0.12);
+}
+
+:root[data-theme="light"] .desktop-topbar-copy small {
+  color: rgba(79, 95, 242, 0.78);
+}
+
+:root[data-theme="light"] .desktop-topbar-button {
+  color: var(--text-1);
+}
+
+:root[data-theme="light"] .desktop-topbar-button:hover,
+:root[data-theme="light"] .desktop-topbar-button.active {
+  background: rgba(79, 95, 242, 0.1);
+  color: var(--text-0);
+}
+
+:root[data-theme="light"] .chat-stage {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(245, 249, 255, 0.98)),
+    radial-gradient(circle at top, rgba(79, 95, 242, 0.08), transparent 30%);
+}
+
+:root[data-theme="light"] .requests-home {
+  background: rgba(249, 251, 255, 0.98);
+}
+
+:root[data-theme="light"] .navigator-panel,
+:root[data-theme="light"] .members-panel {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(243, 248, 255, 0.98)),
+    radial-gradient(circle at top, rgba(62, 167, 216, 0.06), transparent 34%);
+  box-shadow: var(--shadow-brand);
+}
+
+:root[data-theme="light"] .navigator-search input,
+:root[data-theme="light"] .chat-search input,
+:root[data-theme="light"] .invite-link-field {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(79, 95, 242, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  color: var(--text-1);
+}
+
+:root[data-theme="light"] .navigator-footer {
+  background:
+    linear-gradient(180deg, rgba(248, 251, 255, 0.98), rgba(241, 247, 255, 0.98)),
+    radial-gradient(circle at left center, rgba(79, 95, 242, 0.08), transparent 42%);
+  border-top-color: rgba(79, 95, 242, 0.1);
+}
+
+:root[data-theme="light"] .floating-tooltip-bubble {
+  background: rgba(255, 255, 255, 0.98);
+  border-color: rgba(79, 95, 242, 0.12);
+  box-shadow:
+    0 14px 28px rgba(78, 96, 136, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  color: var(--text-0);
+}
+
+:root[data-theme="light"] .user-dock {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(79, 95, 242, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+:root[data-theme="light"] .profile-card.user-dock-profile:hover {
+  background: rgba(79, 95, 242, 0.08);
+}
+
+:root[data-theme="light"] .voice-status-chip {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(79, 95, 242, 0.1);
+}
+
+:root[data-theme="light"] .channel-row,
+:root[data-theme="light"] .dm-row,
+:root[data-theme="light"] .member-row,
+:root[data-theme="light"] .profile-card {
+  color: rgba(49, 64, 90, 0.82);
+}
+
+:root[data-theme="light"] .channel-row:hover,
+:root[data-theme="light"] .dm-row:hover,
+:root[data-theme="light"] .channel-row.active,
+:root[data-theme="light"] .dm-row.active,
+:root[data-theme="light"] .member-row:hover {
+  background: linear-gradient(180deg, rgba(79, 95, 242, 0.1), rgba(62, 167, 216, 0.05));
+  color: var(--text-0);
+}
+
+:root[data-theme="light"] .channel-row.active,
+:root[data-theme="light"] .dm-row.active {
+  box-shadow: inset 0 0 0 1px rgba(79, 95, 242, 0.12);
+}
+
+:root[data-theme="light"] .channel-row.has-unread,
+:root[data-theme="light"] .dm-row.has-unread {
+  background: linear-gradient(90deg, rgba(79, 95, 242, 0.12), rgba(62, 167, 216, 0.06));
+  box-shadow: inset 0 0 0 1px rgba(79, 95, 242, 0.12);
+}
+
+:root[data-theme="light"] .channel-row.is-read:not(.active),
+:root[data-theme="light"] .dm-row.is-read:not(.active) {
+  color: rgba(49, 64, 90, 0.68);
+}
+
+:root[data-theme="light"] .channel-row.is-read:not(.active) .channel-label span,
+:root[data-theme="light"] .channel-row.is-read:not(.active) .umbra-icon,
+:root[data-theme="light"] .dm-row.is-read:not(.active) .dm-copy strong {
+  color: rgba(49, 64, 90, 0.82);
+}
+
+:root[data-theme="light"] .profile-card {
+  background: rgba(255, 255, 255, 0.94);
+}
+
+:root[data-theme="light"] .profile-card:hover {
+  background: rgba(245, 248, 255, 0.98);
+}
+
+:root[data-theme="light"] .direct-home-link {
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--text-1);
+}
+
+:root[data-theme="light"] .direct-home-link:hover,
+:root[data-theme="light"] .direct-home-link.active {
+  background: linear-gradient(180deg, rgba(79, 95, 242, 0.14), rgba(62, 167, 216, 0.06));
+  border-color: rgba(79, 95, 242, 0.14);
+  color: var(--text-0);
+}
+
+:root[data-theme="light"] .navigator-server-glyph {
+  background: linear-gradient(180deg, #eef3ff, #dde7f8);
+  border-color: rgba(79, 95, 242, 0.14);
+  color: var(--accent);
+}
+
+:root[data-theme="light"] .navigator-title-logo {
+  box-shadow: 0 0 0 1px rgba(79, 95, 242, 0.08), 0 14px 28px rgba(79, 98, 142, 0.12);
+}
+
+:root[data-theme="light"] .dock-split-control:hover,
+:root[data-theme="light"] .dock-split-control.active,
+:root[data-theme="light"] .dock-split-main:hover,
+:root[data-theme="light"] .dock-split-caret:hover,
+:root[data-theme="light"] .dock-split-main.active,
+:root[data-theme="light"] .dock-split-caret.active {
+  background: rgba(79, 95, 242, 0.08);
+}
+
+:root[data-theme="light"] .dock-split-caret {
+  border-left-color: rgba(79, 95, 242, 0.12);
+}
+
