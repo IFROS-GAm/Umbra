@@ -19,7 +19,27 @@
   z-index: 3200;
 }
 
+.navigator-footer-voice-menu-shell {
+  left: 0;
+  pointer-events: auto;
+  position: fixed;
+  top: 0;
+  transform: translateY(calc(-100% - 10px));
+  z-index: 4200;
+}
+
+.navigator-footer-voice-menu-shell > .voice-control-menu {
+  left: auto;
+  max-width: none;
+  position: static;
+  top: auto;
+}
+
 .navigator-footer > .voice-control-menu .voice-control-submenu {
+  top: -14px;
+}
+
+.navigator-footer-voice-menu-shell > .voice-control-menu .voice-control-submenu {
   top: -14px;
 }
 

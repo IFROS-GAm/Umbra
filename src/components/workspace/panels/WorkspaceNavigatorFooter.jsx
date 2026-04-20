@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 import { Avatar } from "../../Avatar.jsx";
 import { Icon } from "../../Icon.jsx";
@@ -21,12 +21,53 @@ export function WorkspaceNavigatorFooter({
   voiceState,
   workspace
 }) {
+  const inputMenuAnchorRef = useRef(null);
+  const outputMenuAnchorRef = useRef(null);
+  const [voiceMenuPosition, setVoiceMenuPosition] = useState(null);
   const joinedVoiceCount = joinedVoiceChannel
     ? Math.max(
         (voiceSessions[joinedVoiceChannel.id] || []).length,
         (voiceUsersByChannel?.[joinedVoiceChannel.id] || []).length
       )
     : 0;
+
+  useEffect(() => {
+    if (voiceMenu !== "input" && voiceMenu !== "output") {
+      setVoiceMenuPosition(null);
+      return undefined;
+    }
+
+    const anchor =
+      voiceMenu === "input" ? inputMenuAnchorRef.current : outputMenuAnchorRef.current;
+
+    if (!anchor || typeof window === "undefined") {
+      setVoiceMenuPosition(null);
+      return undefined;
+    }
+
+    function updateVoiceMenuPosition() {
+      const rect = anchor.getBoundingClientRect();
+      const estimatedMenuWidth = voiceMenu === "output" ? 328 : 308;
+      const nextLeft = Math.min(
+        window.innerWidth - estimatedMenuWidth - 12,
+        Math.max(12, rect.left + rect.width / 2 - estimatedMenuWidth / 2)
+      );
+
+      setVoiceMenuPosition({
+        left: `${Math.round(nextLeft)}px`,
+        top: `${Math.round(rect.top - 10)}px`
+      });
+    }
+
+    updateVoiceMenuPosition();
+    window.addEventListener("resize", updateVoiceMenuPosition);
+    window.addEventListener("scroll", updateVoiceMenuPosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updateVoiceMenuPosition);
+      window.removeEventListener("scroll", updateVoiceMenuPosition, true);
+    };
+  }, [voiceMenu]);
 
   return (
     <div className="navigator-footer">
@@ -54,8 +95,16 @@ export function WorkspaceNavigatorFooter({
         </div>
       ) : null}
 
-      {inputMenuNode}
-      {outputMenuNode}
+      {voiceMenu === "input" && inputMenuNode && voiceMenuPosition ? (
+        <div className="navigator-footer-voice-menu-shell" style={voiceMenuPosition}>
+          {inputMenuNode}
+        </div>
+      ) : null}
+      {voiceMenu === "output" && outputMenuNode && voiceMenuPosition ? (
+        <div className="navigator-footer-voice-menu-shell" style={voiceMenuPosition}>
+          {outputMenuNode}
+        </div>
+      ) : null}
 
       <div className="user-dock">
         <button className="profile-card profile-card-button user-dock-profile" onClick={onOpenSelfMenu} type="button">
@@ -77,6 +126,7 @@ export function WorkspaceNavigatorFooter({
             className={`dock-split-control ${
               voiceState.micMuted ? "danger active" : voiceMenu === "input" ? "active" : ""
             }`}
+            ref={inputMenuAnchorRef}
           >
             <button
               aria-label={voiceState.micMuted ? "Activar microfono" : "Silenciar microfono"}
@@ -103,6 +153,7 @@ export function WorkspaceNavigatorFooter({
             className={`dock-split-control ${
               voiceState.deafen ? "danger active" : voiceMenu === "output" ? "active" : ""
             }`}
+            ref={outputMenuAnchorRef}
           >
             <button
               aria-label={voiceState.deafen ? "Activar audio" : "Ensordecer"}
