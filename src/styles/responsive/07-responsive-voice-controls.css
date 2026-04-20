@@ -16,7 +16,7 @@
   bottom: calc(100% + 26px);
   left: 66px;
   top: auto;
-  z-index: 95;
+  z-index: 3200;
 }
 
 .navigator-footer > .voice-control-menu .voice-control-submenu {
@@ -34,7 +34,7 @@
   max-height: 420px;
   overflow-y: auto;
   top: 0;
-  z-index: 96;
+  z-index: 3201;
 }
 
 .voice-control-menu.camera-menu {

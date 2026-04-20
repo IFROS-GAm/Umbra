@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld("umbraDesktop", {
     };
   },
   openExternalAuth: (url) => ipcRenderer.invoke("umbra:open-external", url),
+  openUninstaller: () => ipcRenderer.invoke("umbra:open-uninstaller"),
   showIncomingCallPopup: (payload) =>
     ipcRenderer.invoke("umbra:show-incoming-call-popup", payload),
   showNativeNotification: (payload) =>

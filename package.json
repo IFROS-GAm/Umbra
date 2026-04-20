@@ -61,6 +61,7 @@
       "buildResources": "build"
     },
     "files": [
+      "build/icon.ico",
       "build/icon.png",
       "dist/**/*",
       "electron/**/*",

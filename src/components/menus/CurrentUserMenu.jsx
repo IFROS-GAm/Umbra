@@ -88,7 +88,8 @@ function buildSelfMenuLocale(language) {
     switchHint: t(
       "selfMenu.switchHint",
       "Vuelve a la pantalla de acceso para entrar con otra cuenta."
-    )
+    ),
+    uninstallApp: t("selfMenu.uninstallApp", "Desinstalar Umbra")
   };
 }
 
@@ -102,6 +103,7 @@ export function CurrentUserMenu({
   onManageAccounts,
   onSignOut,
   onSwitchAccount,
+  onUninstall,
   profile
 }) {
   const locale = useMemo(() => buildSelfMenuLocale(language), [language]);
@@ -358,6 +360,15 @@ export function CurrentUserMenu({
                 <span>{locale.signOut}</span>
               </span>
             </button>
+
+            {onUninstall ? (
+              <button className="user-profile-utility-row danger" onClick={onUninstall} type="button">
+                <span className="user-profile-utility-copy">
+                  <Icon name="trash" />
+                  <span>{locale.uninstallApp}</span>
+                </span>
+              </button>
+            ) : null}
           </div>
         </div>
       </aside>

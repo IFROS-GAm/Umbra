@@ -777,6 +777,8 @@ button {
 
 .navigator-panel {
   min-width: 0;
+  overflow: visible;
+  overflow-x: hidden;
   width: var(--navigator-panel-width, 272px);
 }
 

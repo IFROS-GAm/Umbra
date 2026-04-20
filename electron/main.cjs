@@ -234,10 +234,15 @@ function extractProtocolUrl(argv = []) {
 
 function resolveDesktopIconPath() {
   const candidates = [
+    path.join(process.cwd(), "build", "icon.ico"),
     path.join(process.cwd(), "build", "icon.png"),
+    path.join(__dirname, "..", "build", "icon.ico"),
     path.join(__dirname, "..", "build", "icon.png"),
+    path.join(app.getAppPath(), "build", "icon.ico"),
     path.join(app.getAppPath(), "build", "icon.png"),
+    path.join(process.resourcesPath || "", "build", "icon.ico"),
     path.join(process.resourcesPath || "", "build", "icon.png"),
+    path.join(process.resourcesPath || "", "app.asar.unpacked", "build", "icon.ico"),
     path.join(process.resourcesPath || "", "app.asar.unpacked", "build", "icon.png")
   ];
 
@@ -269,6 +274,17 @@ function registerProtocolClient() {
   }
 
   app.setAsDefaultProtocolClient(protocolScheme);
+}
+
+function resolveDesktopUninstallerPath() {
+  const installDir = path.dirname(process.execPath);
+  const candidates = [
+    path.join(installDir, "Uninstall Umbra.exe"),
+    path.join(installDir, "Uninstall.exe"),
+    path.join(installDir, "Umbra Uninstaller.exe")
+  ];
+
+  return candidates.find((candidatePath) => candidatePath && fs.existsSync(candidatePath)) || null;
 }
 
 function dispatchAuthCallback(callbackUrl) {
@@ -488,6 +504,32 @@ app.on("open-url", (event, callbackUrl) => {
 ipcMain.handle("umbra:open-external", async (_event, url) => {
   await shell.openExternal(url);
   return true;
+});
+
+ipcMain.handle("umbra:open-uninstaller", async () => {
+  if (process.platform !== "win32") {
+    return {
+      error: "unsupported-platform",
+      ok: false
+    };
+  }
+
+  const uninstallerPath = resolveDesktopUninstallerPath();
+  if (uninstallerPath) {
+    const errorMessage = await shell.openPath(uninstallerPath);
+    if (!errorMessage) {
+      return {
+        kind: "uninstaller",
+        ok: true
+      };
+    }
+  }
+
+  await shell.openExternal("ms-settings:appsfeatures");
+  return {
+    kind: "settings",
+    ok: true
+  };
 });
 
 ipcMain.handle("umbra:consume-auth-callback", async () => {

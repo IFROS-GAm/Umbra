@@ -117,6 +117,8 @@ export function UmbraWorkspaceStage({
   workspace,
   toggleHeaderPanel
 }) {
+  const shouldRenderVoiceStage = isVoiceChannel || (isDirectCallActive && isGroupDirectConversation);
+
   return (
     <>
       <main className="chat-stage">
@@ -154,6 +156,7 @@ export function UmbraWorkspaceStage({
               headerPanel={headerPanel}
               headerPanelNode={chatHeaderPanelNode}
               headerSearchPlaceholder={headerSearchPlaceholder}
+              isDirectCallActive={isDirectCallActive && !isGroupDirectConversation}
               isDirectConversation={isDirectConversation}
               isDirectGroupConversation={isGroupDirectConversation}
               membersPanelVisible={effectiveMembersPanelVisible}
@@ -161,16 +164,20 @@ export function UmbraWorkspaceStage({
               onAddFriend={handleSendFriendRequest}
               onOpenDialog={handleOpenDialog}
               onOpenInviteModal={handleOpenInviteModal}
+              onLeaveDirectCall={handleVoiceLeave}
               onShowNotice={showUiNotice}
               onStartDirectCall={() => handleJoinDirectCall()}
               onStartDirectVideoCall={() => handleJoinDirectCall({ enableCamera: true })}
+              onToggleDirectCallCamera={() => handleToggleVoiceState("cameraEnabled")}
+              onToggleDirectCallMute={() => handleToggleVoiceState("micMuted")}
               onToggleHeaderPanel={toggleHeaderPanel}
               onToggleMembersPanel={() => setMembersPanelVisible((previous) => !previous)}
               subtitle={activeGuild?.name || headerCopy.eyebrow}
               title={headerCopy.title}
+              voiceState={voiceState}
             />
 
-            {isVoiceChannel || isDirectCallActive ? (
+            {shouldRenderVoiceStage ? (
               <Suspense fallback={<WorkspacePanelFallback />}>
                 <VoiceRoomStage
                   activeChannel={activeChannel}

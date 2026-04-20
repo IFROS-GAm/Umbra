@@ -167,7 +167,7 @@ export function WorkspaceNavigationContent({
                     className="ghost-button icon-only tooltip-anchor"
                     data-tooltip="Invitar al servidor"
                     data-tooltip-position="bottom"
-                    onClick={onOpenInviteModal}
+                    onClick={() => onOpenInviteModal?.()}
                     type="button"
                   >
                     <Icon name="userAdd" />

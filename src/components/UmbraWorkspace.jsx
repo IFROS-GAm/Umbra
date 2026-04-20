@@ -516,6 +516,33 @@ export function UmbraWorkspace({
     voiceState,
     selectedVoiceDevices
   });
+
+  async function handleOpenDesktopUninstaller() {
+    const desktopBridge =
+      typeof window !== "undefined" ? window.umbraDesktop || null : null;
+
+    if (!desktopBridge?.openUninstaller) {
+      showUiNotice("La desinstalacion solo esta disponible en la app de escritorio.");
+      return;
+    }
+
+    try {
+      const result = await desktopBridge.openUninstaller();
+      if (result?.ok) {
+        showUiNotice(
+          result.kind === "uninstaller"
+            ? "Se abrio el desinstalador de Umbra."
+            : "Se abrio la configuracion de aplicaciones de Windows."
+        );
+        return;
+      }
+    } catch {
+      // Fall through to the generic notice below.
+    }
+
+    showUiNotice("No se pudo abrir el desinstalador de Umbra.");
+  }
+
   const chatHeaderPanelNode = (
     <ChatHeaderPanel
       activeChannel={activeChannel}
@@ -828,6 +855,7 @@ export function UmbraWorkspace({
           onOpenInviteModal={openInviteModal}
           onOpenSettingsDialog={openSettingsDialog}
           onSignOut={onSignOut}
+          onUninstallApp={handleOpenDesktopUninstaller}
           onToggleShareAudio={handleToggleShareAudio}
           openSettingsDialog={openSettingsDialog}
           profileCard={profileCard}

@@ -51,19 +51,24 @@ export function ChatHeader({
   headerPanel,
   headerPanelNode,
   headerSearchPlaceholder,
+  isDirectCallActive,
   isDirectConversation,
   isDirectGroupConversation,
   membersPanelVisible,
   onAddFriend,
   onOpenDialog,
   onOpenInviteModal,
+  onLeaveDirectCall,
   onStartDirectCall,
   onStartDirectVideoCall,
   onShowNotice,
+  onToggleDirectCallCamera,
+  onToggleDirectCallMute,
   onToggleHeaderPanel,
   onToggleMembersPanel,
   subtitle,
-  title
+  title,
+  voiceState
 }) {
   const directFriendAction = getDirectFriendAction(directMessageProfile);
 
@@ -95,26 +100,73 @@ export function ChatHeader({
           <div className="chat-header-tool-cluster" ref={headerActionsRef}>
             {isDirectConversation ? (
               <>
-                <button
-                  aria-label="Llamada"
-                  className="ghost-button icon-only tooltip-anchor"
-                  data-tooltip="Llamar"
-                  data-tooltip-position="bottom"
-                  onClick={() => onStartDirectCall?.()}
-                  type="button"
-                >
-                  <Icon name="phone" />
-                </button>
-                <button
-                  aria-label="Videollamada"
-                  className="ghost-button icon-only tooltip-anchor"
-                  data-tooltip="Videollamada"
-                  data-tooltip-position="bottom"
-                  onClick={() => onStartDirectVideoCall?.()}
-                  type="button"
-                >
-                  <Icon name="camera" />
-                </button>
+                {isDirectCallActive && !isDirectGroupConversation ? (
+                  <>
+                    <span className="chat-header-call-pill">
+                      <Icon name="phone" size={14} />
+                      <strong>En llamada</strong>
+                    </span>
+                    <button
+                      aria-label={voiceState?.micMuted ? "Activar microfono" : "Silenciar"}
+                      className={`ghost-button icon-only tooltip-anchor ${
+                        voiceState?.micMuted ? "danger active" : ""
+                      }`.trim()}
+                      data-tooltip={voiceState?.micMuted ? "Activar microfono" : "Silenciar"}
+                      data-tooltip-position="bottom"
+                      onClick={() => onToggleDirectCallMute?.()}
+                      type="button"
+                    >
+                      <Icon name={voiceState?.micMuted ? "micOff" : "mic"} />
+                    </button>
+                    <button
+                      aria-label={voiceState?.cameraEnabled ? "Apagar camara" : "Encender camara"}
+                      className={`ghost-button icon-only tooltip-anchor ${
+                        voiceState?.cameraEnabled ? "active" : ""
+                      }`.trim()}
+                      data-tooltip={
+                        voiceState?.cameraEnabled ? "Apagar camara" : "Encender camara"
+                      }
+                      data-tooltip-position="bottom"
+                      onClick={() => onToggleDirectCallCamera?.()}
+                      type="button"
+                    >
+                      <Icon name="camera" />
+                    </button>
+                    <button
+                      aria-label="Salir de la llamada"
+                      className="ghost-button icon-only danger tooltip-anchor"
+                      data-tooltip="Salir de la llamada"
+                      data-tooltip-position="bottom"
+                      onClick={() => onLeaveDirectCall?.()}
+                      type="button"
+                    >
+                      <Icon name="close" />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      aria-label="Llamada"
+                      className="ghost-button icon-only tooltip-anchor"
+                      data-tooltip="Llamar"
+                      data-tooltip-position="bottom"
+                      onClick={() => onStartDirectCall?.()}
+                      type="button"
+                    >
+                      <Icon name="phone" />
+                    </button>
+                    <button
+                      aria-label="Videollamada"
+                      className="ghost-button icon-only tooltip-anchor"
+                      data-tooltip="Videollamada"
+                      data-tooltip-position="bottom"
+                      onClick={() => onStartDirectVideoCall?.()}
+                      type="button"
+                    >
+                      <Icon name="camera" />
+                    </button>
+                  </>
+                )}
                 <button
                   aria-label="Fijados"
                   className={`ghost-button icon-only tooltip-anchor ${headerPanel === "pins" ? "active" : ""}`}

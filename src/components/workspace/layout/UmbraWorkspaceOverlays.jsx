@@ -69,6 +69,7 @@ export function UmbraWorkspaceOverlays({
   onOpenInviteModal,
   onOpenSettingsDialog,
   onSignOut,
+  onUninstallApp,
   onToggleShareAudio,
   openSettingsDialog,
   profileCard,
@@ -110,7 +111,10 @@ export function UmbraWorkspaceOverlays({
             onChangeLanguage={onChangeLanguage}
             onClose={() => setSettingsOpen(false)}
             onSignOut={onSignOut}
-            onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")}
+            onToggleTheme={() => {
+              setTheme("dark");
+              showUiNotice("Umbra usa modo oscuro.");
+            }}
             onUpdateProfile={handleProfileUpdate}
             theme={theme}
             user={workspace.current_user}
@@ -134,6 +138,7 @@ export function UmbraWorkspaceOverlays({
           onManageAccounts={() => onOpenAccountManager()}
           onSignOut={handleCurrentUserExit}
           onSwitchAccount={onOpenAccountManager}
+          onUninstall={onUninstallApp}
           profile={currentUserProfile}
         />
       ) : null}

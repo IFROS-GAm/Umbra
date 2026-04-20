@@ -190,6 +190,24 @@
   gap: 8px;
 }
 
+.chat-header-call-pill {
+  align-items: center;
+  background: rgba(88, 101, 242, 0.16);
+  border: 1px solid rgba(88, 101, 242, 0.3);
+  border-radius: 999px;
+  color: #cfd6ff;
+  display: inline-flex;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 12px;
+}
+
+.chat-header-call-pill strong {
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .chat-header-tool-cluster .ghost-button.icon-only {
   background: transparent;
   border: 1px solid transparent;
