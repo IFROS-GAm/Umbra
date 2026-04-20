@@ -589,6 +589,26 @@
   background: rgba(79, 95, 242, 0.08);
 }
 
+:root[data-theme="light"] .server-admin-menu {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(245, 248, 255, 0.98)),
+    radial-gradient(circle at top right, rgba(79, 95, 242, 0.08), transparent 28%);
+  border-color: rgba(79, 95, 242, 0.12);
+  box-shadow: 0 22px 48px rgba(88, 107, 148, 0.16);
+}
+
+:root[data-theme="light"] .server-admin-row {
+  color: var(--text-1);
+}
+
+:root[data-theme="light"] .server-admin-row .umbra-icon {
+  color: var(--text-2);
+}
+
+:root[data-theme="light"] .server-admin-divider {
+  border-top-color: rgba(79, 95, 242, 0.1);
+}
+
 :root[data-theme="light"] .server-context-checkbox,
 :root[data-theme="light"] .server-context-radio {
   border-color: rgba(49, 64, 90, 0.36);

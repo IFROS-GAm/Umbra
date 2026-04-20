@@ -417,6 +417,39 @@
   box-shadow: inset 0 0 0 1px rgba(79, 95, 242, 0.08);
 }
 
+:root[data-theme="light"] .settings-card-title h3,
+:root[data-theme="light"] .settings-connection-summary-tile strong,
+:root[data-theme="light"] .settings-device-card strong,
+:root[data-theme="light"] .settings-device-item strong,
+:root[data-theme="light"] .settings-empty-state strong,
+:root[data-theme="light"] .settings-credits-person-card strong,
+:root[data-theme="light"] .settings-legal-summary-copy strong,
+:root[data-theme="light"] .settings-legal-summary-note strong,
+:root[data-theme="light"] .settings-legal-section strong {
+  color: var(--text-0);
+}
+
+:root[data-theme="light"] .settings-card-title span,
+:root[data-theme="light"] .settings-connection-summary-tile small,
+:root[data-theme="light"] .settings-connection-summary-tile span,
+:root[data-theme="light"] .settings-device-card > span,
+:root[data-theme="light"] .settings-device-item small,
+:root[data-theme="light"] .settings-empty-state span,
+:root[data-theme="light"] .settings-credits-person-card span:last-child,
+:root[data-theme="light"] .settings-legal-summary-copy p,
+:root[data-theme="light"] .settings-legal-summary-note span,
+:root[data-theme="light"] .settings-legal-section p {
+  color: var(--text-1);
+}
+
+:root[data-theme="light"] .settings-row-icon,
+:root[data-theme="light"] .settings-connection-summary-tile .settings-row-icon,
+:root[data-theme="light"] .dialog-hero-icon {
+  background: rgba(79, 95, 242, 0.1);
+  border-color: rgba(79, 95, 242, 0.14);
+  color: var(--accent);
+}
+
 :root[data-theme="light"] .settings-connection-divider {
   background: linear-gradient(90deg, transparent, rgba(79, 95, 242, 0.12), transparent);
 }
@@ -442,6 +475,74 @@
   background: rgba(235, 242, 255, 0.76);
 }
 
+:root[data-theme="light"] .user-profile-card {
+  background: rgba(255, 255, 255, 0.98);
+  border-color: rgba(79, 95, 242, 0.12);
+  box-shadow: 0 30px 72px rgba(88, 107, 148, 0.16);
+}
+
+:root[data-theme="light"] .user-profile-status-bubble,
+:root[data-theme="light"] .user-profile-chip,
+:root[data-theme="light"] .user-profile-meta-card,
+:root[data-theme="light"] .user-profile-section,
+:root[data-theme="light"] .user-profile-message-box,
+:root[data-theme="light"] .user-profile-status-trigger,
+:root[data-theme="light"] .user-profile-utility-row,
+:root[data-theme="light"] .user-profile-status-option,
+:root[data-theme="light"] .current-user-main-action,
+:root[data-theme="light"] .current-user-utility-box,
+:root[data-theme="light"] .current-user-floating-menu,
+:root[data-theme="light"] .account-manager-modal,
+:root[data-theme="light"] .account-manager-entry,
+:root[data-theme="light"] .account-manager-entry-menu {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(79, 95, 242, 0.12);
+}
+
+:root[data-theme="light"] .user-profile-chip.accent,
+:root[data-theme="light"] .user-profile-role-card {
+  background: linear-gradient(180deg, rgba(248, 250, 255, 0.98), rgba(241, 246, 255, 0.98));
+  border-color: rgba(79, 95, 242, 0.12);
+}
+
+:root[data-theme="light"] .user-profile-title h3,
+:root[data-theme="light"] .user-profile-role-copy strong,
+:root[data-theme="light"] .user-profile-meta-card strong,
+:root[data-theme="light"] .user-profile-section p,
+:root[data-theme="light"] .user-profile-status-trigger,
+:root[data-theme="light"] .user-profile-utility-row,
+:root[data-theme="light"] .user-profile-status-option,
+:root[data-theme="light"] .current-user-floating-row,
+:root[data-theme="light"] .account-manager-header h3,
+:root[data-theme="light"] .account-manager-entry-copy strong {
+  color: var(--text-0);
+}
+
+:root[data-theme="light"] .user-profile-subline,
+:root[data-theme="light"] .user-profile-chip.muted,
+:root[data-theme="light"] .user-profile-meta,
+:root[data-theme="light"] .user-profile-meta-card span,
+:root[data-theme="light"] .user-profile-section h4,
+:root[data-theme="light"] .user-profile-role-copy small,
+:root[data-theme="light"] .user-profile-message-input::placeholder,
+:root[data-theme="light"] .user-profile-status-main small,
+:root[data-theme="light"] .user-profile-status-option-copy small,
+:root[data-theme="light"] .current-user-identity p,
+:root[data-theme="light"] .current-user-floating-copy small,
+:root[data-theme="light"] .account-manager-header p {
+  color: var(--text-2);
+}
+
+:root[data-theme="light"] .user-profile-chip-link:hover,
+:root[data-theme="light"] .user-profile-status-option:hover,
+:root[data-theme="light"] .user-profile-status-option.active,
+:root[data-theme="light"] .user-profile-status-trigger:hover,
+:root[data-theme="light"] .user-profile-utility-row:hover,
+:root[data-theme="light"] .current-user-floating-row:hover {
+  background: rgba(79, 95, 242, 0.08);
+  border-color: rgba(79, 95, 242, 0.16);
+}
+
 :root[data-theme="light"] .profile-detail-card {
   background: rgba(255, 255, 255, 0.98);
   border-color: rgba(79, 95, 242, 0.12);
@@ -456,6 +557,16 @@
 
 :root[data-theme="light"] .profile-detail-role-card {
   background: linear-gradient(135deg, rgba(79, 95, 242, 0.08), rgba(255, 255, 255, 0.92));
+  border-color: rgba(79, 95, 242, 0.12);
+}
+
+:root[data-theme="light"] .profile-detail-connection,
+:root[data-theme="light"] .profile-detail-connection-link {
+  color: var(--text-1);
+}
+
+:root[data-theme="light"] .profile-detail-connection-icon {
+  background: rgba(79, 95, 242, 0.08);
   border-color: rgba(79, 95, 242, 0.12);
 }
 

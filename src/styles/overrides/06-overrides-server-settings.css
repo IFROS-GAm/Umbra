@@ -1044,6 +1044,23 @@
   border-color: rgba(79, 95, 242, 0.18);
 }
 
+:root[data-theme="light"] .server-settings-panel,
+:root[data-theme="light"] .server-settings-form,
+:root[data-theme="light"] .server-settings-preview {
+  background: transparent;
+}
+
+:root[data-theme="light"] .server-settings-header {
+  border-bottom-color: rgba(79, 95, 242, 0.08);
+}
+
+:root[data-theme="light"] .server-settings-header p,
+:root[data-theme="light"] .server-settings-member-copy span,
+:root[data-theme="light"] .server-settings-role-copy span,
+:root[data-theme="light"] .server-settings-invite-copy span {
+  color: var(--text-1);
+}
+
 :root[data-theme="light"] .server-settings-member-role-select,
 :root[data-theme="light"] .server-settings-member-role-current,
 :root[data-theme="light"] .server-settings-member-role-select select,
@@ -1059,6 +1076,23 @@
 :root[data-theme="light"] .server-icon-preview,
 :root[data-theme="light"] .server-preview-icon {
   background: linear-gradient(180deg, #eef3ff, #dde7f8);
+  border-color: rgba(79, 95, 242, 0.12);
+}
+
+:root[data-theme="light"] .server-settings-form .settings-field input,
+:root[data-theme="light"] .server-settings-form .settings-field textarea,
+:root[data-theme="light"] .server-settings-form .settings-field select,
+:root[data-theme="light"] .server-settings-role-visual-field > input,
+:root[data-theme="light"] .server-settings-role-color-row {
+  background: rgba(247, 250, 255, 0.96);
+  border-color: rgba(79, 95, 242, 0.12);
+  color: var(--text-0);
+}
+
+:root[data-theme="light"] .server-settings-role-artwork,
+:root[data-theme="light"] .server-settings-member-transfer-panel,
+:root[data-theme="light"] .server-settings-member-ban-panel {
+  background: rgba(255, 255, 255, 0.96);
   border-color: rgba(79, 95, 242, 0.12);
 }
 
