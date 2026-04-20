@@ -260,6 +260,146 @@
   opacity: 0.7;
 }
 
+:root[data-theme="light"] .invite-code-block,
+:root[data-theme="light"] .invite-empty-state {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(79, 95, 242, 0.12);
+}
+
+:root[data-theme="light"] .invite-friend-list {
+  border-bottom-color: rgba(79, 95, 242, 0.1);
+  border-top-color: rgba(79, 95, 242, 0.1);
+}
+
+:root[data-theme="light"] .invite-friend-row:hover {
+  background: rgba(79, 95, 242, 0.06);
+}
+
+:root[data-theme="light"] .confirm-action-modal {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(245, 248, 255, 0.98));
+  border-color: rgba(79, 95, 242, 0.12);
+  box-shadow: 0 28px 60px rgba(90, 110, 150, 0.16);
+}
+
+:root[data-theme="light"] .settings-shell {
+  background: rgba(255, 255, 255, 0.96);
+}
+
+:root[data-theme="light"] .settings-shell.discordish {
+  background: rgba(255, 255, 255, 0.98);
+  border-color: rgba(79, 95, 242, 0.12);
+  box-shadow: 0 28px 64px rgba(90, 110, 150, 0.16);
+}
+
+:root[data-theme="light"] .settings-sidebar,
+:root[data-theme="light"] .settings-shell.discordish .settings-sidebar {
+  background: linear-gradient(180deg, rgba(247, 250, 255, 0.98), rgba(238, 244, 255, 0.98));
+  border-right-color: rgba(79, 95, 242, 0.1);
+}
+
+:root[data-theme="light"] .settings-nav-group {
+  border-bottom-color: rgba(79, 95, 242, 0.08);
+}
+
+:root[data-theme="light"] .settings-nav-title {
+  color: rgba(79, 95, 242, 0.74);
+}
+
+:root[data-theme="light"] .settings-nav-item:hover,
+:root[data-theme="light"] .settings-nav-item.active {
+  background: rgba(79, 95, 242, 0.1);
+  color: var(--text-0);
+}
+
+:root[data-theme="light"] .settings-shell.discordish .settings-panel {
+  background: rgba(255, 255, 255, 0.98);
+}
+
+:root[data-theme="light"] .settings-shell.discordish .settings-panel-header {
+  border-bottom-color: rgba(79, 95, 242, 0.08);
+}
+
+:root[data-theme="light"] .settings-sidebar-legal,
+:root[data-theme="light"] .settings-legal-hero,
+:root[data-theme="light"] .settings-credits-hero,
+:root[data-theme="light"] .settings-legal-card,
+:root[data-theme="light"] .settings-legal-section,
+:root[data-theme="light"] .settings-credits-person-card,
+:root[data-theme="light"] .settings-card,
+:root[data-theme="light"] .settings-hero-card,
+:root[data-theme="light"] .settings-hero-card.discordish,
+:root[data-theme="light"] .account-overview-card,
+:root[data-theme="light"] .profile-editor-card {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(79, 95, 242, 0.1);
+}
+
+:root[data-theme="light"] .settings-sidebar-legal-note,
+:root[data-theme="light"] .settings-legal-summary-note,
+:root[data-theme="light"] .settings-row,
+:root[data-theme="light"] .settings-action-row,
+:root[data-theme="light"] .account-row {
+  background: rgba(245, 248, 255, 0.96);
+  border-color: rgba(79, 95, 242, 0.1);
+}
+
+:root[data-theme="light"] .settings-sidebar-legal-header strong,
+:root[data-theme="light"] .settings-sidebar-legal-list,
+:root[data-theme="light"] .settings-legal-summary-copy strong,
+:root[data-theme="light"] .settings-legal-summary-note strong,
+:root[data-theme="light"] .settings-legal-section strong {
+  color: var(--text-0);
+}
+
+:root[data-theme="light"] .settings-sidebar-legal-copy p,
+:root[data-theme="light"] .settings-sidebar-legal-note span,
+:root[data-theme="light"] .settings-legal-summary-copy p,
+:root[data-theme="light"] .settings-legal-summary-note span,
+:root[data-theme="light"] .settings-legal-section p {
+  color: var(--text-1);
+}
+
+:root[data-theme="light"] .settings-sidebar-legal-header .umbra-icon {
+  background: rgba(79, 95, 242, 0.1);
+  border-color: rgba(79, 95, 242, 0.14);
+  color: var(--accent);
+}
+
+:root[data-theme="light"] .settings-sidebar-legal-list li::before {
+  background: rgba(79, 95, 242, 0.92);
+}
+
+:root[data-theme="light"] .settings-search {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(79, 95, 242, 0.12);
+}
+
+:root[data-theme="light"] .settings-field input,
+:root[data-theme="light"] .settings-field textarea,
+:root[data-theme="light"] .settings-field select {
+  background: rgba(247, 250, 255, 0.96);
+  border-color: rgba(79, 95, 242, 0.12);
+  color: var(--text-0);
+}
+
+:root[data-theme="light"] .settings-banner-preview {
+  border-color: rgba(79, 95, 242, 0.12);
+}
+
+:root[data-theme="light"] .settings-banner-upload {
+  background: rgba(255, 255, 255, 0.88);
+  border-color: rgba(79, 95, 242, 0.18);
+  color: var(--text-0);
+}
+
+:root[data-theme="light"] .settings-top-tabs {
+  border-bottom-color: rgba(79, 95, 242, 0.08);
+}
+
+:root[data-theme="light"] .settings-top-tab.active {
+  color: var(--accent);
+}
+
 .avatar-crop-modal {
   background: linear-gradient(180deg, rgba(22, 24, 31, 0.99), rgba(17, 19, 24, 0.99));
   border: 1px solid rgba(255, 255, 255, 0.08);

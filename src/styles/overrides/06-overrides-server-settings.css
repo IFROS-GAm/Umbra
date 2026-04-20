@@ -993,3 +993,87 @@
   font-size: 0.84rem;
 }
 
+:root[data-theme="light"] .server-settings-shell {
+  background: rgba(255, 255, 255, 0.98);
+  border-color: rgba(79, 95, 242, 0.12);
+  box-shadow: 0 28px 64px rgba(90, 110, 150, 0.16);
+}
+
+:root[data-theme="light"] .server-settings-sidebar {
+  background: linear-gradient(180deg, rgba(247, 250, 255, 0.98), rgba(238, 244, 255, 0.98));
+  border-right-color: rgba(79, 95, 242, 0.1);
+}
+
+:root[data-theme="light"] .server-settings-sidebar-title small {
+  color: rgba(79, 95, 242, 0.76);
+}
+
+:root[data-theme="light"] .server-settings-sidebar-footer {
+  border-top-color: rgba(79, 95, 242, 0.08);
+}
+
+:root[data-theme="light"] .server-settings-nav-item {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(79, 95, 242, 0.08);
+}
+
+:root[data-theme="light"] .server-settings-nav-item.active,
+:root[data-theme="light"] .server-settings-nav-item:hover {
+  background: rgba(79, 95, 242, 0.1);
+  border-color: rgba(79, 95, 242, 0.16);
+}
+
+:root[data-theme="light"] .server-settings-nav-item.muted {
+  background: rgba(79, 95, 242, 0.04);
+  border-color: rgba(79, 95, 242, 0.05);
+}
+
+:root[data-theme="light"] .server-settings-list-row,
+:root[data-theme="light"] .server-settings-empty,
+:root[data-theme="light"] .server-settings-role-preview-card,
+:root[data-theme="light"] .server-stickers-form,
+:root[data-theme="light"] .server-sticker-card {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(79, 95, 242, 0.1);
+}
+
+:root[data-theme="light"] .server-settings-list-row.role-row.active,
+:root[data-theme="light"] .server-settings-role-permission.active,
+:root[data-theme="light"] .server-settings-pill-button.active {
+  background: rgba(79, 95, 242, 0.12);
+  border-color: rgba(79, 95, 242, 0.18);
+}
+
+:root[data-theme="light"] .server-settings-member-role-select,
+:root[data-theme="light"] .server-settings-member-role-current,
+:root[data-theme="light"] .server-settings-member-role-select select,
+:root[data-theme="light"] .server-settings-role-permission,
+:root[data-theme="light"] .server-banner-preview,
+:root[data-theme="light"] .server-sticker-preview,
+:root[data-theme="light"] .server-sticker-card-visual {
+  background: rgba(247, 250, 255, 0.96);
+  border-color: rgba(79, 95, 242, 0.12);
+}
+
+:root[data-theme="light"] .server-settings-role-icon,
+:root[data-theme="light"] .server-icon-preview,
+:root[data-theme="light"] .server-preview-icon {
+  background: linear-gradient(180deg, #eef3ff, #dde7f8);
+  border-color: rgba(79, 95, 242, 0.12);
+}
+
+:root[data-theme="light"] .server-preview-card {
+  background: rgba(255, 255, 255, 0.98);
+  border-color: rgba(79, 95, 242, 0.12);
+}
+
+:root[data-theme="light"] .server-preview-icon {
+  border-color: rgba(255, 255, 255, 0.98);
+}
+
+:root[data-theme="light"] .server-banner-upload {
+  background: rgba(255, 255, 255, 0.88);
+  border-color: rgba(79, 95, 242, 0.16);
+  color: var(--text-0);
+}
+
