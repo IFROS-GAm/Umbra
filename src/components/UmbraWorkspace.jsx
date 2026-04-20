@@ -383,6 +383,7 @@ export function UmbraWorkspace({
   });
   const isDirectCallActive =
     isCallableDirectConversation && joinedVoiceChannelId === activeChannel?.id;
+  const hasVisibleJoinedVoiceChannel = Boolean(joinedVoiceChannel);
   useEffect(() => {
     if (isDirectCallActive && !isGroupDirectConversation) {
       setDirectCallLayoutMode("split");
@@ -638,9 +639,13 @@ export function UmbraWorkspace({
             dmMenuPrefs={dmMenuPrefs}
             guildMenuPrefs={guildMenuPrefs}
             hoveredVoiceChannelId={hoveredVoiceChannelId}
-            inputMenuNode={voiceMenu === "input" && !joinedVoiceChannelId ? inputMenuNode : null}
+            inputMenuNode={
+              voiceMenu === "input" && !hasVisibleJoinedVoiceChannel ? inputMenuNode : null
+            }
             language={language}
-            outputMenuNode={voiceMenu === "output" && !joinedVoiceChannelId ? outputMenuNode : null}
+            outputMenuNode={
+              voiceMenu === "output" && !hasVisibleJoinedVoiceChannel ? outputMenuNode : null
+            }
             isVoiceChannel={isVoiceChannel}
             joinedVoiceChannel={joinedVoiceChannel}
             joinedVoiceChannelId={joinedVoiceChannelId}
