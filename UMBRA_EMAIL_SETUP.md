@@ -24,6 +24,7 @@ SMTP_USER=tu-usuario-smtp
 SMTP_PASS=tu-password-smtp
 SMTP_REPLY_TO=soporte@tu-dominio.com
 PUBLIC_APP_URL=https://tu-dominio.com
+VITE_PUBLIC_APP_URL=https://tu-dominio.com
 ```
 
 Ejemplos de proveedores SMTP validos:
@@ -54,6 +55,26 @@ Ruta general:
 Referencia oficial:
 
 - `https://supabase.com/docs/guides/auth/auth-smtp`
+
+## 2.1 Redirect URLs limpias para Auth
+
+Umbra ya no debe reutilizar la URL completa actual del navegador para `redirect_to`.
+En web usa una ruta fija y limpia:
+
+- `https://tu-dominio.com/auth/callback`
+
+En Supabase debes registrar esa URL en:
+
+1. `Authentication`
+2. `URL Configuration`
+3. `Redirect URLs`
+
+Recomendado:
+
+- `Site URL`: `https://tu-dominio.com`
+- `Redirect URL`: `https://tu-dominio.com/auth/callback`
+
+Esto evita que se reciclen URLs contaminadas con parametros como `code`, `token_hash` o `access_denied`.
 
 ## 3. Dar estilo profesional a los correos de confirmacion de Supabase
 

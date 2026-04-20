@@ -7,6 +7,8 @@ import { UmbraBootScreen } from "./components/shared/UmbraBootScreen.jsx";
 import { applyLanguageToDocument, getStoredLanguage, persistLanguage } from "./i18n.js";
 import { hasSupabaseBrowserConfig, supabase } from "./supabase-browser.js";
 
+const AUTH_CALLBACK_PATH = "/auth/callback";
+
 function getDesktopBridge() {
   if (typeof window === "undefined") {
     return null;
@@ -15,9 +17,31 @@ function getDesktopBridge() {
   return window.umbraDesktop || null;
 }
 
+function getConfiguredPublicAppUrl() {
+  return String(import.meta.env.VITE_PUBLIC_APP_URL || "")
+    .trim()
+    .replace(/\/$/, "");
+}
+
+function getWebAuthRedirectUrl() {
+  if (typeof window === "undefined") {
+    return getConfiguredPublicAppUrl()
+      ? `${getConfiguredPublicAppUrl()}${AUTH_CALLBACK_PATH}`
+      : AUTH_CALLBACK_PATH;
+  }
+
+  const publicBase = getConfiguredPublicAppUrl() || window.location.origin;
+  return `${publicBase}${AUTH_CALLBACK_PATH}`;
+}
+
 function getAuthRedirectUrl() {
   const desktop = getDesktopBridge();
-  return desktop?.redirectUri || window.location.href;
+  return desktop?.redirectUri || getWebAuthRedirectUrl();
+}
+
+function isAuthCallbackPath(pathname = "") {
+  const normalizedPath = String(pathname || "").replace(/\/+$/, "") || "/";
+  return normalizedPath === AUTH_CALLBACK_PATH;
 }
 
 function readInviteCodeFromLocation() {
@@ -245,6 +269,20 @@ function AppContent() {
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (!session?.user) {
+      return;
+    }
+
+    if (isAuthCallbackPath(window.location.pathname)) {
+      setInviteCode(pushRoute("/", { replace: true }));
+    }
+  }, [session?.user?.id]);
 
   useEffect(() => {
     const desktop = getDesktopBridge();
