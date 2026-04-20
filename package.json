@@ -13,7 +13,9 @@
     "dev:web": "vite",
     "dev:electron": "wait-on tcp:3030 tcp:5173 && node scripts/run-electron.cjs .",
     "build": "vite build",
+    "clean:masita": "node --eval \"require('fs').rmSync('Masita', { recursive: true, force: true })\"",
     "build:desktop": "npm run build && electron-builder --win nsis --publish never",
+    "dist:masita": "npm run clean:masita && npm run build && electron-builder --win nsis --publish never",
     "pack:desktop": "npm run build && electron-builder --dir --publish never",
     "setup:supabase": "node scripts/bootstrap-supabase.js",
     "start": "node server/index.js",
@@ -52,9 +54,9 @@
   "build": {
     "appId": "com.umbra.chat",
     "productName": "Umbra",
-    "icon": "build/icon.png",
+    "icon": "build/icon.ico",
     "directories": {
-      "output": "release",
+      "output": "Masita",
       "buildResources": "build"
     },
     "files": [
@@ -79,9 +81,20 @@
       ]
     },
     "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "shortcutName": "Umbra",
+      "multiLanguageInstaller": true,
+      "installerLanguages": [
+        "es_ES",
+        "en_US",
+        "fr_FR"
+      ],
       "installerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
-      "installerHeaderIcon": "build/icon.ico"
+      "displayLanguageSelector": true
     }
   }
 }
