@@ -432,6 +432,7 @@
 }
 
 :root[data-theme="light"] .settings-card-title span,
+:root[data-theme="light"] .settings-user-copy span,
 :root[data-theme="light"] .settings-connection-summary-tile small,
 :root[data-theme="light"] .settings-connection-summary-tile span,
 :root[data-theme="light"] .settings-device-card > span,
@@ -442,6 +443,12 @@
 :root[data-theme="light"] .settings-legal-summary-note span,
 :root[data-theme="light"] .settings-legal-section p {
   color: var(--text-1);
+}
+
+:root[data-theme="light"] .settings-user-copy strong,
+:root[data-theme="light"] .settings-device-card .settings-user-copy strong,
+:root[data-theme="light"] .settings-device-item .settings-user-copy strong {
+  color: var(--text-0);
 }
 
 :root[data-theme="light"] .settings-row-icon,
@@ -463,6 +470,14 @@
 }
 
 :root[data-theme="light"] .summary-tile .umbra-icon {
+  color: var(--accent);
+}
+
+:root[data-theme="light"] .settings-device-card .settings-row-icon,
+:root[data-theme="light"] .settings-credits-person-card .settings-row-icon,
+:root[data-theme="light"] .settings-empty-state .settings-row-icon {
+  background: rgba(79, 95, 242, 0.1);
+  border-color: rgba(79, 95, 242, 0.14);
   color: var(--accent);
 }
 
@@ -592,6 +607,34 @@
 :root[data-theme="light"] .profile-detail-connection-icon {
   background: rgba(79, 95, 242, 0.08);
   border-color: rgba(79, 95, 242, 0.12);
+}
+
+:root[data-theme="light"] .profile-detail-identity h2,
+:root[data-theme="light"] .profile-detail-connection-copy strong,
+:root[data-theme="light"] .profile-detail-connection-copy a,
+:root[data-theme="light"] .profile-detail-role-copy strong,
+:root[data-theme="light"] .profile-detail-note {
+  color: var(--text-0);
+}
+
+:root[data-theme="light"] .profile-detail-identity p,
+:root[data-theme="light"] .profile-detail-section h4,
+:root[data-theme="light"] .profile-detail-section p,
+:root[data-theme="light"] .profile-detail-connection-copy small,
+:root[data-theme="light"] .profile-detail-role-copy small {
+  color: var(--text-1);
+}
+
+:root[data-theme="light"] .profile-detail-note {
+  background: rgba(247, 250, 255, 0.98);
+  border-color: rgba(79, 95, 242, 0.12);
+}
+
+:root[data-theme="light"] .profile-detail-role-icon,
+:root[data-theme="light"] .profile-detail-close {
+  background: rgba(79, 95, 242, 0.08);
+  border-color: rgba(79, 95, 242, 0.12);
+  color: var(--accent);
 }
 
 .avatar-crop-modal {

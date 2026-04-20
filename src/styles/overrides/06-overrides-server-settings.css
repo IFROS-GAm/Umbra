@@ -1089,6 +1089,17 @@
   color: var(--text-0);
 }
 
+:root[data-theme="light"] .server-settings-form .settings-field span,
+:root[data-theme="light"] .server-settings-form .settings-field label,
+:root[data-theme="light"] .server-settings-form .settings-field input::placeholder,
+:root[data-theme="light"] .server-settings-form .settings-field textarea::placeholder,
+:root[data-theme="light"] .server-settings-form .settings-field select,
+:root[data-theme="light"] .server-settings-role-color-row span,
+:root[data-theme="light"] .server-preview-body span,
+:root[data-theme="light"] .server-preview-body small {
+  color: var(--text-1);
+}
+
 :root[data-theme="light"] .server-settings-role-artwork,
 :root[data-theme="light"] .server-settings-member-transfer-panel,
 :root[data-theme="light"] .server-settings-member-ban-panel {
@@ -1099,6 +1110,14 @@
 :root[data-theme="light"] .server-preview-card {
   background: rgba(255, 255, 255, 0.98);
   border-color: rgba(79, 95, 242, 0.12);
+}
+
+:root[data-theme="light"] .server-preview-body {
+  background: rgba(255, 255, 255, 0.96);
+}
+
+:root[data-theme="light"] .server-preview-body strong {
+  color: var(--text-0);
 }
 
 :root[data-theme="light"] .server-preview-icon {
