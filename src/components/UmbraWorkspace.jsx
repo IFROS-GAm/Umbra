@@ -638,9 +638,9 @@ export function UmbraWorkspace({
             dmMenuPrefs={dmMenuPrefs}
             guildMenuPrefs={guildMenuPrefs}
             hoveredVoiceChannelId={hoveredVoiceChannelId}
-            inputMenuNode={voiceMenu === "input" && !isVoiceChannel ? inputMenuNode : null}
+            inputMenuNode={voiceMenu === "input" && !joinedVoiceChannelId ? inputMenuNode : null}
             language={language}
-            outputMenuNode={voiceMenu === "output" && !isVoiceChannel ? outputMenuNode : null}
+            outputMenuNode={voiceMenu === "output" && !joinedVoiceChannelId ? outputMenuNode : null}
             isVoiceChannel={isVoiceChannel}
             joinedVoiceChannel={joinedVoiceChannel}
             joinedVoiceChannelId={joinedVoiceChannelId}
