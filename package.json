@@ -61,7 +61,6 @@
       "build/icon.png",
       "dist/**/*",
       "electron/**/*",
-      "server/**/*",
       "package.json"
     ],
     "protocols": [

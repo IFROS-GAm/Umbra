@@ -11,16 +11,14 @@ const {
 const dotenv = require("dotenv");
 const fs = require("node:fs");
 const path = require("node:path");
-const { pathToFileURL } = require("node:url");
 
 const isDev = !app.isPackaged;
 const appId = "com.umbra.chat";
 const protocolScheme = "umbra";
-const serverPort = Number(process.env.ELECTRON_SERVER_PORT || 3130);
+const defaultHostedAppUrl = "https://umbra-suaj.onrender.com";
 
 let mainWindow = null;
 let pendingAuthCallback = null;
-let embeddedServer = null;
 let incomingCallWindow = null;
 let incomingCallPayload = null;
 let callSoundInterval = null;
@@ -133,6 +131,17 @@ function pickDesktopServiceBaseUrl({
   return normalizedViteUrl || normalizedPublicAppUrl || trimTrailingSlash(fallbackUrl);
 }
 
+function getDesktopHostedAppUrl() {
+  return (
+    trimTrailingSlash(
+      process.env.ELECTRON_PUBLIC_APP_URL ||
+        process.env.PUBLIC_APP_URL ||
+        process.env.VITE_PUBLIC_APP_URL ||
+        defaultHostedAppUrl
+    ) || defaultHostedAppUrl
+  );
+}
+
 function getDesktopRuntimeConfig() {
   if (isDev) {
     const publicAppUrl = trimTrailingSlash(
@@ -163,22 +172,26 @@ function getDesktopRuntimeConfig() {
     };
   }
 
-  const embeddedBaseUrl = trimTrailingSlash(
-    embeddedServer?.url || `http://127.0.0.1:${serverPort}`
-  );
-  const publicAppUrl = trimTrailingSlash(
-    process.env.ELECTRON_PUBLIC_APP_URL ||
-      process.env.PUBLIC_APP_URL ||
-      process.env.VITE_PUBLIC_APP_URL ||
-      embeddedBaseUrl
-  );
+  const publicAppUrl = getDesktopHostedAppUrl();
+  const apiBaseUrl = pickDesktopServiceBaseUrl({
+    electronOverride: process.env.ELECTRON_API_URL,
+    fallbackUrl: publicAppUrl,
+    publicAppUrl,
+    viteUrl: process.env.VITE_API_URL
+  });
+  const socketBaseUrl = pickDesktopServiceBaseUrl({
+    electronOverride: process.env.ELECTRON_SOCKET_URL,
+    fallbackUrl: apiBaseUrl,
+    publicAppUrl: apiBaseUrl,
+    viteUrl: process.env.VITE_SOCKET_URL
+  });
 
   return {
-    apiBaseUrl: embeddedBaseUrl,
+    apiBaseUrl,
     isDesktop: true,
     publicAppUrl,
     redirectUri: "umbra://auth/callback",
-    socketBaseUrl: embeddedBaseUrl
+    socketBaseUrl
   };
 }
 
@@ -266,35 +279,6 @@ function dispatchAuthCallback(callbackUrl) {
   }
 }
 
-async function startEmbeddedServer() {
-  if (isDev) {
-    return null;
-  }
-
-  if (embeddedServer) {
-    return embeddedServer;
-  }
-
-  process.env.UMBRA_DEMO_STORE_PATH =
-    process.env.UMBRA_DEMO_STORE_PATH ||
-    path.join(app.getPath("userData"), "demo-store.json");
-
-  const serverModuleUrl = pathToFileURL(
-    path.join(app.getAppPath(), "server", "start-server.js")
-  ).href;
-  const { startServer } = await import(serverModuleUrl);
-  writeDesktopLog(`Starting embedded server from ${serverModuleUrl}`);
-
-  embeddedServer = await startServer({
-    host: "127.0.0.1",
-    port: serverPort,
-    quiet: true
-  });
-  writeDesktopLog(`Embedded server ready at ${embeddedServer.url}`);
-
-  return embeddedServer;
-}
-
 async function createWindow() {
   const preloadPath = path.join(__dirname, "preload.cjs");
   const iconPath = resolveDesktopIconPath();
@@ -355,8 +339,8 @@ async function createWindow() {
       throw lastError;
     }
   } else {
-    const serverHandle = await startEmbeddedServer();
-    await mainWindow.loadURL(serverHandle.url);
+    await mainWindow.loadURL(runtimeConfig.publicAppUrl);
+    writeDesktopLog(`Main window loaded from hosted runtime ${runtimeConfig.publicAppUrl}.`);
   }
 
   writeDesktopLog("Main window loaded.");
@@ -636,13 +620,6 @@ process.on("unhandledRejection", (error) => {
 
 app.on("before-quit", async () => {
   hideIncomingCallWindow();
-  if (embeddedServer?.close) {
-    try {
-      await embeddedServer.close();
-    } catch {
-      // Ignore shutdown races.
-    }
-  }
 });
 
 app.on("window-all-closed", () => {
