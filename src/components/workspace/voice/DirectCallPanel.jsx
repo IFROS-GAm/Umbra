@@ -146,11 +146,15 @@ export function DirectCallPanel({
       }),
     [activeChannel, currentUser, currentUserId, voiceStageParticipants]
   );
-  const connectedCount = participants.filter((participant) => participant.inCall).length;
+  const connectedParticipants = useMemo(
+    () => participants.filter((participant) => participant.inCall),
+    [participants]
+  );
+  const connectedCount = connectedParticipants.length;
   const callSummary =
     connectedCount > 1
       ? "Ambos estan conectados en esta llamada."
-      : "Llamada privada activa. Puedes seguir chateando mientras hablas.";
+      : "Llamada privada activa. Esperando a la otra persona o sigue chateando mientras hablas.";
 
   return (
     <section className={`direct-call-panel direct-call-panel-${displayMode}`.trim()}>
@@ -167,8 +171,13 @@ export function DirectCallPanel({
         </div>
       </div>
 
-      <div className={`direct-call-panel-grid direct-call-panel-grid-${participants.length}`.trim()}>
-        {participants.map((user) => (
+      <div
+        className={`direct-call-panel-grid direct-call-panel-grid-${Math.max(
+          connectedParticipants.length,
+          1
+        )}`.trim()}
+      >
+        {connectedParticipants.map((user) => (
           <button
             className={`direct-call-panel-participant ${user.isSpeaking ? "speaking" : ""}`.trim()}
             key={user.id}
