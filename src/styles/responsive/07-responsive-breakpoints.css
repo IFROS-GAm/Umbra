@@ -1,4 +1,8 @@
 @media (max-width: 1180px) {
+  .direct-call-panel-grid {
+    grid-template-columns: 1fr;
+  }
+
   .direct-call-stage-layout,
   .voice-room-grid,
   .voice-stage-grid {
@@ -36,6 +40,27 @@
 }
 
 @media (max-width: 960px) {
+  .chat-header-tools {
+    flex-wrap: wrap;
+  }
+
+  .chat-header-actions-shell {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .chat-search {
+    min-width: min(100%, 260px);
+  }
+
+  .direct-call-panel-header {
+    flex-direction: column;
+  }
+
+  .direct-call-panel-badges {
+    justify-content: flex-start;
+  }
+
   .direct-call-stage-main {
     padding: 18px;
   }
@@ -129,5 +154,24 @@
 
   .screen-share-quality-inline button {
     flex: 1 1 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .chat-header-call-layout-switch {
+    order: 2;
+    width: 100%;
+  }
+
+  .chat-header-call-layout-switch .ghost-button.icon-only {
+    flex: 1 1 0;
+  }
+
+  .direct-call-panel {
+    padding: 16px;
+  }
+
+  .direct-call-panel-split {
+    min-height: 260px;
   }
 }

@@ -1,4 +1,4 @@
-import React, { lazy, useEffect, useMemo, useRef } from "react";
+import React, { lazy, useEffect, useMemo, useRef, useState } from "react";
 
 import { translate } from "../i18n.js";
 import { ChatHeaderPanel } from "./workspace/ChatHeaderPanel.jsx";
@@ -162,6 +162,7 @@ export function UmbraWorkspace({
   const isGroupDirectConversation = isDirectConversation && activeChannel?.type === "group_dm";
   const isCallableDirectConversation =
     isDirectConversation && ["dm", "group_dm"].includes(activeChannel?.type || "");
+  const [directCallLayoutMode, setDirectCallLayoutMode] = useState("chat");
   const isSingleDirectMessagePanel =
     membersPanelVisible && isDirectConversation && activeChannel?.type === "dm";
   const resolvedMembersPanelWidth = isSingleDirectMessagePanel ? membersPanelWidth : 292;
@@ -382,6 +383,14 @@ export function UmbraWorkspace({
   });
   const isDirectCallActive =
     isCallableDirectConversation && joinedVoiceChannelId === activeChannel?.id;
+  useEffect(() => {
+    if (isDirectCallActive && !isGroupDirectConversation) {
+      setDirectCallLayoutMode("split");
+      return;
+    }
+
+    setDirectCallLayoutMode("chat");
+  }, [activeChannel?.id, isDirectCallActive, isGroupDirectConversation]);
   const {
     screenSharePicker,
     screenShareQualityLabel,
@@ -701,7 +710,9 @@ export function UmbraWorkspace({
           composerPicker={composerPicker}
           composerRef={composerRef}
           canInvitePeople={Boolean(activeGuild?.permissions?.can_create_invite)}
+          currentUser={currentUser}
           directMessageProfile={directMessageProfile}
+          directCallLayoutMode={directCallLayoutMode}
           editingMessage={editingMessage}
           effectiveMembersPanelVisible={effectiveMembersPanelVisible}
           friendUsers={friendUsers}
@@ -769,6 +780,7 @@ export function UmbraWorkspace({
           replyMentionEnabled={replyMentionEnabled}
           replyTarget={replyTarget}
           screenShareQualityLabel={screenShareQualityLabel}
+          setDirectCallLayoutMode={setDirectCallLayoutMode}
           setComposer={setComposer}
           setComposerAttachments={setComposerAttachments}
           setComposerMenuOpen={setComposerMenuOpen}

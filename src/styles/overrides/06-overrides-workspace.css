@@ -645,3 +645,19 @@
   color: var(--text-2);
 }
 
+:root[data-theme="light"] .chat-header-call-layout-switch,
+:root[data-theme="light"] .direct-call-panel,
+:root[data-theme="light"] .direct-call-panel-participant,
+:root[data-theme="light"] .direct-call-panel-share-hint {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(245, 248, 255, 0.98)),
+    radial-gradient(circle at top, rgba(79, 95, 242, 0.08), transparent 34%);
+  border-color: rgba(79, 95, 242, 0.12);
+  box-shadow: 0 18px 36px rgba(88, 107, 148, 0.12);
+}
+
+:root[data-theme="light"] .direct-call-panel-header p,
+:root[data-theme="light"] .direct-call-panel-copy span {
+  color: rgba(72, 88, 118, 0.78);
+}
+

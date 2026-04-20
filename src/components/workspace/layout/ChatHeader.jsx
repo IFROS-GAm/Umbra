@@ -46,6 +46,7 @@ function getDirectFriendAction(profile) {
 export function ChatHeader({
   activeChannel,
   canInvitePeople,
+  directCallLayoutMode,
   directMessageProfile,
   headerActionsRef,
   headerPanel,
@@ -59,6 +60,7 @@ export function ChatHeader({
   onOpenDialog,
   onOpenInviteModal,
   onLeaveDirectCall,
+  onSetDirectCallLayoutMode,
   onStartDirectCall,
   onStartDirectVideoCall,
   onShowNotice,
@@ -106,6 +108,44 @@ export function ChatHeader({
                       <Icon name="phone" size={14} />
                       <strong>En llamada</strong>
                     </span>
+                    <div className="chat-header-call-layout-switch">
+                      <button
+                        aria-label="Vista mixta"
+                        className={`ghost-button icon-only tooltip-anchor ${
+                          directCallLayoutMode === "split" ? "active" : ""
+                        }`.trim()}
+                        data-tooltip="Vista mixta"
+                        data-tooltip-position="bottom"
+                        onClick={() => onSetDirectCallLayoutMode?.("split")}
+                        type="button"
+                      >
+                        <Icon name="appGrid" size={16} />
+                      </button>
+                      <button
+                        aria-label="Solo llamada"
+                        className={`ghost-button icon-only tooltip-anchor ${
+                          directCallLayoutMode === "call" ? "active" : ""
+                        }`.trim()}
+                        data-tooltip="Solo llamada"
+                        data-tooltip-position="bottom"
+                        onClick={() => onSetDirectCallLayoutMode?.("call")}
+                        type="button"
+                      >
+                        <Icon name="phone" size={16} />
+                      </button>
+                      <button
+                        aria-label="Solo chat"
+                        className={`ghost-button icon-only tooltip-anchor ${
+                          directCallLayoutMode === "chat" ? "active" : ""
+                        }`.trim()}
+                        data-tooltip="Solo chat"
+                        data-tooltip-position="bottom"
+                        onClick={() => onSetDirectCallLayoutMode?.("chat")}
+                        type="button"
+                      >
+                        <Icon name="mail" size={16} />
+                      </button>
+                    </div>
                     <button
                       aria-label={voiceState?.micMuted ? "Activar microfono" : "Silenciar"}
                       className={`ghost-button icon-only tooltip-anchor ${

@@ -208,6 +208,22 @@
   text-transform: uppercase;
 }
 
+.chat-header-call-layout-switch {
+  align-items: center;
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+}
+
+.chat-header-call-layout-switch .ghost-button.icon-only {
+  min-height: 34px;
+  min-width: 34px;
+  padding: 7px;
+}
+
 .chat-header-tool-cluster .ghost-button.icon-only {
   background: transparent;
   border: 1px solid transparent;
@@ -266,6 +282,28 @@
 .chat-header-panel.compact-panel {
   overflow: hidden;
   width: min(460px, calc(100vw - 120px));
+}
+
+.direct-call-chat-layout {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+}
+
+.direct-call-chat-layout-call {
+  min-height: 0;
+}
+
+.direct-call-chat-layout-call .direct-call-panel {
+  flex: 1;
+}
+
+.direct-call-chat-messages {
+  display: flex;
+  flex: 1;
+  min-height: 0;
 }
 
 .topbar-inbox-panel {

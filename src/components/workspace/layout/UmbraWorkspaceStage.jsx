@@ -3,6 +3,7 @@ import React, { Suspense } from "react";
 import { ChatHeader } from "../ChatHeader.jsx";
 import { MembersPanel } from "../MembersPanel.jsx";
 import { WorkspacePanelFallback } from "../WorkspacePanelFallback.jsx";
+import { DirectCallPanel } from "../voice/DirectCallPanel.jsx";
 
 export function UmbraWorkspaceStage({
   FriendsHome,
@@ -25,7 +26,9 @@ export function UmbraWorkspaceStage({
   composerPicker,
   composerRef,
   canInvitePeople,
+  currentUser,
   directMessageProfile,
+  directCallLayoutMode,
   editingMessage,
   effectiveMembersPanelVisible,
   friendUsers,
@@ -93,6 +96,7 @@ export function UmbraWorkspaceStage({
   replyMentionEnabled,
   replyTarget,
   screenShareQualityLabel,
+  setDirectCallLayoutMode,
   setComposer,
   setComposerAttachments,
   setComposerMenuOpen,
@@ -118,6 +122,87 @@ export function UmbraWorkspaceStage({
   toggleHeaderPanel
 }) {
   const shouldRenderVoiceStage = isVoiceChannel || (isDirectCallActive && isGroupDirectConversation);
+  const shouldRenderDirectCallSplit =
+    isDirectCallActive && isDirectConversation && !isGroupDirectConversation;
+  const shouldRenderDirectCallPanel =
+    shouldRenderDirectCallSplit && directCallLayoutMode !== "chat";
+  const shouldRenderMessageStage =
+    !shouldRenderVoiceStage &&
+    (!shouldRenderDirectCallSplit || directCallLayoutMode !== "call");
+
+  const messageStageNode = (
+    <Suspense fallback={<WorkspacePanelFallback />}>
+      <MessageStage
+        activeChannel={activeChannel}
+        activeSelectionKind={activeSelection.kind}
+        attachmentInputRef={attachmentInputRef}
+        availableUsersById={availableUsersById}
+        composer={composer}
+        composerAttachments={composerAttachments}
+        composerMenuOpen={composerMenuOpen}
+        composerPicker={composerPicker}
+        composerRef={composerRef}
+        directMessageProfile={directMessageProfile}
+        editingMessage={editingMessage}
+        guildStickers={activeGuild?.stickers || []}
+        handleAttachmentSelection={handleAttachmentSelection}
+        handleComposerChange={handleComposerChange}
+        handleComposerShortcut={handleComposerShortcut}
+        handleDeleteMessage={handleDeleteMessage}
+        handlePickerInsert={handlePickerInsert}
+        handleReaction={handleReaction}
+        handleScroll={handleScroll}
+        handleStickerSelect={handleStickerSelect}
+        handleSubmitMessage={handleSubmitMessage}
+        language={language}
+        listRef={listRef}
+        loadingHistoryMessages={loadingHistoryMessages}
+        loadingMessages={loadingMessages}
+        messageLoadError={messageLoadError}
+        messageMenuFor={messageMenuFor}
+        messages={messages}
+        onAcceptFriendRequest={handleAcceptFriendRequest}
+        onAcceptInvite={onAcceptInviteFromMessage}
+        onAddFriend={handleSendFriendRequest}
+        onBlockUser={handleBlockUser}
+        onCancelEdit={() => {
+          setEditingMessage(null);
+          setComposerAttachments([]);
+          setComposer("");
+        }}
+        onCancelFriendRequest={handleCancelFriendRequest}
+        onCancelReply={() => {
+          setReplyTarget(null);
+          setReplyMentionEnabled(true);
+        }}
+        onEditMessage={handleEditMessage}
+        onForwardMessage={handleForwardMessage}
+        onJumpToLatest={handleJumpToLatest}
+        onReportUser={handleReportUser}
+        onRetryMessages={handleRetryMessages}
+        onSetComposerMenuOpen={setComposerMenuOpen}
+        onSetComposerPicker={setComposerPicker}
+        onSetMessageMenuFor={setMessageMenuFor}
+        onSetReactionPickerFor={setReactionPickerFor}
+        onShowNotice={showUiNotice}
+        onStartReply={handleStartReply}
+        onTogglePinnedMessage={handleTogglePinnedMessage}
+        onToggleReplyMention={() => setReplyMentionEnabled((previous) => !previous)}
+        openProfileCard={handleOpenProfileCard}
+        reactionPickerFor={reactionPickerFor}
+        removeComposerAttachment={removeComposerAttachment}
+        replyMentionEnabled={replyMentionEnabled}
+        replyTarget={replyTarget}
+        showUiNotice={showUiNotice}
+        submittingMessage={submittingMessage}
+        typingUsers={typingUsers}
+        uiNotice={uiNotice}
+        updateComposerAttachment={updateComposerAttachment}
+        uploadingAttachments={uploadingAttachments}
+        workspace={workspace}
+      />
+    </Suspense>
+  );
 
   return (
     <>
@@ -152,6 +237,7 @@ export function UmbraWorkspaceStage({
             <ChatHeader
               activeChannel={activeChannel}
               directMessageProfile={directMessageProfile}
+              directCallLayoutMode={directCallLayoutMode}
               headerActionsRef={headerActionsRef}
               headerPanel={headerPanel}
               headerPanelNode={chatHeaderPanelNode}
@@ -166,6 +252,7 @@ export function UmbraWorkspaceStage({
               onOpenInviteModal={handleOpenInviteModal}
               onLeaveDirectCall={handleVoiceLeave}
               onShowNotice={showUiNotice}
+              onSetDirectCallLayoutMode={setDirectCallLayoutMode}
               onStartDirectCall={() => handleJoinDirectCall()}
               onStartDirectVideoCall={() => handleJoinDirectCall({ enableCamera: true })}
               onToggleDirectCallCamera={() => handleToggleVoiceState("cameraEnabled")}
@@ -207,78 +294,34 @@ export function UmbraWorkspaceStage({
                   workspace={workspace}
                 />
               </Suspense>
+            ) : shouldRenderDirectCallSplit ? (
+              <section
+                className={`direct-call-chat-layout direct-call-chat-layout-${directCallLayoutMode}`.trim()}
+              >
+                {shouldRenderDirectCallPanel ? (
+                  <DirectCallPanel
+                    activeChannel={activeChannel}
+                    currentUser={currentUser}
+                    displayMode={directCallLayoutMode}
+                    joinedVoiceChannelId={joinedVoiceChannelId}
+                    onJoinVoiceChannel={() => handleJoinDirectCall()}
+                    onLeaveVoice={handleVoiceLeave}
+                    onOpenProfileCard={handleOpenProfileCard}
+                    onShowNotice={showUiNotice}
+                    onToggleCamera={() => handleToggleVoiceState("cameraEnabled")}
+                    onToggleMute={() => handleToggleVoiceState("micMuted")}
+                    onToggleScreenShare={handleToggleScreenShare}
+                    voiceStageParticipants={voiceStageParticipants}
+                    voiceState={voiceState}
+                  />
+                ) : null}
+
+                {shouldRenderMessageStage ? (
+                  <div className="direct-call-chat-messages">{messageStageNode}</div>
+                ) : null}
+              </section>
             ) : (
-              <Suspense fallback={<WorkspacePanelFallback />}>
-                <MessageStage
-                  activeChannel={activeChannel}
-                  activeSelectionKind={activeSelection.kind}
-                  attachmentInputRef={attachmentInputRef}
-                  availableUsersById={availableUsersById}
-                  composer={composer}
-                  composerAttachments={composerAttachments}
-                  composerMenuOpen={composerMenuOpen}
-                  composerPicker={composerPicker}
-                  composerRef={composerRef}
-                  directMessageProfile={directMessageProfile}
-                  editingMessage={editingMessage}
-                  guildStickers={activeGuild?.stickers || []}
-                  handleAttachmentSelection={handleAttachmentSelection}
-                  handleComposerChange={handleComposerChange}
-                  handleComposerShortcut={handleComposerShortcut}
-                  handleDeleteMessage={handleDeleteMessage}
-                  handlePickerInsert={handlePickerInsert}
-                  handleReaction={handleReaction}
-                  handleScroll={handleScroll}
-                  handleStickerSelect={handleStickerSelect}
-                  handleSubmitMessage={handleSubmitMessage}
-                  language={language}
-                  listRef={listRef}
-                  loadingHistoryMessages={loadingHistoryMessages}
-                  loadingMessages={loadingMessages}
-                  messageLoadError={messageLoadError}
-                  messageMenuFor={messageMenuFor}
-                  messages={messages}
-                  onAcceptFriendRequest={handleAcceptFriendRequest}
-                  onAcceptInvite={onAcceptInviteFromMessage}
-                  onAddFriend={handleSendFriendRequest}
-                  onBlockUser={handleBlockUser}
-                  onCancelEdit={() => {
-                    setEditingMessage(null);
-                    setComposerAttachments([]);
-                    setComposer("");
-                  }}
-                  onCancelFriendRequest={handleCancelFriendRequest}
-                  onCancelReply={() => {
-                    setReplyTarget(null);
-                    setReplyMentionEnabled(true);
-                  }}
-                  onEditMessage={handleEditMessage}
-                  onForwardMessage={handleForwardMessage}
-                  onJumpToLatest={handleJumpToLatest}
-                  onReportUser={handleReportUser}
-                  onRetryMessages={handleRetryMessages}
-                  onSetComposerMenuOpen={setComposerMenuOpen}
-                  onSetComposerPicker={setComposerPicker}
-                  onSetMessageMenuFor={setMessageMenuFor}
-                  onSetReactionPickerFor={setReactionPickerFor}
-                  onShowNotice={showUiNotice}
-                  onStartReply={handleStartReply}
-                  onTogglePinnedMessage={handleTogglePinnedMessage}
-                  onToggleReplyMention={() => setReplyMentionEnabled((previous) => !previous)}
-                  openProfileCard={handleOpenProfileCard}
-                  reactionPickerFor={reactionPickerFor}
-                  removeComposerAttachment={removeComposerAttachment}
-                  replyMentionEnabled={replyMentionEnabled}
-                  replyTarget={replyTarget}
-                  showUiNotice={showUiNotice}
-                  submittingMessage={submittingMessage}
-                  typingUsers={typingUsers}
-                  uiNotice={uiNotice}
-                  updateComposerAttachment={updateComposerAttachment}
-                  uploadingAttachments={uploadingAttachments}
-                  workspace={workspace}
-                />
-              </Suspense>
+              messageStageNode
             )}
           </>
         )}
