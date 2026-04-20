@@ -338,7 +338,9 @@
 :root[data-theme="light"] .settings-legal-summary-note,
 :root[data-theme="light"] .settings-row,
 :root[data-theme="light"] .settings-action-row,
-:root[data-theme="light"] .account-row {
+:root[data-theme="light"] .account-row,
+:root[data-theme="light"] .settings-status-showcase,
+:root[data-theme="light"] .summary-tile {
   background: rgba(245, 248, 255, 0.96);
   border-color: rgba(79, 95, 242, 0.1);
 }
@@ -450,8 +452,30 @@
   color: var(--accent);
 }
 
+:root[data-theme="light"] .settings-status-showcase strong,
+:root[data-theme="light"] .summary-tile strong {
+  color: var(--text-0);
+}
+
+:root[data-theme="light"] .settings-status-showcase p,
+:root[data-theme="light"] .summary-tile span {
+  color: var(--text-1);
+}
+
+:root[data-theme="light"] .summary-tile .umbra-icon {
+  color: var(--accent);
+}
+
 :root[data-theme="light"] .settings-connection-divider {
   background: linear-gradient(90deg, transparent, rgba(79, 95, 242, 0.12), transparent);
+}
+
+:root[data-theme="light"] .settings-legal-checklist li {
+  color: var(--text-1);
+}
+
+:root[data-theme="light"] .settings-legal-checklist li::before {
+  background: rgba(79, 95, 242, 0.88);
 }
 
 :root[data-theme="light"] .current-user-main-action,
