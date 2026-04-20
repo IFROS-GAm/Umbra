@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useLayoutEffect, useRef, useState } from "react";
 
 import { Avatar } from "../../Avatar.jsx";
 import { Icon } from "../../Icon.jsx";
@@ -31,7 +31,7 @@ export function WorkspaceNavigatorFooter({
       )
     : 0;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (voiceMenu !== "input" && voiceMenu !== "output") {
       setVoiceMenuPosition(null);
       return undefined;
@@ -53,10 +53,16 @@ export function WorkspaceNavigatorFooter({
         Math.max(12, rect.left + rect.width / 2 - estimatedMenuWidth / 2)
       );
 
-      setVoiceMenuPosition({
+      const nextPosition = {
         left: `${Math.round(nextLeft)}px`,
         top: `${Math.round(rect.top - 10)}px`
-      });
+      };
+
+      setVoiceMenuPosition((previous) =>
+        previous?.left === nextPosition.left && previous?.top === nextPosition.top
+          ? previous
+          : nextPosition
+      );
     }
 
     updateVoiceMenuPosition();

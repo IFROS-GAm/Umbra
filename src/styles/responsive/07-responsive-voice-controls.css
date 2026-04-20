@@ -237,8 +237,8 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.04),
     0 8px 20px rgba(0, 0, 0, 0.2);
   gap: 14px;
-  min-height: 72px;
-  padding: 12px 12px 12px 14px;
+  min-height: 76px;
+  padding: 14px 14px 14px 16px;
 }
 
 .voice-route-card:hover,
@@ -266,11 +266,13 @@
 }
 
 .voice-route-card-copy strong {
-  font-size: 0.96rem;
+  font-size: 1rem;
   letter-spacing: -0.02em;
+  line-height: 1.2;
 }
 
 .voice-route-card-copy small:last-child {
+  color: var(--text-2);
   line-height: 1.45;
   margin-top: 1px;
 }
@@ -280,7 +282,7 @@
   display: inline-flex;
   flex: 0 0 auto;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   justify-content: space-between;
 }
 
@@ -357,27 +359,81 @@
 }
 
 .voice-control-slider-block {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.02)),
+    radial-gradient(circle at top left, rgba(107, 124, 255, 0.08), transparent 42%);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 14px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 4px 0;
+  padding: 12px;
+}
+
+.voice-control-slider-block input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  height: 18px;
+  width: 100%;
+}
+
+.voice-control-slider-block input[type="range"]::-webkit-slider-runnable-track {
+  background:
+    linear-gradient(90deg, rgba(107, 124, 255, 0.88), rgba(123, 212, 255, 0.82)),
+    rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  height: 6px;
+}
+
+.voice-control-slider-block input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  background: linear-gradient(180deg, #ffffff, #dfe4ff);
+  border: 2px solid rgba(107, 124, 255, 0.44);
+  border-radius: 999px;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.22);
+  height: 16px;
+  margin-top: -5px;
+  width: 16px;
+}
+
+.voice-control-slider-block input[type="range"]::-moz-range-track {
+  background:
+    linear-gradient(90deg, rgba(107, 124, 255, 0.88), rgba(123, 212, 255, 0.82)),
+    rgba(255, 255, 255, 0.08);
+  border: 0;
+  border-radius: 999px;
+  height: 6px;
+}
+
+.voice-control-slider-block input[type="range"]::-moz-range-thumb {
+  background: linear-gradient(180deg, #ffffff, #dfe4ff);
+  border: 2px solid rgba(107, 124, 255, 0.44);
+  border-radius: 999px;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.22);
+  height: 16px;
+  width: 16px;
 }
 
 .voice-input-meter {
   display: grid;
   gap: 3px;
   grid-template-columns: repeat(18, 1fr);
+  margin-top: 2px;
 }
 
 .voice-input-meter i {
   background: rgba(255, 255, 255, 0.12);
   border-radius: 999px;
   display: block;
-  height: 16px;
+  height: 12px;
+  transition: background 160ms ease, transform 160ms ease;
 }
 
 .voice-input-meter i.active {
   background: linear-gradient(180deg, #ffd761, #75d37b);
+  transform: translateY(-1px);
 }
 
 .voice-control-check {
@@ -610,5 +666,38 @@
 
 .empty-state.compact {
   min-height: 180px;
+}
+
+:root[data-theme="light"] .voice-route-card {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(245, 248, 255, 0.98)),
+    radial-gradient(circle at top left, rgba(79, 95, 242, 0.08), transparent 40%);
+  border-color: rgba(79, 95, 242, 0.12);
+  box-shadow: 0 14px 30px rgba(88, 107, 148, 0.12);
+}
+
+:root[data-theme="light"] .voice-route-card:hover,
+:root[data-theme="light"] .voice-route-card.panel-open {
+  background:
+    linear-gradient(180deg, rgba(252, 253, 255, 0.98), rgba(241, 246, 255, 0.99)),
+    radial-gradient(circle at top left, rgba(79, 95, 242, 0.12), transparent 44%);
+  border-color: rgba(79, 95, 242, 0.18);
+}
+
+:root[data-theme="light"] .voice-control-slider-block {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(245, 248, 255, 0.98)),
+    radial-gradient(circle at top left, rgba(79, 95, 242, 0.08), transparent 42%);
+  border-color: rgba(79, 95, 242, 0.12);
+}
+
+:root[data-theme="light"] .voice-control-slider-block input[type="range"]::-webkit-slider-thumb,
+:root[data-theme="light"] .voice-control-slider-block input[type="range"]::-moz-range-thumb {
+  border-color: rgba(79, 95, 242, 0.3);
+  box-shadow: 0 6px 14px rgba(88, 107, 148, 0.14);
+}
+
+:root[data-theme="light"] .voice-input-meter i {
+  background: rgba(79, 95, 242, 0.12);
 }
 
