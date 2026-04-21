@@ -127,6 +127,7 @@ export function DirectCallPanel({
   joinedVoiceChannelId,
   onJoinVoiceChannel,
   onLeaveVoice,
+  onOpenParticipantMenu,
   onOpenProfileCard,
   onShowNotice,
   onToggleCamera,
@@ -182,6 +183,7 @@ export function DirectCallPanel({
             className={`direct-call-panel-participant ${user.isSpeaking ? "speaking" : ""}`.trim()}
             key={user.id}
             onClick={(event) => onOpenProfileCard?.(event, user, user.display_name)}
+            onContextMenu={(event) => onOpenParticipantMenu?.(event, user)}
             style={user.stageStyle}
             type="button"
           >

@@ -322,6 +322,7 @@ export function UmbraWorkspaceStage({
                     joinedVoiceChannelId={joinedVoiceChannelId}
                     onJoinVoiceChannel={() => handleJoinDirectCall()}
                     onLeaveVoice={handleVoiceLeave}
+                    onOpenParticipantMenu={handleOpenParticipantMenu}
                     onOpenProfileCard={handleOpenProfileCard}
                     onShowNotice={showUiNotice}
                     onToggleCamera={() => handleToggleVoiceState("cameraEnabled")}
