@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { api, resolveAssetUrl } from "../../api.js";
 import { translate } from "../../i18n.js";
@@ -18,6 +18,7 @@ function replaceCount(template, count, fallback) {
 
 export function ServerStickersPanel({ guildId, language = "es" }) {
   const fileInputRef = useRef(null);
+  const loadRequestIdRef = useRef(0);
   const t = (key, fallback) => translate(language, key, fallback);
   const [stickersState, setStickersState] = useState({
     error: "",
@@ -49,6 +50,7 @@ export function ServerStickersPanel({ guildId, language = "es" }) {
     });
     setSubmitting(false);
     setNotice("");
+    loadRequestIdRef.current += 1;
   }, [guildId]);
 
   useEffect(
@@ -60,49 +62,54 @@ export function ServerStickersPanel({ guildId, language = "es" }) {
     [form.imagePreview]
   );
 
-  useEffect(() => {
-    if (stickersState.loaded || stickersState.loading) {
-      return;
-    }
+  const loadStickers = useCallback(
+    async ({ keepStickers = false } = {}) => {
+      const requestId = loadRequestIdRef.current + 1;
+      loadRequestIdRef.current = requestId;
 
-    let cancelled = false;
-    setStickersState((previous) => ({
-      ...previous,
-      error: "",
-      loading: true
-    }));
+      setStickersState((previous) => ({
+        ...previous,
+        error: "",
+        loaded: previous.loaded && keepStickers,
+        loading: true,
+        stickers: keepStickers ? previous.stickers : []
+      }));
 
-    api
-      .listGuildStickers({ guildId })
-      .then((payload) => {
-        if (cancelled) {
-          return;
+      try {
+        const payload = await api.listGuildStickers({ guildId });
+        if (loadRequestIdRef.current !== requestId) {
+          return payload?.stickers || [];
         }
 
+        const stickers = Array.isArray(payload?.stickers) ? payload.stickers : [];
         setStickersState({
           error: "",
           loaded: true,
           loading: false,
-          stickers: payload.stickers || []
+          stickers
         });
-      })
-      .catch((error) => {
-        if (cancelled) {
-          return;
+        return stickers;
+      } catch (error) {
+        if (loadRequestIdRef.current !== requestId) {
+          return [];
         }
 
-        setStickersState({
+        setStickersState((previous) => ({
+          ...previous,
           error: error.message,
           loaded: true,
           loading: false,
-          stickers: []
-        });
-      });
+          stickers: keepStickers ? previous.stickers : []
+        }));
+        return [];
+      }
+    },
+    [guildId]
+  );
 
-    return () => {
-      cancelled = true;
-    };
-  }, [guildId, stickersState.loaded, stickersState.loading]);
+  useEffect(() => {
+    loadStickers();
+  }, [loadStickers]);
 
   const customStickerCount = useMemo(
     () => stickersState.stickers.filter((sticker) => !sticker.is_default).length,
@@ -180,6 +187,9 @@ export function ServerStickersPanel({ guildId, language = "es" }) {
 
       setStickersState((previous) => ({
         ...previous,
+        error: "",
+        loaded: true,
+        loading: false,
         stickers: [...previous.stickers, payload.sticker].sort(
           (left, right) => Number(left.position || 0) - Number(right.position || 0)
         )
@@ -197,9 +207,11 @@ export function ServerStickersPanel({ guildId, language = "es" }) {
         };
       });
       setNotice(t("server.settings.stickers.created", "Sticker creado."));
+      await loadStickers({ keepStickers: true });
     } catch (error) {
       setStickersState((previous) => ({
         ...previous,
+        loading: false,
         error: error.message
       }));
     } finally {
@@ -215,12 +227,16 @@ export function ServerStickersPanel({ guildId, language = "es" }) {
       });
       setStickersState((previous) => ({
         ...previous,
+        loaded: true,
+        loading: false,
         stickers: previous.stickers.filter((item) => item.id !== sticker.id)
       }));
       setNotice(t("server.settings.stickers.deleted", "Sticker eliminado."));
+      await loadStickers({ keepStickers: true });
     } catch (error) {
       setStickersState((previous) => ({
         ...previous,
+        loading: false,
         error: error.message
       }));
     }
@@ -337,12 +353,7 @@ export function ServerStickersPanel({ guildId, language = "es" }) {
               <button
                 className="ghost-button small"
                 onClick={() =>
-                  setStickersState((previous) => ({
-                    ...previous,
-                    error: "",
-                    loaded: false,
-                    loading: false
-                  }))
+                  loadStickers({ keepStickers: Boolean(stickersState.stickers.length) })
                 }
                 type="button"
               >
@@ -364,12 +375,17 @@ export function ServerStickersPanel({ guildId, language = "es" }) {
           </div>
         </form>
 
-        {stickersState.loading ? (
+        {stickersState.loading && !stickersState.stickers.length ? (
           <div className="server-settings-empty">
             {t("server.settings.stickers.loading", "Cargando stickers...")}
           </div>
         ) : (
           <div className="server-stickers-grid">
+            {stickersState.loading ? (
+              <div className="server-settings-empty subtle">
+                {t("server.settings.stickers.loading", "Cargando stickers...")}
+              </div>
+            ) : null}
             {stickersState.stickers.map((sticker) => (
               <article className="server-sticker-card" key={sticker.id}>
                 <div className="server-sticker-card-main">
