@@ -37,7 +37,6 @@ export function useWorkspaceVoiceEffects({
   setVoicePresencePeers,
   setVoicePresenceUsers,
   setVoiceState,
-  voiceRtcSessionRef,
   voiceInputSessionRef,
   voiceInputSpeaking,
   voiceInputStream,
@@ -50,6 +49,7 @@ export function useWorkspaceVoiceEffects({
   workspace,
   workspaceRef
 }) {
+  const voiceRtcSessionRef = useRef(null);
   const voicePresenceChannelRef = useRef(null);
   const voicePresenceRevisionRef = useRef(0);
   const voicePresenceSyncRef = useRef(null);

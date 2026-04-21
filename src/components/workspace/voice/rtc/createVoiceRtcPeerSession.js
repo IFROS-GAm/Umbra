@@ -1,7 +1,5 @@
 import {
-  applyAudioContextSinkId,
   applySinkId,
-  buildParticipantAudioMix,
   buildRtcConfiguration,
   createHiddenAudioElement,
   createRemoteStream,
@@ -125,14 +123,6 @@ export function createVoiceRtcPeerSession({
     return selfPeerId.localeCompare(String(peerId || "")) < 0;
   }
 
-  function getParticipantAudioMix(entry) {
-    const playbackState = getPlaybackState();
-    const participantPrefs =
-      playbackState?.participantAudioPrefs?.[String(entry?.userId || "").trim()] || {};
-
-    return buildParticipantAudioMix(participantPrefs);
-  }
-
   function emitPeerMedia(entry) {
     if (typeof onPeerMediaChange !== "function" || !entry) {
       return;
@@ -186,46 +176,10 @@ export function createVoiceRtcPeerSession({
     }
 
     const playbackState = getPlaybackState();
-    const participantMix = getParticipantAudioMix(entry);
     entry.audioElement.defaultMuted = Boolean(playbackState.deafened);
     entry.audioElement.muted = Boolean(playbackState.deafened);
     entry.audioElement.volume = playbackState.deafened ? 0 : playbackState.outputVolume;
     applySinkId(entry.audioElement, playbackState.outputDeviceId);
-
-    const remoteAudioAnalysis = entry.remoteAudioAnalysis;
-    if (!remoteAudioAnalysis) {
-      return;
-    }
-
-    applyAudioContextSinkId(remoteAudioAnalysis.context, playbackState.outputDeviceId);
-
-    if (remoteAudioAnalysis.participantGain?.gain) {
-      remoteAudioAnalysis.participantGain.gain.cancelScheduledValues(
-        remoteAudioAnalysis.context.currentTime
-      );
-      remoteAudioAnalysis.participantGain.gain.setValueAtTime(
-        participantMix.outputGain,
-        remoteAudioAnalysis.context.currentTime
-      );
-    }
-
-    if (remoteAudioAnalysis.intensityGain?.gain) {
-      remoteAudioAnalysis.intensityGain.gain.cancelScheduledValues(
-        remoteAudioAnalysis.context.currentTime
-      );
-      remoteAudioAnalysis.intensityGain.gain.setValueAtTime(
-        participantMix.intensityGain,
-        remoteAudioAnalysis.context.currentTime
-      );
-    }
-
-    if (remoteAudioAnalysis.compressor) {
-      remoteAudioAnalysis.compressor.attack.value = participantMix.compressorAttack;
-      remoteAudioAnalysis.compressor.knee.value = participantMix.compressorKnee;
-      remoteAudioAnalysis.compressor.ratio.value = participantMix.compressorRatio;
-      remoteAudioAnalysis.compressor.release.value = participantMix.compressorRelease;
-      remoteAudioAnalysis.compressor.threshold.value = participantMix.compressorThreshold;
-    }
   }
 
   function safePlayAudio(entry) {
@@ -263,11 +217,6 @@ export function createVoiceRtcPeerSession({
       analyser,
       animationFrameId,
       cleanup,
-      compressor,
-      context,
-      destination,
-      intensityGain,
-      participantGain,
       silentGain,
       source
     } = entry.remoteAudioAnalysis;
@@ -279,10 +228,6 @@ export function createVoiceRtcPeerSession({
     try {
       source?.disconnect?.();
       analyser?.disconnect?.();
-      participantGain?.disconnect?.();
-      compressor?.disconnect?.();
-      intensityGain?.disconnect?.();
-      destination?.disconnect?.();
       silentGain?.disconnect?.();
     } catch {
       // Ignore audio node disconnect issues during teardown.
@@ -292,12 +237,6 @@ export function createVoiceRtcPeerSession({
     entry.remoteAudioAnalysis = null;
     entry.audioLevel = 0;
     entry.detectedSpeaking = false;
-
-    try {
-      entry.audioElement.srcObject = null;
-    } catch {
-      // Ignore teardown races on the hidden player.
-    }
   }
 
   function startRemoteAudioAnalysis(entry) {
@@ -340,20 +279,11 @@ export function createVoiceRtcPeerSession({
     analyser.smoothingTimeConstant = 0.55;
     const silentGain = context.createGain();
     silentGain.gain.value = 0;
-    const participantGain = context.createGain();
-    const compressor = context.createDynamicsCompressor();
-    const intensityGain = context.createGain();
-    const destination = context.createMediaStreamDestination();
 
     const source = context.createMediaStreamSource(entry.remoteAudioStream);
     source.connect(analyser);
     analyser.connect(silentGain);
     silentGain.connect(context.destination);
-    source.connect(participantGain);
-    participantGain.connect(compressor);
-    compressor.connect(intensityGain);
-    intensityGain.connect(destination);
-    entry.audioElement.srcObject = destination.stream;
 
     const timeDomainData = new Float32Array(analyser.fftSize);
     let animationFrameId = 0;
@@ -468,18 +398,11 @@ export function createVoiceRtcPeerSession({
         entry.audioElement.removeEventListener("loadedmetadata", replayOnCanPlay);
         entry.audioElement.removeEventListener("canplay", replayOnCanPlay);
       },
-      compressor,
-      context,
-      destination,
-      intensityGain,
-      participantGain,
       silentGain,
       source,
       streamKey
     };
 
-    applyPlaybackToPeer(entry);
-    safePlayAudio(entry);
     tick();
   }
 
@@ -590,9 +513,7 @@ export function createVoiceRtcPeerSession({
       }
 
       if (kind === "audio") {
-        if (!entry.remoteAudioAnalysis) {
-          entry.audioElement.srcObject = entry.remoteAudioStream;
-        }
+        entry.audioElement.srcObject = entry.remoteAudioStream;
         applyPlaybackToPeer(entry);
         if (!track.muted && track.readyState !== "ended") {
           safePlayAudio(entry);
@@ -759,8 +680,10 @@ export function createVoiceRtcPeerSession({
       videoSender: videoTransceiver.sender
     };
 
+    audioElement.srcObject = entry.remoteAudioStream;
     peers.set(entry.peerId, entry);
     applyPlaybackToPeer(entry);
+    safePlayAudio(entry);
 
     peerConnection.onicecandidate = (event) => {
       if (entry.destroyed || !event.candidate) {
@@ -795,6 +718,7 @@ export function createVoiceRtcPeerSession({
           entry.remoteAudioStream.addTrack(event.track);
         }
         attachRemoteTrackLifecycle(entry, event.track, "audio");
+        entry.audioElement.srcObject = entry.remoteAudioStream;
         applyPlaybackToPeer(entry);
         startRemoteAudioAnalysis(entry);
         safePlayAudio(entry);
@@ -895,7 +819,6 @@ export function createVoiceRtcPeerSession({
       existing.speaking = Boolean(speaking);
       existing.userId = userId || existing.userId;
       existing.videoMode = videoMode || existing.videoMode || "";
-      applyPlaybackToPeer(existing);
 
       if (existing.micMuted) {
         existing.audioLevel = 0;

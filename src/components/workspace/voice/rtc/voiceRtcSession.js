@@ -3,11 +3,7 @@ import { createVoiceRtcPeerSession } from "./createVoiceRtcPeerSession.js";
 import { createVoiceRtcSessionControls } from "./createVoiceRtcSessionControls.js";
 import { createRealtimePresenceSync } from "../presence/createRealtimePresenceSync.js";
 import { buildVoicePeersFromPresenceState } from "../presence/voiceRealtimeHelpers.js";
-import {
-  clampUnitVolume,
-  hasTrack,
-  normalizeVoiceParticipantAudioPrefsMap
-} from "./voiceRtcSessionConfig.js";
+import { clampUnitVolume, hasTrack } from "./voiceRtcSessionConfig.js";
 
 export function createVoiceRtcSession({
   channelId,
@@ -46,8 +42,7 @@ export function createVoiceRtcSession({
   let playbackState = {
     deafened: Boolean(deafened),
     outputDeviceId,
-    outputVolume: clampUnitVolume(outputVolume),
-    participantAudioPrefs: normalizeVoiceParticipantAudioPrefsMap()
+    outputVolume: clampUnitVolume(outputVolume)
   };
   let participantState = {
     deafened: Boolean(deafened),
