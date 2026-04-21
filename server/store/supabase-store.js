@@ -66,6 +66,7 @@ function normalizeRecoveryAccount(value = "") {
 
 const DEFAULT_VOICE_CHANNELS = ["Lounge", "Sala de estudio 1", "Sala de estudio 2"];
 const GUILD_MESSAGE_CONTEXT_TTL_MS = 15_000;
+const GUILD_STICKER_SCHEMA_RETRY_MS = 12_000;
 
 async function expectData(queryPromise, fallbackMessage = "Error consultando Supabase.") {
   const { data, error } = await queryPromise;
@@ -113,6 +114,8 @@ export class SupabaseStore {
     this.attachmentsBucket = process.env.SUPABASE_ATTACHMENTS_BUCKET || "attachments";
     this.guildModerationEnabled = true;
     this.guildStickersEnabled = true;
+    this.guildStickerFeatureCheckPromise = null;
+    this.guildStickerFeatureLastCheckAt = 0;
     this.guildMessageContextCache = new Map();
   }
 
@@ -142,6 +145,49 @@ export class SupabaseStore {
     return true;
   }
 
+  async ensureGuildStickerFeatureAvailable({ force = false } = {}) {
+    if (this.guildStickersEnabled && !force) {
+      return true;
+    }
+
+    if (this.guildStickerFeatureCheckPromise) {
+      return this.guildStickerFeatureCheckPromise;
+    }
+
+    const now = Date.now();
+    if (
+      !force &&
+      !this.guildStickersEnabled &&
+      now - this.guildStickerFeatureLastCheckAt < GUILD_STICKER_SCHEMA_RETRY_MS
+    ) {
+      return false;
+    }
+
+    const probePromise = (async () => {
+      this.guildStickerFeatureLastCheckAt = Date.now();
+
+      try {
+        await expectData(this.client.from("guild_stickers").select("id").limit(1));
+        await expectData(this.client.from("messages").select("id,sticker_id").limit(1));
+        this.guildStickersEnabled = true;
+        return true;
+      } catch (error) {
+        if (this.handleMissingStickerSchemaError(error)) {
+          return false;
+        }
+
+        throw error;
+      } finally {
+        if (this.guildStickerFeatureCheckPromise === probePromise) {
+          this.guildStickerFeatureCheckPromise = null;
+        }
+      }
+    })();
+
+    this.guildStickerFeatureCheckPromise = probePromise;
+    return probePromise;
+  }
+
   handleMissingGuildModerationSchemaError(error) {
     if (!isMissingSchemaFeatureError(error, ["guild_bans"])) {
       return false;
@@ -151,8 +197,8 @@ export class SupabaseStore {
     return true;
   }
 
-  assertGuildStickerFeatureAvailable() {
-    if (!this.guildStickersEnabled) {
+  async assertGuildStickerFeatureAvailable() {
+    if (!(await this.ensureGuildStickerFeatureAvailable())) {
       throw createError(
         "Los stickers del servidor aun no estan habilitados. Aplica el schema nuevo en Supabase para usarlos.",
         501
@@ -212,7 +258,11 @@ export class SupabaseStore {
   }
 
   async loadGuildStickers(guildId) {
-    if (!this.guildStickersEnabled || !guildId) {
+    if (!guildId) {
+      return [];
+    }
+
+    if (!(await this.ensureGuildStickerFeatureAvailable())) {
       return [];
     }
 
@@ -230,7 +280,11 @@ export class SupabaseStore {
   }
 
   async loadGuildStickersByGuildIds(guildIds = []) {
-    if (!this.guildStickersEnabled || !guildIds.length) {
+    if (!guildIds.length) {
+      return [];
+    }
+
+    if (!(await this.ensureGuildStickerFeatureAvailable())) {
       return [];
     }
 
@@ -248,7 +302,11 @@ export class SupabaseStore {
   }
 
   async getGuildStickerById(stickerId) {
-    if (!this.guildStickersEnabled || !stickerId) {
+    if (!stickerId) {
+      return null;
+    }
+
+    if (!(await this.ensureGuildStickerFeatureAvailable())) {
       return null;
     }
 
@@ -403,7 +461,7 @@ export class SupabaseStore {
   }
 
   async ensureDefaultGuildStickers() {
-    if (!this.guildStickersEnabled) {
+    if (!(await this.ensureGuildStickerFeatureAvailable())) {
       return;
     }
 

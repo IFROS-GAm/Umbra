@@ -93,7 +93,7 @@ export function ServerStickersPanel({ guildId, language = "es" }) {
 
         setStickersState({
           error: error.message,
-          loaded: false,
+          loaded: true,
           loading: false,
           stickers: []
         });
@@ -332,7 +332,24 @@ export function ServerStickersPanel({ guildId, language = "es" }) {
 
           {notice ? <p className="settings-form-success">{notice}</p> : null}
           {stickersState.error ? (
-            <p className="form-error settings-form-error">{stickersState.error}</p>
+            <div className="settings-form-actions inline">
+              <p className="form-error settings-form-error">{stickersState.error}</p>
+              <button
+                className="ghost-button small"
+                onClick={() =>
+                  setStickersState((previous) => ({
+                    ...previous,
+                    error: "",
+                    loaded: false,
+                    loading: false
+                  }))
+                }
+                type="button"
+              >
+                <Icon name="refresh" size={14} />
+                <span>Reintentar</span>
+              </button>
+            </div>
           ) : null}
 
           <div className="settings-form-actions">

@@ -176,7 +176,7 @@ export const supabaseStoreRuntimeGuildMethods = {
       )
     );
 
-    if (this.guildStickersEnabled) {
+    if (await this.ensureGuildStickerFeatureAvailable()) {
       await expectData(
         this.client.from("guild_stickers").insert(
           buildDefaultGuildStickerRows({
@@ -520,7 +520,7 @@ export const supabaseStoreRuntimeGuildMethods = {
   }
 ,
   async listGuildStickers({ guildId, userId }) {
-    this.assertGuildStickerFeatureAvailable();
+    await this.assertGuildStickerFeatureAvailable();
 
     const guildRows = await expectData(
       this.client.from("guilds").select("id").eq("id", guildId).limit(1)
@@ -547,7 +547,7 @@ export const supabaseStoreRuntimeGuildMethods = {
   }
 ,
   async createGuildSticker({ emoji = "", guildId, imageUrl = "", name, userId }) {
-    this.assertGuildStickerFeatureAvailable();
+    await this.assertGuildStickerFeatureAvailable();
 
     const guildRows = await expectData(
       this.client.from("guilds").select("id").eq("id", guildId).limit(1)
@@ -601,7 +601,7 @@ export const supabaseStoreRuntimeGuildMethods = {
   }
 ,
   async deleteGuildSticker({ guildId, stickerId, userId }) {
-    this.assertGuildStickerFeatureAvailable();
+    await this.assertGuildStickerFeatureAvailable();
 
     const guildRows = await expectData(
       this.client.from("guilds").select("id").eq("id", guildId).limit(1)

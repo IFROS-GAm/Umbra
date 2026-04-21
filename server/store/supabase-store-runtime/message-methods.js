@@ -166,7 +166,17 @@ export const supabaseStoreRuntimeMessageMethods = {
     }
 
     const trimmed = content?.trim() || "";
+    const stickerFeatureAvailable = stickerId
+      ? await this.ensureGuildStickerFeatureAvailable()
+      : this.guildStickersEnabled;
     const sticker = stickerId ? await this.getGuildStickerById(stickerId) : null;
+
+    if (stickerId && !stickerFeatureAvailable) {
+      throw createError(
+        "Los stickers del servidor aun no estan habilitados. Aplica el schema nuevo en Supabase para usarlos.",
+        501
+      );
+    }
 
     if (stickerId && !sticker) {
       throw createError("El sticker seleccionado no existe.", 400);
@@ -241,7 +251,7 @@ export const supabaseStoreRuntimeMessageMethods = {
       created_at: now
     };
 
-    if (this.guildStickersEnabled) {
+    if (stickerFeatureAvailable) {
       message.sticker_id = sticker?.id || null;
     }
 
