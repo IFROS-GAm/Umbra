@@ -2,7 +2,7 @@ import React from "react";
 
 import { Avatar } from "../../Avatar.jsx";
 import { Icon } from "../../Icon.jsx";
-import { HOME_LINKS, getDmSummary } from "../workspaceHelpers.js";
+import { HOME_LINKS, getDmSummary, resolveDirectChannelVisual } from "../workspaceHelpers.js";
 
 export function WorkspaceDirectHome({
   activeSelection,
@@ -41,7 +41,7 @@ export function WorkspaceDirectHome({
           </button>
         </div>
         {workspace.dms.map((dm) => {
-          const other = dm.participants.find((participant) => participant.id !== workspace.current_user.id);
+          const visual = resolveDirectChannelVisual(dm, workspace.current_user.id);
 
           return (
             <button
@@ -54,11 +54,11 @@ export function WorkspaceDirectHome({
               type="button"
             >
               <Avatar
-                hue={other?.avatar_hue || 210}
+                hue={visual.avatarHue}
                 label={dm.display_name}
                 size={38}
-                src={other?.avatar_url}
-                status={dm.type === "dm" ? other?.status : null}
+                src={visual.avatarUrl}
+                status={visual.status}
               />
               <div className="dm-copy">
                 <strong title={dm.display_name}>{dm.display_name}</strong>

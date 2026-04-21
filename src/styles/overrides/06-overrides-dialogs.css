@@ -57,6 +57,30 @@
   line-height: 1.5;
 }
 
+.dialog-group-avatar-editor {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dialog-group-avatar-trigger {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  display: inline-flex;
+  justify-content: center;
+  padding: 0;
+}
+
+.dialog-group-avatar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
 .dialog-selected-count {
   color: var(--text-1);
   font-size: 0.82rem;
@@ -237,6 +261,10 @@
   background: rgba(255, 255, 255, 0.94);
   border-color: rgba(79, 95, 242, 0.12);
   color: var(--text-1);
+}
+
+:root[data-theme="light"] .dialog-group-avatar-trigger {
+  background: transparent;
 }
 
 :root[data-theme="light"] .dialog-friend-list {

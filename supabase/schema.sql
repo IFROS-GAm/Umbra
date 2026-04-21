@@ -108,6 +108,7 @@ create table if not exists public.channels (
   id uuid primary key default gen_random_uuid(),
   guild_id uuid references public.guilds(id) on delete cascade,
   type text not null check (type in ('category', 'text', 'voice', 'dm', 'group_dm')),
+  icon_url text not null default '',
   name text not null default '',
   topic text not null default '',
   position integer not null default 0,
@@ -127,6 +128,8 @@ alter table public.channels
 alter table public.channels
   add constraint channels_type_check
   check (type in ('category', 'text', 'voice', 'dm', 'group_dm'));
+
+alter table public.channels add column if not exists icon_url text not null default '';
 
 create table if not exists public.channel_members (
   channel_id uuid not null references public.channels(id) on delete cascade,

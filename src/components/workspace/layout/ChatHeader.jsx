@@ -46,6 +46,7 @@ function getDirectFriendAction(profile) {
 export function ChatHeader({
   activeChannel,
   canInvitePeople,
+  directConversationVisual,
   directCallLayoutMode,
   directMessageProfile,
   headerActionsRef,
@@ -73,6 +74,14 @@ export function ChatHeader({
   voiceState
 }) {
   const directFriendAction = getDirectFriendAction(directMessageProfile);
+  const groupDirectAvatar =
+    !directMessageProfile && isDirectGroupConversation
+      ? {
+          avatarHue: directConversationVisual?.avatarHue || 248,
+          avatarUrl: directConversationVisual?.avatarUrl || "",
+          label: activeChannel?.display_name || title
+        }
+      : null;
 
   return (
     <header className="chat-header">
@@ -91,6 +100,13 @@ export function ChatHeader({
               size={28}
               src={directMessageProfile.avatarUrl}
               status={directMessageProfile.status}
+            />
+          ) : groupDirectAvatar ? (
+            <Avatar
+              hue={groupDirectAvatar.avatarHue}
+              label={groupDirectAvatar.label}
+              size={28}
+              src={groupDirectAvatar.avatarUrl}
             />
           ) : null}
           <h1>{title}</h1>

@@ -401,10 +401,11 @@ export const api = {
       })
     });
   },
-  createGroupDm({ name = "", recipientIds = [] }) {
+  createGroupDm({ iconUrl = "", name = "", recipientIds = [] }) {
     return request("/api/dms", {
       method: "POST",
       body: JSON.stringify({
+        iconUrl,
         name,
         recipientIds
       })

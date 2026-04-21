@@ -50,6 +50,10 @@ export const demoStoreBaseMethods = {
       banner_image_url: "",
       ...guild
     }));
+    this.db.channels = (this.db.channels || []).map((channel) => ({
+      icon_url: "",
+      ...channel
+    }));
     this.db.guild_bans = this.db.guild_bans || [];
     const membershipOrderByUser = new Map();
     this.db.guild_members = (this.db.guild_members || []).map((membership) => {

@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
+import { Avatar } from "../Avatar.jsx";
 import { Icon } from "../Icon.jsx";
 
 const GUILD_TEMPLATES = [
@@ -86,8 +87,11 @@ export function Dialog({ dialog, guildChannels = [], onClose, onSubmit, users })
   );
   const [recipientIds, setRecipientIds] = useState([]);
   const [friendQuery, setFriendQuery] = useState("");
+  const [groupIconFile, setGroupIconFile] = useState(null);
+  const [groupIconPreview, setGroupIconPreview] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const groupIconInputRef = useRef(null);
   const meta = useMemo(() => getDialogMeta(dialog.type), [dialog.type]);
   const filteredFriendUsers = useMemo(() => {
     const normalizedQuery = friendQuery.trim().toLowerCase();
@@ -106,6 +110,12 @@ export function Dialog({ dialog, guildChannels = [], onClose, onSubmit, users })
     [guildChannels]
   );
 
+  function releasePreviewUrl(candidate) {
+    if (String(candidate || "").startsWith("blob:")) {
+      URL.revokeObjectURL(candidate);
+    }
+  }
+
   useEffect(() => {
     setName("");
     setDescription("");
@@ -118,7 +128,22 @@ export function Dialog({ dialog, guildChannels = [], onClose, onSubmit, users })
     setRecipientId(users.find((user) => user.id !== dialog.currentUserId)?.id || "");
     setRecipientIds([]);
     setFriendQuery("");
+    setGroupIconFile(null);
+    setGroupIconPreview((previous) => {
+      releasePreviewUrl(previous);
+      return "";
+    });
+    if (groupIconInputRef.current) {
+      groupIconInputRef.current.value = "";
+    }
   }, [dialog, users]);
+
+  useEffect(
+    () => () => {
+      releasePreviewUrl(groupIconPreview);
+    },
+    [groupIconPreview]
+  );
 
   function toggleRecipient(userId) {
     setRecipientIds((previous) => {
@@ -136,6 +161,40 @@ export function Dialog({ dialog, guildChannels = [], onClose, onSubmit, users })
 
       setError("");
       return [...previous, userId];
+    });
+  }
+
+  function clearGroupIcon() {
+    setGroupIconFile(null);
+    setGroupIconPreview((previous) => {
+      releasePreviewUrl(previous);
+      return "";
+    });
+
+    if (groupIconInputRef.current) {
+      groupIconInputRef.current.value = "";
+    }
+  }
+
+  function handleGroupIconSelection(event) {
+    const nextFile = event.target.files?.[0] || null;
+    if (!nextFile) {
+      return;
+    }
+
+    if (!String(nextFile.type || "").startsWith("image/")) {
+      setError("Selecciona una imagen valida para la foto del grupo.");
+      if (groupIconInputRef.current) {
+        groupIconInputRef.current.value = "";
+      }
+      return;
+    }
+
+    setError("");
+    setGroupIconFile(nextFile);
+    setGroupIconPreview((previous) => {
+      releasePreviewUrl(previous);
+      return URL.createObjectURL(nextFile);
     });
   }
 
@@ -157,6 +216,7 @@ export function Dialog({ dialog, guildChannels = [], onClose, onSubmit, users })
 
       await onSubmit({
         description,
+        iconFile: groupIconFile,
         kind,
         name,
         parentId: parentId || null,
@@ -185,9 +245,49 @@ export function Dialog({ dialog, guildChannels = [], onClose, onSubmit, users })
             <Icon name="close" />
           </button>
 
-          <div className="dialog-hero-icon">
-            <Icon name={meta.heroIcon} size={28} />
-          </div>
+          {dialog.type === "dm_group" ? (
+            <div className="dialog-group-avatar-editor">
+              <input
+                accept="image/*"
+                hidden
+                onChange={handleGroupIconSelection}
+                ref={groupIconInputRef}
+                type="file"
+              />
+              <button
+                className="dialog-group-avatar-trigger"
+                onClick={() => groupIconInputRef.current?.click()}
+                type="button"
+              >
+                <Avatar
+                  hue={248}
+                  label={name || "Grupo"}
+                  size={72}
+                  src={groupIconPreview}
+                />
+              </button>
+              <div className="dialog-group-avatar-actions">
+                <button
+                  className="ghost-button"
+                  onClick={() => groupIconInputRef.current?.click()}
+                  type="button"
+                >
+                  <Icon name="upload" />
+                  <span>{groupIconPreview ? "Cambiar foto" : "Subir foto"}</span>
+                </button>
+                {groupIconPreview ? (
+                  <button className="ghost-button" onClick={clearGroupIcon} type="button">
+                    <Icon name="close" />
+                    <span>Quitar</span>
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : (
+            <div className="dialog-hero-icon">
+              <Icon name={meta.heroIcon} size={28} />
+            </div>
+          )}
 
           <h3>{meta.title}</h3>
           <p>{meta.subtitle}</p>

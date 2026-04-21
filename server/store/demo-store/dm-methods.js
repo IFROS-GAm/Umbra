@@ -141,7 +141,7 @@ export const demoStoreDmMethods = {
     };
   }
 ,
-  async createGroupDm({ name = "", ownerId, recipientIds }) {
+  async createGroupDm({ iconUrl = "", name = "", ownerId, recipientIds }) {
     const uniqueRecipientIds = [...new Set((recipientIds || []).map((id) => String(id)).filter(Boolean))]
       .filter((id) => id !== ownerId);
     const maxRecipients = 9;
@@ -187,6 +187,7 @@ export const demoStoreDmMethods = {
       id: createId(),
       guild_id: null,
       type: CHANNEL_TYPES.GROUP_DM,
+      icon_url: String(iconUrl || "").trim(),
       name: String(name || "").trim(),
       topic: "Grupo directo",
       position: 0,

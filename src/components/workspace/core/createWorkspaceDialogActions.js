@@ -272,7 +272,19 @@ export function createWorkspaceDialogActions(context, shared = {}) {
       }
 
       if (dialog.type === "dm_group") {
+        let iconUrl = "";
+
+        if (values.iconFile) {
+          const uploadPayload = await api.uploadAttachments([values.iconFile]);
+          iconUrl = uploadPayload.attachments?.[0]?.url || "";
+
+          if (!iconUrl) {
+            throw new Error("No se pudo subir la foto del grupo.");
+          }
+        }
+
         const payload = await api.createGroupDm({
+          iconUrl,
           name: values.name,
           recipientIds: values.recipientIds
         });

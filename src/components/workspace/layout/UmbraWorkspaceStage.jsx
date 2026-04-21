@@ -3,6 +3,7 @@ import React, { Suspense } from "react";
 import { ChatHeader } from "../ChatHeader.jsx";
 import { MembersPanel } from "../MembersPanel.jsx";
 import { WorkspacePanelFallback } from "../WorkspacePanelFallback.jsx";
+import { resolveDirectChannelVisual } from "../shared/workspaceHelpers.js";
 import { DirectCallPanel } from "../voice/DirectCallPanel.jsx";
 
 export function UmbraWorkspaceStage({
@@ -121,6 +122,9 @@ export function UmbraWorkspaceStage({
   workspace,
   toggleHeaderPanel
 }) {
+  const directConversationVisual = isDirectConversation
+    ? resolveDirectChannelVisual(activeChannel, currentUser?.id)
+    : null;
   const shouldRenderVoiceStage = isVoiceChannel || (isDirectCallActive && isGroupDirectConversation);
   const shouldRenderDirectCallSplit =
     isDirectCallActive && isDirectConversation && !isGroupDirectConversation;
@@ -237,6 +241,7 @@ export function UmbraWorkspaceStage({
             <ChatHeader
               activeChannel={activeChannel}
               directMessageProfile={directMessageProfile}
+              directConversationVisual={directConversationVisual}
               directCallLayoutMode={directCallLayoutMode}
               headerActionsRef={headerActionsRef}
               headerPanel={headerPanel}

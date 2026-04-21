@@ -20,7 +20,9 @@ export function registerSocialRoutes({
 
       if (recipientIds.length) {
         channel = await store.createGroupDm({
-          name: req.body.name || "",
+          iconUrl: req.body.iconUrl || "",
+
+          name: req.body.name || "",
           ownerId: req.viewer.id,
           recipientIds
         });
