@@ -31,6 +31,7 @@ import {
   normalizeRecoveryProvider,
   normalizeSocialLinks,
   normalizeStickerEmoji,
+  resolveMessageSticker,
   resolveMentionUserIds,
   sanitizeCategoryName,
   sanitizeChannelName,
@@ -157,10 +158,13 @@ export const supabaseStoreRuntimeCoreMethods = {
     );
 
     const message = latest[0];
-    let sticker = null;
-    if (message?.sticker_id) {
-      sticker = await this.getGuildStickerById(message.sticker_id);
-    }
+    const persistedSticker = message?.sticker_id
+      ? await this.getGuildStickerById(message.sticker_id, message.guild_id)
+      : null;
+    const sticker = resolveMessageSticker(message, {
+      guild_stickers: persistedSticker ? [persistedSticker] : [],
+      guilds: []
+    });
     await expectData(
       this.client
         .from("channels")

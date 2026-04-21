@@ -18,6 +18,41 @@ const statusOrder = {
 const GROUP_DM_META_PREFIX = "[[group-dm-meta:";
 const GROUP_DM_META_SUFFIX = "]]";
 const DEFAULT_GROUP_DM_TOPIC = "Grupo directo";
+const GUILD_META_PREFIX = "[[guild-meta:";
+const GUILD_META_SUFFIX = "]]";
+const STORED_GUILD_STICKER_ATTACHMENT_KIND = "__umbra_guild_sticker__";
+
+function sanitizeGuildStickerName(candidate = "") {
+  return String(candidate || "").trim().slice(0, 32);
+}
+
+function sanitizeGuildStickerEmoji(candidate = "") {
+  return String(candidate || "").trim().slice(0, 16);
+}
+
+function normalizeGuildStickerRecord(record = {}, fallback = {}) {
+  const id = String(record?.id || fallback.id || "").trim();
+  const guildId = String(record?.guild_id || fallback.guildId || "").trim();
+  const name = sanitizeGuildStickerName(record?.name || fallback.name || "");
+  const emoji = sanitizeGuildStickerEmoji(record?.emoji || fallback.emoji || "");
+  const imageUrl = String(record?.image_url || record?.imageUrl || fallback.imageUrl || "").trim();
+
+  if (!id || !guildId || !name || (!emoji && !imageUrl)) {
+    return null;
+  }
+
+  return {
+    id,
+    guild_id: guildId,
+    name,
+    emoji,
+    image_url: imageUrl,
+    is_default: Boolean(record?.is_default ?? fallback.isDefault),
+    position: Number(record?.position ?? fallback.position ?? 0),
+    created_by: String(record?.created_by || record?.createdBy || fallback.createdBy || "").trim(),
+    created_at: String(record?.created_at || record?.createdAt || fallback.createdAt || "").trim()
+  };
+}
 
 export function createId() {
   return uuidv4();
@@ -77,13 +112,14 @@ export function buildMessagePreview(content = "", attachments = [], sticker = nu
     return `[sticker] ${sticker.name}`;
   }
 
-  const attachmentCount = attachments.length || 0;
+  const visibleAttachments = stripStoredGuildStickerAttachments(attachments);
+  const attachmentCount = visibleAttachments.length || 0;
   if (!attachmentCount) {
     return "";
   }
 
   if (attachmentCount === 1) {
-    const attachment = attachments[0] || {};
+    const attachment = visibleAttachments[0] || {};
     const contentType = String(attachment.content_type || "").toLowerCase();
 
     if (contentType.startsWith("image/gif")) {
@@ -415,6 +451,34 @@ export function buildDefaultGuildStickerRows({
   }));
 }
 
+export function buildFallbackDefaultGuildStickerRows({
+  createdBy,
+  guildId,
+  now = new Date().toISOString()
+}) {
+  return DEFAULT_GUILD_STICKERS.map((sticker, index) =>
+    normalizeGuildStickerRecord(
+      {
+        created_at: now,
+        created_by: createdBy,
+        emoji: sticker.emoji,
+        guild_id: guildId,
+        id: `fallback-sticker:${guildId}:${sticker.key}`,
+        image_url: "",
+        is_default: true,
+        name: sticker.name,
+        position: index
+      },
+      {
+        createdAt: now,
+        createdBy,
+        guildId,
+        position: index
+      }
+    )
+  ).filter(Boolean);
+}
+
 export function sortGuildStickers(stickers = []) {
   return [...stickers].sort((left, right) => {
     const positionDiff = Number(left.position || 0) - Number(right.position || 0);
@@ -426,8 +490,191 @@ export function sortGuildStickers(stickers = []) {
   });
 }
 
+export function parseStoredGuildDescription(candidate = "", guild = {}) {
+  const raw = String(candidate || "");
+  let visibleDescription = raw;
+  let customStickers = [];
+
+  if (raw.startsWith(GUILD_META_PREFIX)) {
+    const suffixIndex = raw.indexOf(GUILD_META_SUFFIX, GUILD_META_PREFIX.length);
+    if (suffixIndex !== -1) {
+      const encodedPayload = raw.slice(GUILD_META_PREFIX.length, suffixIndex);
+      visibleDescription = raw.slice(suffixIndex + GUILD_META_SUFFIX.length).trim();
+
+      try {
+        const parsed = JSON.parse(decodeURIComponent(encodedPayload));
+        customStickers = Array.isArray(parsed?.stickers) ? parsed.stickers : [];
+      } catch {
+        customStickers = [];
+      }
+    }
+  }
+
+  const normalizedCustomStickers = sortGuildStickers(
+    customStickers
+      .map((sticker, index) =>
+        normalizeGuildStickerRecord(sticker, {
+          createdAt: guild?.created_at,
+          createdBy: sticker?.created_by || guild?.owner_id,
+          guildId: guild?.id,
+          position: index + DEFAULT_GUILD_STICKERS.length
+        })
+      )
+      .filter((sticker) => sticker && !sticker.is_default)
+  );
+
+  return {
+    customStickers: normalizedCustomStickers,
+    description: visibleDescription,
+    stickers: sortGuildStickers([
+      ...buildFallbackDefaultGuildStickerRows({
+        createdBy: guild?.owner_id,
+        guildId: guild?.id,
+        now: guild?.created_at || new Date().toISOString()
+      }),
+      ...normalizedCustomStickers
+    ])
+  };
+}
+
+export function buildStoredGuildDescription({
+  customStickers = [],
+  description = ""
+} = {}) {
+  const visibleDescription = String(description || "").trim();
+  const normalizedCustomStickers = sortGuildStickers(
+    (Array.isArray(customStickers) ? customStickers : [])
+      .map((sticker, index) =>
+        normalizeGuildStickerRecord(sticker, {
+          guildId: sticker?.guild_id,
+          position: index + DEFAULT_GUILD_STICKERS.length
+        })
+      )
+      .filter((sticker) => sticker && !sticker.is_default)
+  );
+
+  if (!normalizedCustomStickers.length) {
+    return visibleDescription;
+  }
+
+  const payload = encodeURIComponent(
+    JSON.stringify({
+      stickers: normalizedCustomStickers.map((sticker) => ({
+        created_at: sticker.created_at || "",
+        created_by: sticker.created_by || "",
+        emoji: sticker.emoji || "",
+        guild_id: sticker.guild_id || "",
+        id: sticker.id,
+        image_url: sticker.image_url || "",
+        is_default: false,
+        name: sticker.name,
+        position: Number(sticker.position || 0)
+      }))
+    })
+  );
+
+  return `${GUILD_META_PREFIX}${payload}${GUILD_META_SUFFIX}${visibleDescription ? ` ${visibleDescription}` : ""}`;
+}
+
+export function buildStoredGuildStickerAttachment(sticker = {}) {
+  const normalized = normalizeGuildStickerRecord(sticker, {
+    guildId: sticker?.guild_id,
+    imageUrl: sticker?.image_url,
+    name: sticker?.name
+  });
+
+  if (!normalized) {
+    return null;
+  }
+
+  return {
+    guild_id: normalized.guild_id,
+    id: normalized.id,
+    image_url: normalized.image_url || "",
+    is_default: Boolean(normalized.is_default),
+    kind: STORED_GUILD_STICKER_ATTACHMENT_KIND,
+    name: normalized.name,
+    emoji: normalized.emoji || ""
+  };
+}
+
+export function extractStoredGuildStickerAttachment(attachments = [], fallback = {}) {
+  const stickerAttachment = (Array.isArray(attachments) ? attachments : []).find(
+    (attachment) =>
+      String(attachment?.kind || "").trim().toLowerCase() === STORED_GUILD_STICKER_ATTACHMENT_KIND
+  );
+
+  if (!stickerAttachment) {
+    return null;
+  }
+
+  return normalizeGuildStickerRecord(stickerAttachment, {
+    createdAt: fallback.createdAt,
+    createdBy: fallback.createdBy,
+    guildId: fallback.guildId || stickerAttachment?.guild_id,
+    imageUrl: stickerAttachment?.image_url,
+    name: stickerAttachment?.name
+  });
+}
+
+export function stripStoredGuildStickerAttachments(attachments = []) {
+  return (Array.isArray(attachments) ? attachments : []).filter(
+    (attachment) =>
+      String(attachment?.kind || "").trim().toLowerCase() !== STORED_GUILD_STICKER_ATTACHMENT_KIND
+  );
+}
+
 function findGuildSticker(db, stickerId) {
-  return (db.guild_stickers || []).find((sticker) => sticker.id === stickerId) || null;
+  const directMatch = (db.guild_stickers || []).find((sticker) => sticker.id === stickerId) || null;
+  if (directMatch) {
+    return directMatch;
+  }
+
+  const guilds = Array.isArray(db?.guilds) ? db.guilds : [];
+  for (const guild of guilds) {
+    const parsed = parseStoredGuildDescription(guild?.description || "", guild);
+    const fallbackMatch = (parsed.stickers || []).find((sticker) => sticker.id === stickerId);
+    if (fallbackMatch) {
+      return fallbackMatch;
+    }
+  }
+
+  return null;
+}
+
+export function resolveMessageSticker(message = {}, db = {}) {
+  if (!message) {
+    return null;
+  }
+
+  if (message.sticker_id) {
+    const sticker = findGuildSticker(db, message.sticker_id);
+    if (sticker) {
+      return sticker;
+    }
+  }
+
+  return extractStoredGuildStickerAttachment(message.attachments || [], {
+    createdAt: message.created_at,
+    guildId: message.guild_id
+  });
+}
+
+export function messageUsesSticker(message = {}, stickerId = "") {
+  if (!message || !stickerId) {
+    return false;
+  }
+
+  if (String(message.sticker_id || "") === String(stickerId)) {
+    return true;
+  }
+
+  return Boolean(
+    extractStoredGuildStickerAttachment(message.attachments || [], {
+      createdAt: message.created_at,
+      guildId: message.guild_id
+    })?.id === String(stickerId)
+  );
 }
 
 function normalizeParentId(parentId) {
@@ -622,6 +869,7 @@ export function buildInvitePreview({
     return null;
   }
 
+  const parsedGuild = parseStoredGuildDescription(guild.description || "", guild);
   const defaultChannel = getDefaultGuildChannel(channels, guild.id);
   const memberIds = guildMembers
     .filter((membership) => membership.guild_id === guild.id)
@@ -650,7 +898,7 @@ export function buildInvitePreview({
       created_at: guild.created_at || null,
       id: guild.id,
       name: guild.name,
-      description: guild.description || "",
+      description: parsedGuild.description || "",
       icon_text: guild.icon_text || "",
       icon_url: guild.icon_url || "",
       banner_color: guild.banner_color || "#5865F2",
@@ -675,9 +923,7 @@ export function refreshChannelSummaries(db) {
     const latestMessage = db.messages
       .filter((message) => message.channel_id === channel.id && !message.deleted_at)
       .sort(sortByDateDesc)[0];
-    const latestSticker = latestMessage?.sticker_id
-      ? findGuildSticker(db, latestMessage.sticker_id)
-      : null;
+    const latestSticker = resolveMessageSticker(latestMessage, db);
 
     channel.last_message_id = latestMessage?.id ?? null;
     channel.last_message_author_id = latestMessage?.author_id ?? null;
@@ -738,6 +984,7 @@ export function buildBootstrapState(db, userId) {
     })
     .filter(Boolean)
     .map(({ guild, membership }) => {
+      const parsedGuild = parseStoredGuildDescription(guild.description || "", guild);
       const permissionBits = computePermissionBits({
         guilds: db.guilds,
         guildId: guild.id,
@@ -812,6 +1059,7 @@ export function buildBootstrapState(db, userId) {
 
       return {
         ...guild,
+        description: parsedGuild.description || "",
         allow_member_invites: guildAllowsMemberInvites({
           guildId: guild.id,
           roles: db.roles
@@ -836,12 +1084,17 @@ export function buildBootstrapState(db, userId) {
         channels,
         members,
         stickers: sortGuildStickers(
-          (db.guild_stickers || [])
-            .filter((sticker) => sticker.guild_id === guild.id)
-            .map((sticker) => ({
-              ...sticker,
-              image_url: sticker.image_url || ""
-            }))
+          (
+            (() => {
+              const guildStickers = (db.guild_stickers || []).filter(
+                (sticker) => sticker.guild_id === guild.id
+              );
+              return guildStickers.length ? guildStickers : parsedGuild.stickers || [];
+            })()
+          ).map((sticker) => ({
+            ...sticker,
+            image_url: sticker.image_url || ""
+          }))
         )
       };
     });
@@ -1011,13 +1264,11 @@ export function enrichMessages({ channelId, db, messages, userId }) {
     .sort(sortByDateAsc)
     .map((message) => {
       const author = db.profiles.find((profile) => profile.id === message.author_id);
-      const sticker = message.sticker_id ? findGuildSticker(db, message.sticker_id) : null;
+      const sticker = resolveMessageSticker(message, db);
       const replyTarget = message.reply_to
         ? db.messages.find((item) => item.id === message.reply_to && !item.deleted_at)
         : null;
-      const replySticker = replyTarget?.sticker_id
-        ? findGuildSticker(db, replyTarget.sticker_id)
-        : null;
+      const replySticker = resolveMessageSticker(replyTarget, db);
       const reactions = db.message_reactions.filter(
         (reaction) => reaction.message_id === message.id
       );
@@ -1062,7 +1313,7 @@ export function enrichMessages({ channelId, db, messages, userId }) {
         can_delete:
           message.author_id === userId ||
           hasPermission(permissionBits, PERMISSIONS.MANAGE_MESSAGES),
-        attachments: message.attachments || [],
+        attachments: stripStoredGuildStickerAttachments(message.attachments || []),
         is_pinned: pinReactions.length > 0,
         pinned_at: pinReactions.at(-1)?.created_at || null,
         pinned_by: pinReactions.at(-1)?.user_id || null,

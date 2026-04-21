@@ -6,9 +6,11 @@ import {
 import { supabaseStoreRuntimeMethods } from "./supabase-store.runtime.js";
 import {
   buildBootstrapState,
+  buildStoredGuildDescription,
   buildDefaultGuildStickerRows,
   computePermissionBits,
   createId,
+  parseStoredGuildDescription,
   isGuildVoiceChannel
 } from "./helpers.js";
 
@@ -257,16 +259,149 @@ export class SupabaseStore {
     return value;
   }
 
+  async getGuildStickerFallbackRows(guildIds = []) {
+    const normalizedGuildIds = [...new Set((guildIds || []).filter(Boolean))];
+    if (!normalizedGuildIds.length) {
+      return [];
+    }
+
+    return expectData(
+      this.client
+        .from("guilds")
+        .select("id,description,owner_id,created_at")
+        .in("id", normalizedGuildIds)
+    );
+  }
+
+  async getGuildStickerFallbackRow(guildId) {
+    if (!guildId) {
+      return null;
+    }
+
+    const rows = await expectData(
+      this.client
+        .from("guilds")
+        .select("id,description,owner_id,created_at")
+        .eq("id", guildId)
+        .limit(1)
+    );
+
+    return rows[0] || null;
+  }
+
+  async saveGuildStickerFallbackState({ customStickers = [], guildRow }) {
+    if (!guildRow?.id) {
+      return null;
+    }
+
+    const parsed = parseStoredGuildDescription(guildRow.description || "", guildRow);
+    const nextDescription = buildStoredGuildDescription({
+      customStickers,
+      description: parsed.description || ""
+    });
+
+    const rows = await expectData(
+      this.client
+        .from("guilds")
+        .update({
+          description: nextDescription,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", guildRow.id)
+        .select("id,description,owner_id,created_at")
+    );
+
+    this.invalidateGuildMessageContext(guildRow.id);
+    return rows[0] || {
+      ...guildRow,
+      description: nextDescription
+    };
+  }
+
+  async ensurePersistedGuildStickerCatalog(guildId) {
+    if (!guildId || !(await this.ensureGuildStickerFeatureAvailable())) {
+      return false;
+    }
+
+    const guildRow = await this.getGuildStickerFallbackRow(guildId);
+    if (!guildRow) {
+      return false;
+    }
+
+    const parsed = parseStoredGuildDescription(guildRow.description || "", guildRow);
+    const existing = await expectData(
+      this.client.from("guild_stickers").select("*").eq("guild_id", guildId)
+    );
+
+    const inserts = [];
+    if (!existing.some((sticker) => Boolean(sticker.is_default))) {
+      inserts.push(
+        ...buildDefaultGuildStickerRows({
+          createdBy: guildRow.owner_id,
+          guildId,
+          now: guildRow.created_at || new Date().toISOString()
+        })
+      );
+    }
+
+    const existingIds = new Set(existing.map((sticker) => String(sticker.id || "")));
+    const existingNames = new Set(
+      existing.map((sticker) => String(sticker.name || "").toLowerCase())
+    );
+    const stagedNames = new Set(
+      inserts.map((sticker) => String(sticker.name || "").toLowerCase())
+    );
+
+    parsed.customStickers.forEach((sticker) => {
+      const stickerId = String(sticker.id || "");
+      const stickerName = String(sticker.name || "").toLowerCase();
+      if (!stickerId || existingIds.has(stickerId) || existingNames.has(stickerName) || stagedNames.has(stickerName)) {
+        return;
+      }
+
+      inserts.push({
+        ...sticker,
+        guild_id: guildId,
+        is_default: false
+      });
+      existingIds.add(stickerId);
+      stagedNames.add(stickerName);
+    });
+
+    if (inserts.length) {
+      await expectData(this.client.from("guild_stickers").insert(inserts));
+    }
+
+    if (parsed.customStickers.length) {
+      await this.saveGuildStickerFallbackState({
+        customStickers: [],
+        guildRow
+      });
+    }
+
+    if (inserts.length || parsed.customStickers.length) {
+      this.invalidateGuildMessageContext(guildId);
+    }
+
+    return true;
+  }
+
   async loadGuildStickers(guildId) {
     if (!guildId) {
       return [];
     }
 
     if (!(await this.ensureGuildStickerFeatureAvailable())) {
-      return [];
+      const guildRow = await this.getGuildStickerFallbackRow(guildId);
+      if (!guildRow) {
+        return [];
+      }
+
+      return parseStoredGuildDescription(guildRow.description || "", guildRow).stickers || [];
     }
 
     try {
+      await this.ensurePersistedGuildStickerCatalog(guildId);
       return await expectData(
         this.client.from("guild_stickers").select("*").eq("guild_id", guildId)
       );
@@ -280,17 +415,24 @@ export class SupabaseStore {
   }
 
   async loadGuildStickersByGuildIds(guildIds = []) {
-    if (!guildIds.length) {
+    const normalizedGuildIds = [...new Set((guildIds || []).filter(Boolean))];
+    if (!normalizedGuildIds.length) {
       return [];
     }
 
     if (!(await this.ensureGuildStickerFeatureAvailable())) {
-      return [];
+      const guildRows = await this.getGuildStickerFallbackRows(normalizedGuildIds);
+      return guildRows.flatMap(
+        (guildRow) => parseStoredGuildDescription(guildRow.description || "", guildRow).stickers || []
+      );
     }
 
     try {
+      await Promise.all(
+        normalizedGuildIds.map((guildId) => this.ensurePersistedGuildStickerCatalog(guildId))
+      );
       return await expectData(
-        this.client.from("guild_stickers").select("*").in("guild_id", guildIds)
+        this.client.from("guild_stickers").select("*").in("guild_id", normalizedGuildIds)
       );
     } catch (error) {
       if (this.handleMissingStickerSchemaError(error)) {
@@ -301,16 +443,36 @@ export class SupabaseStore {
     }
   }
 
-  async getGuildStickerById(stickerId) {
+  async getGuildStickerById(stickerId, guildId = null) {
     if (!stickerId) {
       return null;
     }
 
     if (!(await this.ensureGuildStickerFeatureAvailable())) {
+      if (guildId) {
+        const stickers = await this.loadGuildStickers(guildId);
+        return stickers.find((sticker) => String(sticker.id || "") === String(stickerId)) || null;
+      }
+
+      const guildRows = await expectData(
+        this.client.from("guilds").select("id,description,owner_id,created_at")
+      );
+      for (const guildRow of guildRows) {
+        const match = (parseStoredGuildDescription(guildRow.description || "", guildRow).stickers || []).find(
+          (sticker) => String(sticker.id || "") === String(stickerId)
+        );
+        if (match) {
+          return match;
+        }
+      }
+
       return null;
     }
 
     try {
+      if (guildId) {
+        await this.ensurePersistedGuildStickerCatalog(guildId);
+      }
       const rows = await expectData(
         this.client.from("guild_stickers").select("*").eq("id", stickerId).limit(1)
       );

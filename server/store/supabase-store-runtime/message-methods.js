@@ -19,6 +19,7 @@ import {
   buildMessagePreview,
   buildChannelMovePatchPlan,
   buildDefaultGuildStickerRows,
+  buildStoredGuildStickerAttachment,
   createError,
   createId,
   enrichMessages,
@@ -169,14 +170,7 @@ export const supabaseStoreRuntimeMessageMethods = {
     const stickerFeatureAvailable = stickerId
       ? await this.ensureGuildStickerFeatureAvailable()
       : this.guildStickersEnabled;
-    const sticker = stickerId ? await this.getGuildStickerById(stickerId) : null;
-
-    if (stickerId && !stickerFeatureAvailable) {
-      throw createError(
-        "Los stickers del servidor aun no estan habilitados. Aplica el schema nuevo en Supabase para usarlos.",
-        501
-      );
-    }
+    const sticker = stickerId ? await this.getGuildStickerById(stickerId, channel.guild_id) : null;
 
     if (stickerId && !sticker) {
       throw createError("El sticker seleccionado no existe.", 400);
@@ -237,6 +231,13 @@ export const supabaseStoreRuntimeMessageMethods = {
     }
 
     const now = new Date().toISOString();
+    const messageAttachments = Array.isArray(attachments) ? [...attachments] : [];
+    if (sticker && !stickerFeatureAvailable) {
+      const storedStickerAttachment = buildStoredGuildStickerAttachment(sticker);
+      if (storedStickerAttachment) {
+        messageAttachments.push(storedStickerAttachment);
+      }
+    }
     const message = {
       id: createId(),
       channel_id: channelId,
@@ -244,7 +245,7 @@ export const supabaseStoreRuntimeMessageMethods = {
       author_id: authorId,
       content: trimmed,
       reply_to: replyTo,
-      attachments,
+      attachments: messageAttachments,
       mention_user_ids: mentionUserIds,
       edited_at: null,
       deleted_at: null,

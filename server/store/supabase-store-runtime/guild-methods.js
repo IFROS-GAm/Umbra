@@ -15,6 +15,7 @@ import {
   buildGuildMovePatchPlan,
   buildInviteCode,
   buildInvitePreview,
+  buildStoredGuildDescription,
   buildStoredRoleName,
   buildMessagePreview,
   buildChannelMovePatchPlan,
@@ -32,7 +33,9 @@ import {
   normalizeRecoveryAccount,
   normalizeRecoveryProvider,
   normalizeSocialLinks,
+  messageUsesSticker,
   normalizeStickerEmoji,
+  parseStoredGuildDescription,
   resolveMentionUserIds,
   sanitizeCategoryName,
   sanitizeChannelName,
@@ -465,13 +468,17 @@ export const supabaseStoreRuntimeGuildMethods = {
     if (!trimmed) {
       throw createError("El servidor necesita un nombre.", 400);
     }
+    const parsedGuild = parseStoredGuildDescription(guild.description || "", guild);
 
     const updatedRows = await expectData(
       this.client
         .from("guilds")
         .update({
           name: trimmed,
-          description: String(description || "").trim().slice(0, 180),
+          description: buildStoredGuildDescription({
+            customStickers: parsedGuild.customStickers,
+            description: String(description || "").trim().slice(0, 180)
+          }),
           icon_text: trimmed
             .split(/\s+/)
             .slice(0, 2)
@@ -520,8 +527,6 @@ export const supabaseStoreRuntimeGuildMethods = {
   }
 ,
   async listGuildStickers({ guildId, userId }) {
-    await this.assertGuildStickerFeatureAvailable();
-
     const guildRows = await expectData(
       this.client.from("guilds").select("id").eq("id", guildId).limit(1)
     );
@@ -547,12 +552,15 @@ export const supabaseStoreRuntimeGuildMethods = {
   }
 ,
   async createGuildSticker({ emoji = "", guildId, imageUrl = "", name, userId }) {
-    await this.assertGuildStickerFeatureAvailable();
-
     const guildRows = await expectData(
-      this.client.from("guilds").select("id").eq("id", guildId).limit(1)
+      this.client
+        .from("guilds")
+        .select("id,description,owner_id,created_at")
+        .eq("id", guildId)
+        .limit(1)
     );
-    if (!guildRows[0]) {
+    const guildRow = guildRows[0] || null;
+    if (!guildRow) {
       throw createError("Servidor no encontrado.", 404);
     }
 
@@ -574,6 +582,7 @@ export const supabaseStoreRuntimeGuildMethods = {
     }
 
     const existing = await this.loadGuildStickers(guildId);
+    const stickerFeatureAvailable = await this.ensureGuildStickerFeatureAvailable();
     if (
       existing.some(
         (sticker) => String(sticker.name || "").toLowerCase() === trimmedName.toLowerCase()
@@ -595,18 +604,31 @@ export const supabaseStoreRuntimeGuildMethods = {
       created_at: new Date().toISOString()
     };
 
+    if (!stickerFeatureAvailable) {
+      const parsed = parseStoredGuildDescription(guildRow.description || "", guildRow);
+      await this.saveGuildStickerFallbackState({
+        customStickers: [...parsed.customStickers, sticker],
+        guildRow
+      });
+      this.invalidateGuildMessageContext(guildId);
+      return sticker;
+    }
+
     const rows = await expectData(this.client.from("guild_stickers").insert(sticker).select("*"));
     this.invalidateGuildMessageContext(guildId);
     return rows[0] || sticker;
   }
 ,
   async deleteGuildSticker({ guildId, stickerId, userId }) {
-    await this.assertGuildStickerFeatureAvailable();
-
     const guildRows = await expectData(
-      this.client.from("guilds").select("id").eq("id", guildId).limit(1)
+      this.client
+        .from("guilds")
+        .select("id,description,owner_id,created_at")
+        .eq("id", guildId)
+        .limit(1)
     );
-    if (!guildRows[0]) {
+    const guildRow = guildRows[0] || null;
+    if (!guildRow) {
       throw createError("Servidor no encontrado.", 404);
     }
 
@@ -615,7 +637,8 @@ export const supabaseStoreRuntimeGuildMethods = {
       throw createError("No tienes permisos para eliminar stickers del servidor.", 403);
     }
 
-    const sticker = await this.getGuildStickerById(stickerId);
+    const stickerFeatureAvailable = await this.ensureGuildStickerFeatureAvailable();
+    const sticker = await this.getGuildStickerById(stickerId, guildId);
     if (!sticker || sticker.guild_id !== guildId) {
       throw createError("Sticker no encontrado.", 404);
     }
@@ -625,16 +648,32 @@ export const supabaseStoreRuntimeGuildMethods = {
     }
 
     const usageRows = await expectData(
-      this.client.from("messages").select("id").eq("sticker_id", stickerId).limit(1)
+      this.client
+        .from("messages")
+        .select("id,attachments,sticker_id,guild_id,created_at")
+        .eq("guild_id", guildId)
+        .is("deleted_at", null)
     );
-    if (usageRows.length) {
+    if (usageRows.some((message) => messageUsesSticker(message, stickerId))) {
       throw createError(
         "No puedes eliminar un sticker que ya fue usado en mensajes del servidor.",
         400
       );
     }
 
-    await expectData(this.client.from("guild_stickers").delete().eq("id", stickerId));
+    if (stickerFeatureAvailable) {
+      await expectData(this.client.from("guild_stickers").delete().eq("id", stickerId));
+      this.invalidateGuildMessageContext(guildId);
+      return { ok: true, sticker_id: stickerId };
+    }
+
+    const parsed = parseStoredGuildDescription(guildRow.description || "", guildRow);
+    await this.saveGuildStickerFallbackState({
+      customStickers: parsed.customStickers.filter(
+        (candidate) => String(candidate.id || "") !== String(stickerId)
+      ),
+      guildRow
+    });
     this.invalidateGuildMessageContext(guildId);
     return { ok: true, sticker_id: stickerId };
   }
