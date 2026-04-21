@@ -68,18 +68,6 @@ function findCallParticipant(workspace, channel, callerId) {
   );
 }
 
-function isDocumentActivelyVisible() {
-  if (typeof document === "undefined") {
-    return false;
-  }
-
-  const isVisible = document.visibilityState !== "hidden";
-  const isFocused =
-    typeof document.hasFocus === "function" ? document.hasFocus() : true;
-
-  return isVisible && isFocused;
-}
-
 export function useWorkspaceDesktopNotifications({
   accessToken,
   activeSelection,
@@ -318,7 +306,7 @@ export function useWorkspaceDesktopNotifications({
         return;
       }
 
-      if (isActiveChannelMessage && isDocumentActivelyVisible()) {
+      if (isActiveChannelMessage) {
         return;
       }
 
