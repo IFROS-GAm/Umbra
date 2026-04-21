@@ -477,5 +477,176 @@ export const supabaseStoreRuntimeInviteDmMethods = {
     );
 
     return channel;
+  },
+  async updateGroupDm({ channelId, clearIcon = false, iconUrl, name, userId }) {
+    const [channelRows, membershipRows] = await Promise.all([
+      expectData(
+        this.client
+          .from("channels")
+          .select("*")
+          .eq("id", channelId)
+          .eq("type", CHANNEL_TYPES.GROUP_DM)
+          .limit(1)
+      ),
+      expectData(
+        this.client
+          .from("channel_members")
+          .select("user_id")
+          .eq("channel_id", channelId)
+          .eq("user_id", userId)
+          .limit(1)
+      )
+    ]);
+
+    const channel = channelRows[0] || null;
+    if (!channel) {
+      throw createError("Grupo no encontrado.", 404);
+    }
+
+    if (!membershipRows[0]) {
+      throw createError("No puedes editar este grupo.", 403);
+    }
+
+    const nextName = String(name || "").trim();
+    const now = new Date().toISOString();
+    const patch = {
+      name: nextName,
+      updated_at: now
+    };
+
+    if (clearIcon) {
+      patch.icon_url = "";
+    } else if (iconUrl !== undefined) {
+      patch.icon_url = String(iconUrl || "").trim();
+    }
+
+    let updatedRows = [];
+    let iconColumnMissing = false;
+
+    try {
+      updatedRows = await expectData(
+        this.client.from("channels").update(patch).eq("id", channelId).select("*").limit(1)
+      );
+    } catch (error) {
+      if (patch.icon_url === undefined || !isMissingChannelIconColumnError(error)) {
+        throw error;
+      }
+
+      iconColumnMissing = true;
+      const { icon_url: _ignoredIconUrl, ...fallbackPatch } = patch;
+      updatedRows = await expectData(
+        this.client.from("channels").update(fallbackPatch).eq("id", channelId).select("*").limit(1)
+      );
+    }
+
+    return {
+      channel: {
+        ...channel,
+        ...(updatedRows[0] || {}),
+        icon_url:
+          clearIcon || iconColumnMissing
+            ? ""
+            : patch.icon_url !== undefined
+              ? patch.icon_url
+              : channel.icon_url || updatedRows[0]?.icon_url || "",
+        name: nextName
+      }
+    };
+  },
+  async inviteGroupDmMembers({ channelId, recipientIds, userId }) {
+    const [channelRows, membershipRows] = await Promise.all([
+      expectData(
+        this.client
+          .from("channels")
+          .select("*")
+          .eq("id", channelId)
+          .eq("type", CHANNEL_TYPES.GROUP_DM)
+          .limit(1)
+      ),
+      expectData(
+        this.client
+          .from("channel_members")
+          .select("*")
+          .eq("channel_id", channelId)
+      )
+    ]);
+
+    const channel = channelRows[0] || null;
+    if (!channel) {
+      throw createError("Grupo no encontrado.", 404);
+    }
+
+    if (!membershipRows.some((membership) => membership.user_id === userId)) {
+      throw createError("No puedes invitar personas a este grupo.", 403);
+    }
+
+    const existingParticipantIds = new Set(membershipRows.map((membership) => membership.user_id));
+    const requestedIds = [...new Set((recipientIds || []).map((id) => String(id)).filter(Boolean))]
+      .filter((id) => id !== userId && !existingParticipantIds.has(id));
+
+    if (!requestedIds.length) {
+      throw createError("Selecciona al menos una amistad nueva para invitar.", 400);
+    }
+
+    if (membershipRows.length + requestedIds.length > 10) {
+      throw createError("Este grupo ya no admite mas participantes.", 400);
+    }
+
+    const profiles = await expectData(
+      this.client.from("profiles").select("id").in("id", requestedIds)
+    );
+
+    if (profiles.length !== requestedIds.length) {
+      throw createError("Una de las personas seleccionadas ya no esta disponible.", 400);
+    }
+
+    await Promise.all(
+      requestedIds.map(async (recipientId) => {
+        const [leftId, rightId] = buildFriendshipPair(userId, recipientId);
+        const friendshipRows = await expectData(
+          this.client
+            .from("friendships")
+            .select("user_id, friend_id")
+            .eq("user_id", leftId)
+            .eq("friend_id", rightId)
+            .limit(1)
+        );
+
+        if (!friendshipRows[0]) {
+          throw createError("Solo puedes invitar amistades activas a este grupo.", 403);
+        }
+      })
+    );
+
+    const now = new Date().toISOString();
+    await expectData(
+      this.client.from("channel_members").upsert(
+        requestedIds.map((recipientId) => ({
+          channel_id: channelId,
+          hidden: false,
+          joined_at: now,
+          last_read_at: null,
+          last_read_message_id: null,
+          user_id: recipientId
+        })),
+        {
+          onConflict: "channel_id,user_id"
+        }
+      )
+    );
+    await expectData(
+      this.client
+        .from("channels")
+        .update({
+          updated_at: now
+        })
+        .eq("id", channelId)
+    );
+
+    return {
+      affected_user_ids: [...new Set([...existingParticipantIds, ...requestedIds])],
+      channel_id: channelId,
+      invited_user_ids: requestedIds
+    };
   }
 };

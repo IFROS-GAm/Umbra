@@ -239,7 +239,11 @@ export function UmbraWorkspaceOverlays({
             guildChannels={activeGuild?.channels || []}
             onClose={() => setDialog(null)}
             onSubmit={handleDialogSubmit}
-            users={dialog.type === "dm_group" ? friendUsers : workspace.available_users}
+            users={
+              ["dm_group", "dm_group_invite", "dm_group_edit"].includes(dialog.type)
+                ? friendUsers
+                : workspace.available_users
+            }
           />
         </Suspense>
       ) : null}

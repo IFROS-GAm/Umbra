@@ -58,6 +58,8 @@ export function ChatHeader({
   isDirectGroupConversation,
   membersPanelVisible,
   onAddFriend,
+  onEditDirectGroup,
+  onInviteDirectGroupMembers,
   onOpenDialog,
   onOpenInviteModal,
   onLeaveDirectCall,
@@ -233,6 +235,30 @@ export function ChatHeader({
                 >
                   <Icon name="pin" />
                 </button>
+                {isDirectGroupConversation ? (
+                  <>
+                    <button
+                      aria-label="Invitar personas"
+                      className="ghost-button icon-only tooltip-anchor"
+                      data-tooltip="Invitar personas"
+                      data-tooltip-position="bottom"
+                      onClick={() => onInviteDirectGroupMembers?.()}
+                      type="button"
+                    >
+                      <Icon name="userAdd" />
+                    </button>
+                    <button
+                      aria-label="Editar grupo"
+                      className="ghost-button icon-only tooltip-anchor"
+                      data-tooltip="Editar grupo"
+                      data-tooltip-position="bottom"
+                      onClick={() => onEditDirectGroup?.()}
+                      type="button"
+                    >
+                      <Icon name="edit" />
+                    </button>
+                  </>
+                ) : null}
                 {!isDirectGroupConversation && directFriendAction.visible ? (
                   <button
                     aria-label={directFriendAction.label}

@@ -216,5 +216,101 @@ export const demoStoreDmMethods = {
     await this.save();
 
     return channel;
+  },
+  async updateGroupDm({ channelId, clearIcon = false, iconUrl, name, userId }) {
+    const channel = this.getChannel(channelId);
+    if (!channel || channel.type !== CHANNEL_TYPES.GROUP_DM) {
+      throw createError("Grupo no encontrado.", 404);
+    }
+
+    const membership = this.db.channel_members.find(
+      (item) => item.channel_id === channelId && item.user_id === userId
+    );
+    if (!membership) {
+      throw createError("No puedes editar este grupo.", 403);
+    }
+
+    channel.name = String(name || "").trim();
+    if (clearIcon) {
+      channel.icon_url = "";
+    } else if (iconUrl !== undefined) {
+      channel.icon_url = String(iconUrl || "").trim();
+    }
+    channel.updated_at = new Date().toISOString();
+
+    await this.save();
+
+    return {
+      channel
+    };
+  },
+  async inviteGroupDmMembers({ channelId, recipientIds, userId }) {
+    const channel = this.getChannel(channelId);
+    if (!channel || channel.type !== CHANNEL_TYPES.GROUP_DM) {
+      throw createError("Grupo no encontrado.", 404);
+    }
+
+    const membership = this.db.channel_members.find(
+      (item) => item.channel_id === channelId && item.user_id === userId
+    );
+    if (!membership) {
+      throw createError("No puedes invitar personas a este grupo.", 403);
+    }
+
+    const currentMemberships = this.db.channel_members.filter((item) => item.channel_id === channelId);
+    const existingParticipantIds = new Set(currentMemberships.map((item) => item.user_id));
+    const requestedIds = [...new Set((recipientIds || []).map((id) => String(id)).filter(Boolean))]
+      .filter((id) => id !== userId && !existingParticipantIds.has(id));
+
+    if (!requestedIds.length) {
+      throw createError("Selecciona al menos una amistad nueva para invitar.", 400);
+    }
+
+    if (currentMemberships.length + requestedIds.length > 10) {
+      throw createError("Este grupo ya no admite mas participantes.", 400);
+    }
+
+    const missingUserId = requestedIds.find(
+      (targetId) => !this.db.profiles.some((profile) => profile.id === targetId)
+    );
+
+    if (missingUserId) {
+      throw createError("Una de las personas seleccionadas ya no esta disponible.", 400);
+    }
+
+    const nonFriendId = requestedIds.find((targetId) => {
+      const [leftId, rightId] = buildFriendshipPair(userId, targetId);
+      return !(this.db.friendships || []).some(
+        (friendship) => friendship.user_id === leftId && friendship.friend_id === rightId
+      );
+    });
+
+    if (nonFriendId) {
+      throw createError("Solo puedes invitar amistades activas a este grupo.", 403);
+    }
+
+    const now = new Date().toISOString();
+    requestedIds.forEach((targetId) => {
+      upsertChannelMembership(this.db, {
+        channel_id: channelId,
+        hidden: false,
+        joined_at:
+          currentMemberships.find((item) => item.user_id === targetId)?.joined_at || now,
+        last_read_at:
+          currentMemberships.find((item) => item.user_id === targetId)?.last_read_at || null,
+        last_read_message_id:
+          currentMemberships.find((item) => item.user_id === targetId)?.last_read_message_id || null,
+        user_id: targetId
+      });
+    });
+    channel.updated_at = now;
+
+    await this.save();
+
+    return {
+      affected_user_ids: [...new Set([...currentMemberships.map((item) => item.user_id), ...requestedIds])],
+      channel_id: channelId,
+      invited_user_ids: requestedIds
+    };
   }
 };

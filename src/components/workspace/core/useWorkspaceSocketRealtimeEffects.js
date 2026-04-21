@@ -96,6 +96,7 @@ export function useWorkspaceSocketRealtimeEffects({
           "channel:create",
           "channel:move",
           "dm:create",
+          "dm:update",
           "friends:update"
         ].includes(payload?.type)
       ) {

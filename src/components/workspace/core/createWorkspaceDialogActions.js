@@ -132,6 +132,21 @@ export function createWorkspaceDialogActions(context, shared = {}) {
     }
   }
 
+  async function uploadGroupIconFile(iconFile) {
+    if (!iconFile) {
+      return "";
+    }
+
+    const uploadPayload = await api.uploadAttachments([iconFile]);
+    const iconUrl = uploadPayload.attachments?.[0]?.url || "";
+
+    if (!iconUrl) {
+      throw new Error("No se pudo subir la foto del grupo.");
+    }
+
+    return iconUrl;
+  }
+
   async function handleDialogSubmit(values) {
     if (!dialog) {
       return;
@@ -272,17 +287,7 @@ export function createWorkspaceDialogActions(context, shared = {}) {
       }
 
       if (dialog.type === "dm_group") {
-        let iconUrl = "";
-
-        if (values.iconFile) {
-          const uploadPayload = await api.uploadAttachments([values.iconFile]);
-          iconUrl = uploadPayload.attachments?.[0]?.url || "";
-
-          if (!iconUrl) {
-            throw new Error("No se pudo subir la foto del grupo.");
-          }
-        }
-
+        const iconUrl = await uploadGroupIconFile(values.iconFile);
         const payload = await api.createGroupDm({
           iconUrl,
           name: values.name,
@@ -305,6 +310,46 @@ export function createWorkspaceDialogActions(context, shared = {}) {
             selectionMode: "target"
           }
         );
+      }
+
+      if (dialog.type === "dm_group_edit") {
+        const iconUrl = values.iconFile ? await uploadGroupIconFile(values.iconFile) : undefined;
+        const payload = await api.updateGroupDm({
+          channelId: values.channelId,
+          clearIcon: values.clearIcon,
+          iconUrl,
+          name: values.name
+        });
+
+        if (values.iconFile && !payload?.channel?.icon_url) {
+          showUiNotice(
+            "El grupo se actualizo, pero la foto quedara disponible cuando apliques el schema nuevo en Supabase."
+          );
+        } else {
+          showUiNotice("Grupo actualizado.");
+        }
+
+        await loadBootstrap(activeSelectionRef.current, {
+          selectionMode: "target"
+        });
+      }
+
+      if (dialog.type === "dm_group_invite") {
+        const payload = await api.inviteGroupDmMembers({
+          channelId: values.channelId,
+          recipientIds: values.recipientIds
+        });
+
+        const invitedCount = payload?.invited_user_ids?.length || values.recipientIds?.length || 0;
+        showUiNotice(
+          invitedCount === 1
+            ? "Se invito 1 persona al grupo."
+            : `Se invitaron ${invitedCount} personas al grupo.`
+        );
+
+        await loadBootstrap(activeSelectionRef.current, {
+          selectionMode: "target"
+        });
       }
 
       setDialog(null);

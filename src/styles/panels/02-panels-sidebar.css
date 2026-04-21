@@ -215,6 +215,22 @@
   gap: 6px;
 }
 
+.dm-sidebar-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.dm-sidebar-inline-button {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+  justify-content: center;
+  min-height: 40px;
+  padding: 10px 14px;
+}
+
 .dm-sidebar-round {
   background: rgba(44, 47, 54, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.06);

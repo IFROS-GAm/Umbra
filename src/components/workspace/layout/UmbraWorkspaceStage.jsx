@@ -3,7 +3,10 @@ import React, { Suspense } from "react";
 import { ChatHeader } from "../ChatHeader.jsx";
 import { MembersPanel } from "../MembersPanel.jsx";
 import { WorkspacePanelFallback } from "../WorkspacePanelFallback.jsx";
-import { resolveDirectChannelVisual } from "../shared/workspaceHelpers.js";
+import {
+  formatGroupDmCreatorLabel,
+  resolveDirectChannelVisual
+} from "../shared/workspaceHelpers.js";
 import { DirectCallPanel } from "../voice/DirectCallPanel.jsx";
 
 export function UmbraWorkspaceStage({
@@ -42,6 +45,7 @@ export function UmbraWorkspaceStage({
   handleComposerShortcut,
   handleDeleteMessage,
   handleEditMessage,
+  handleEditGroup,
   handleJoinDirectCall,
   handleJumpToLatest,
   handleOpenDmFromCard,
@@ -59,6 +63,7 @@ export function UmbraWorkspaceStage({
   handleScroll,
   handleSelectGuildChannel,
   handleSendFriendRequest,
+  handleInvitePeople,
   handleForwardMessage,
   handleStartMembersResize,
   handleStartReply,
@@ -253,6 +258,8 @@ export function UmbraWorkspaceStage({
               membersPanelVisible={effectiveMembersPanelVisible}
               canInvitePeople={canInvitePeople}
               onAddFriend={handleSendFriendRequest}
+              onEditDirectGroup={handleEditGroup}
+              onInviteDirectGroupMembers={handleInvitePeople}
               onOpenDialog={handleOpenDialog}
               onOpenInviteModal={handleOpenInviteModal}
               onLeaveDirectCall={handleVoiceLeave}
@@ -264,7 +271,11 @@ export function UmbraWorkspaceStage({
               onToggleDirectCallMute={() => handleToggleVoiceState("micMuted")}
               onToggleHeaderPanel={toggleHeaderPanel}
               onToggleMembersPanel={() => setMembersPanelVisible((previous) => !previous)}
-              subtitle={activeGuild?.name || headerCopy.eyebrow}
+              subtitle={
+                isGroupDirectConversation
+                  ? formatGroupDmCreatorLabel(activeChannel, currentUser?.id) || headerCopy.eyebrow
+                  : activeGuild?.name || headerCopy.eyebrow
+              }
               title={headerCopy.title}
               voiceState={voiceState}
             />
@@ -354,6 +365,8 @@ export function UmbraWorkspaceStage({
             onBlockUser={handleBlockUser}
             onCancelFriendRequest={handleCancelFriendRequest}
             onCopyProfileId={handleCopyProfileId}
+            onEditGroup={handleEditGroup}
+            onInvitePeople={handleInvitePeople}
             onOpenDm={handleOpenDmFromCard}
             onOpenFullProfile={handleOpenFullProfile}
             onOpenProfileCard={handleOpenProfileCard}

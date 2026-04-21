@@ -3,6 +3,10 @@ import React, { useEffect, useRef, useState } from "react";
 import { resolveAssetUrl } from "../../../api.js";
 import { Avatar } from "../../Avatar.jsx";
 import { Icon } from "../../Icon.jsx";
+import {
+  formatGroupDmCreatorLabel,
+  resolveGroupDmCreator
+} from "../shared/workspaceHelpers.js";
 
 function buildBannerStyle(profile) {
   if (profile?.profileBannerUrl) {
@@ -167,6 +171,35 @@ function relationshipAction(profile, handlers) {
   };
 }
 
+function buildGroupBannerStyle(group) {
+  if (group?.icon_url) {
+    return {
+      backgroundImage: `linear-gradient(180deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.56)), url("${resolveAssetUrl(group.icon_url)}")`,
+      backgroundPosition: "center",
+      backgroundSize: "cover"
+    };
+  }
+
+  const creator = resolveGroupDmCreator(group);
+  const hue = creator?.avatar_hue || 248;
+
+  return {
+    background: `linear-gradient(135deg, hsl(${hue} 48% 42%), hsl(${(hue + 40) % 360} 26% 18%))`
+  };
+}
+
+function formatGroupCreatedLabel(isoDate) {
+  if (!isoDate) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat("es-CO", {
+    day: "numeric",
+    month: "short",
+    year: "numeric"
+  }).format(new Date(isoDate));
+}
+
 export function DirectMessageHero({
   onAcceptFriendRequest,
   onAddFriend,
@@ -255,6 +288,130 @@ export function DirectMessageHero({
         </div>
       </div>
     </section>
+  );
+}
+
+export function GroupDirectSidebar({
+  currentUserId,
+  group,
+  onEditGroup,
+  onInvitePeople,
+  onOpenProfileCard
+}) {
+  if (!group) {
+    return null;
+  }
+
+  const creator = resolveGroupDmCreator(group);
+  const creatorLabel = formatGroupDmCreatorLabel(group, currentUserId) || "Grupo directo";
+  const createdAtLabel = formatGroupCreatedLabel(group.created_at);
+  const memberCount = group.participants?.length || 0;
+  const displayName = group.display_name || group.name || "Grupo directo";
+  const isFullGroup = memberCount >= 10;
+
+  return (
+    <aside className="dm-sidebar-card">
+      <div className="dm-sidebar-banner" style={buildGroupBannerStyle(group)} />
+
+      <div className="dm-sidebar-body">
+        <button
+          className="dm-sidebar-avatar"
+          onClick={() => onEditGroup?.(group)}
+          type="button"
+        >
+          <Avatar
+            hue={creator?.avatar_hue || 248}
+            label={displayName}
+            size={94}
+            src={group.icon_url || ""}
+          />
+        </button>
+
+        <div className="dm-sidebar-title">
+          <h3>{displayName}</h3>
+          <p>{creatorLabel}</p>
+        </div>
+
+        <div className="dm-sidebar-chips">
+          <span className="user-profile-chip">{memberCount} miembros</span>
+          {group.icon_url ? (
+            <span className="user-profile-chip muted">Foto personalizada</span>
+          ) : (
+            <span className="user-profile-chip muted">Avatar automatico</span>
+          )}
+        </div>
+
+        <section className="dm-sidebar-section">
+          <h4>Gestion</h4>
+          <div className="dm-sidebar-list">
+            <p>Cambia el nombre, actualiza la foto del grupo o suma amistades nuevas sin recrearlo.</p>
+          </div>
+          <div className="dm-sidebar-action-row">
+            <button className="ghost-button dm-sidebar-inline-button" onClick={() => onEditGroup?.(group)} type="button">
+              <Icon name="edit" size={16} />
+              <span>Editar grupo</span>
+            </button>
+            <button
+              className="primary-button dm-sidebar-inline-button"
+              disabled={isFullGroup}
+              onClick={() => onInvitePeople?.(group)}
+              type="button"
+            >
+              <Icon name="userAdd" size={16} />
+              <span>Invitar personas</span>
+            </button>
+          </div>
+          {isFullGroup ? (
+            <div className="dm-sidebar-subsection">
+              <p>Este grupo ya alcanzo el maximo de 10 personas.</p>
+            </div>
+          ) : null}
+        </section>
+
+        <section className="dm-sidebar-section">
+          <h4>Detalles</h4>
+          <div className="dm-sidebar-list">
+            <p>{creator ? creatorLabel : "El creador original no esta visible ahora mismo."}</p>
+            {createdAtLabel ? <p>Creado el {createdAtLabel}.</p> : null}
+          </div>
+        </section>
+
+        <SharedListSection defaultOpen title={`Participantes - ${memberCount}`}>
+          {(group.participants || []).map((participant) => (
+            <button
+              className="dm-sidebar-shared-row"
+              key={participant.id}
+              onClick={(event) =>
+                onOpenProfileCard?.(
+                  event,
+                  participant,
+                  participant.display_name || participant.username
+                )
+              }
+              type="button"
+            >
+              <Avatar
+                hue={participant.avatar_hue}
+                label={participant.display_name || participant.username}
+                size={28}
+                src={participant.avatar_url}
+                status={participant.status}
+              />
+              <div className="dm-sidebar-shared-copy">
+                <span>{participant.display_name || participant.username}</span>
+                <small>
+                  {participant.id === currentUserId
+                    ? "Tu"
+                    : participant.id === group.created_by
+                      ? "Creador del grupo"
+                      : participant.custom_status || participant.status || `@${participant.username}`}
+                </small>
+              </div>
+            </button>
+          ))}
+        </SharedListSection>
+      </div>
+    </aside>
   );
 }
 

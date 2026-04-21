@@ -411,6 +411,24 @@ export const api = {
       })
     });
   },
+  updateGroupDm({ channelId, clearIcon = false, iconUrl, name = "" }) {
+    return request(`/api/dms/${channelId}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        clearIcon,
+        iconUrl,
+        name
+      })
+    });
+  },
+  inviteGroupDmMembers({ channelId, recipientIds = [] }) {
+    return request(`/api/dms/${channelId}/members`, {
+      method: "POST",
+      body: JSON.stringify({
+        recipientIds
+      })
+    });
+  },
   setDmVisibility({ channelId, hidden }) {
     return request(`/api/dms/${channelId}/visibility`, {
       method: "PATCH",

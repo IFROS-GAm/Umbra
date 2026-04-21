@@ -66,6 +66,18 @@ function getDialogMeta(type) {
         subtitle: "Crea un grupo privado dentro de mensajes directos usando solo gente de tu lista.",
         title: "Nuevo grupo"
       };
+    case "dm_group_edit":
+      return {
+        heroIcon: "edit",
+        subtitle: "Cambia el nombre y la foto del grupo sin salir de la conversacion.",
+        title: "Editar grupo"
+      };
+    case "dm_group_invite":
+      return {
+        heroIcon: "userAdd",
+        subtitle: "Suma amistades nuevas al grupo manteniendo el limite de 10 personas.",
+        title: "Invitar al grupo"
+      };
     default:
       return {
         heroIcon: "mail",
@@ -76,6 +88,18 @@ function getDialogMeta(type) {
 }
 
 export function Dialog({ dialog, guildChannels = [], onClose, onSubmit, users }) {
+  const isGroupCreateDialog = dialog.type === "dm_group";
+  const isGroupEditDialog = dialog.type === "dm_group_edit";
+  const isGroupInviteDialog = dialog.type === "dm_group_invite";
+  const isGroupAvatarDialog = isGroupCreateDialog || isGroupEditDialog;
+  const activeGroup = dialog.channel || null;
+  const activeGroupParticipantIds = useMemo(
+    () => new Set((activeGroup?.participants || []).map((participant) => participant.id).filter(Boolean)),
+    [activeGroup]
+  );
+  const groupRecipientLimit = isGroupInviteDialog
+    ? Math.max(0, GROUP_DM_MAX_PARTICIPANTS - Number(activeGroup?.participants?.length || 0))
+    : GROUP_DM_MAX_RECIPIENTS;
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("friends");
@@ -89,22 +113,30 @@ export function Dialog({ dialog, guildChannels = [], onClose, onSubmit, users })
   const [friendQuery, setFriendQuery] = useState("");
   const [groupIconFile, setGroupIconFile] = useState(null);
   const [groupIconPreview, setGroupIconPreview] = useState("");
+  const [clearGroupIconRequested, setClearGroupIconRequested] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const groupIconInputRef = useRef(null);
   const meta = useMemo(() => getDialogMeta(dialog.type), [dialog.type]);
-  const filteredFriendUsers = useMemo(() => {
-    const normalizedQuery = friendQuery.trim().toLowerCase();
-    if (!normalizedQuery) {
+  const eligibleFriendUsers = useMemo(() => {
+    if (!isGroupInviteDialog) {
       return users;
     }
 
-    return users.filter((user) =>
+    return users.filter((user) => !activeGroupParticipantIds.has(user.id));
+  }, [activeGroupParticipantIds, isGroupInviteDialog, users]);
+  const filteredFriendUsers = useMemo(() => {
+    const normalizedQuery = friendQuery.trim().toLowerCase();
+    if (!normalizedQuery) {
+      return eligibleFriendUsers;
+    }
+
+    return eligibleFriendUsers.filter((user) =>
       `${user.display_name || ""} ${user.username || ""} ${user.custom_status || ""}`
         .toLowerCase()
         .includes(normalizedQuery)
     );
-  }, [friendQuery, users]);
+  }, [eligibleFriendUsers, friendQuery]);
   const categoryOptions = useMemo(
     () => guildChannels.filter((channel) => channel.is_category),
     [guildChannels]
@@ -117,7 +149,7 @@ export function Dialog({ dialog, guildChannels = [], onClose, onSubmit, users })
   }
 
   useEffect(() => {
-    setName("");
+    setName(isGroupEditDialog ? String(activeGroup?.name || "") : "");
     setDescription("");
     setSelectedTemplateId("friends");
     setKind(dialog.initialKind || "text");
@@ -129,14 +161,15 @@ export function Dialog({ dialog, guildChannels = [], onClose, onSubmit, users })
     setRecipientIds([]);
     setFriendQuery("");
     setGroupIconFile(null);
+    setClearGroupIconRequested(false);
     setGroupIconPreview((previous) => {
       releasePreviewUrl(previous);
-      return "";
+      return isGroupEditDialog ? String(activeGroup?.icon_url || "") : "";
     });
     if (groupIconInputRef.current) {
       groupIconInputRef.current.value = "";
     }
-  }, [dialog, users]);
+  }, [activeGroup?.icon_url, activeGroup?.name, dialog, isGroupEditDialog, users]);
 
   useEffect(
     () => () => {
@@ -152,7 +185,7 @@ export function Dialog({ dialog, guildChannels = [], onClose, onSubmit, users })
         return previous.filter((item) => item !== userId);
       }
 
-      if (previous.length >= GROUP_DM_MAX_RECIPIENTS) {
+      if (previous.length >= groupRecipientLimit) {
         setError(
           `Un grupo directo admite maximo ${GROUP_DM_MAX_PARTICIPANTS} personas contando contigo.`
         );
@@ -166,6 +199,7 @@ export function Dialog({ dialog, guildChannels = [], onClose, onSubmit, users })
 
   function clearGroupIcon() {
     setGroupIconFile(null);
+    setClearGroupIconRequested(Boolean(activeGroup?.icon_url));
     setGroupIconPreview((previous) => {
       releasePreviewUrl(previous);
       return "";
@@ -191,6 +225,7 @@ export function Dialog({ dialog, guildChannels = [], onClose, onSubmit, users })
     }
 
     setError("");
+    setClearGroupIconRequested(false);
     setGroupIconFile(nextFile);
     setGroupIconPreview((previous) => {
       releasePreviewUrl(previous);
@@ -204,17 +239,29 @@ export function Dialog({ dialog, guildChannels = [], onClose, onSubmit, users })
     setError("");
 
     try {
-      if (dialog.type === "dm_group" && recipientIds.length < 2) {
+      if (isGroupCreateDialog && recipientIds.length < 2) {
         throw new Error("Selecciona al menos dos amigos para crear el grupo.");
       }
 
-      if (dialog.type === "dm_group" && recipientIds.length > GROUP_DM_MAX_RECIPIENTS) {
+      if (isGroupCreateDialog && recipientIds.length > GROUP_DM_MAX_RECIPIENTS) {
         throw new Error(
           `Un grupo directo admite maximo ${GROUP_DM_MAX_PARTICIPANTS} personas contando contigo.`
         );
       }
 
+      if (isGroupInviteDialog && recipientIds.length < 1) {
+        throw new Error("Selecciona al menos una amistad para invitar al grupo.");
+      }
+
+      if (isGroupInviteDialog && recipientIds.length > groupRecipientLimit) {
+        throw new Error(
+          `Este grupo solo admite ${GROUP_DM_MAX_PARTICIPANTS} personas contando contigo.`
+        );
+      }
+
       await onSubmit({
+        channelId: activeGroup?.id || null,
+        clearIcon: clearGroupIconRequested,
         description,
         iconFile: groupIconFile,
         kind,
@@ -245,12 +292,15 @@ export function Dialog({ dialog, guildChannels = [], onClose, onSubmit, users })
             <Icon name="close" />
           </button>
 
-          {dialog.type === "dm_group" ? (
+          {isGroupAvatarDialog ? (
             <div className="dialog-group-avatar-editor">
               <input
                 accept="image/*"
                 hidden
                 onChange={handleGroupIconSelection}
+                onClick={(event) => {
+                  event.currentTarget.value = "";
+                }}
                 ref={groupIconInputRef}
                 type="file"
               />
@@ -441,92 +491,114 @@ export function Dialog({ dialog, guildChannels = [], onClose, onSubmit, users })
                 </label>
               )}
             </>
-          ) : dialog.type === "dm_group" ? (
+          ) : isGroupCreateDialog || isGroupEditDialog || isGroupInviteDialog ? (
             <>
-              <label className="dialog-field">
-                <span className="dialog-field-label">
-                  <Icon name="friends" />
-                  <em>Nombre del grupo</em>
-                </span>
-                <input
-                  autoFocus
-                  maxLength={40}
-                  onChange={(event) => setName(event.target.value)}
-                  placeholder="Grupo de madrugada"
-                  value={name}
-                />
-              </label>
+              {isGroupCreateDialog || isGroupEditDialog ? (
+                <label className="dialog-field">
+                  <span className="dialog-field-label">
+                    <Icon name="friends" />
+                    <em>Nombre del grupo</em>
+                  </span>
+                  <input
+                    autoFocus
+                    maxLength={40}
+                    onChange={(event) => setName(event.target.value)}
+                    placeholder="Grupo de madrugada"
+                    value={name}
+                  />
+                </label>
+              ) : null}
 
-              <div className="dialog-field">
-                <span className="dialog-field-label">
-                  <Icon name="community" />
-                  <em>Sombras disponibles</em>
-                </span>
-                {users.length ? (
-                  <>
-                    <div className="dialog-field-helper">
-                      Selecciona entre 2 y {GROUP_DM_MAX_RECIPIENTS} sombras. Si no nombras el grupo,
-                      Umbra mostrara a los integrantes y solo tendra un chat de texto compartido.
-                    </div>
-                    <label className="dialog-friend-search">
-                      <Icon name="search" size={16} />
-                      <input
-                        onChange={(event) => setFriendQuery(event.target.value)}
-                        placeholder="Buscar sombras"
-                        type="text"
-                        value={friendQuery}
-                      />
-                    </label>
-                    <div className="dialog-selected-count">
-                      {recipientIds.length + 1}/{GROUP_DM_MAX_PARTICIPANTS} personas
-                    </div>
-                    <div className="dialog-friend-list discord-like">
-                      {filteredFriendUsers.map((user) => {
-                        const selected = recipientIds.includes(user.id);
-                        const atCapacity =
-                          !selected && recipientIds.length >= GROUP_DM_MAX_RECIPIENTS;
-                        return (
-                          <button
-                            className={`dialog-friend-option ${selected ? "selected" : ""} ${
-                              atCapacity ? "disabled" : ""
-                            }`.trim()}
-                            disabled={atCapacity}
-                            key={user.id}
-                            onClick={() => toggleRecipient(user.id)}
-                            type="button"
-                          >
-                            <span className="dialog-friend-check" aria-hidden="true">
-                              {selected ? <Icon name="check" size={14} /> : null}
-                            </span>
-                            <span className="dialog-friend-copy">
-                              <strong>{user.display_name || user.username}</strong>
-                              <small>
-                                @{user.username}
-                                {user.custom_status ? ` - ${user.custom_status}` : ""}
-                              </small>
-                            </span>
-                          </button>
-                        );
-                      })}
+              {isGroupEditDialog ? (
+                <div className="dialog-field-helper">
+                  Cambia el nombre o la foto. Si dejas el nombre vacio, Umbra volvera a mostrar a
+                  los integrantes como fallback.
+                </div>
+              ) : null}
 
-                      {!filteredFriendUsers.length ? (
-                        <div className="dialog-friends-empty">
-                          <strong>No encontramos sombras</strong>
-                          <span>Prueba otra busqueda dentro de tu lista de amigos.</span>
-                        </div>
-                      ) : null}
+              {isGroupCreateDialog || isGroupInviteDialog ? (
+                <div className="dialog-field">
+                  <span className="dialog-field-label">
+                    <Icon name="community" />
+                    <em>Sombras disponibles</em>
+                  </span>
+                  {eligibleFriendUsers.length ? (
+                    <>
+                      <div className="dialog-field-helper">
+                        {isGroupCreateDialog
+                          ? `Selecciona entre 2 y ${GROUP_DM_MAX_RECIPIENTS} sombras. Si no nombras el grupo, Umbra mostrara a los integrantes y solo tendra un chat de texto compartido.`
+                          : `Puedes sumar hasta ${groupRecipientLimit} personas mas a este grupo.`}
+                      </div>
+                      <label className="dialog-friend-search">
+                        <Icon name="search" size={16} />
+                        <input
+                          onChange={(event) => setFriendQuery(event.target.value)}
+                          placeholder="Buscar sombras"
+                          type="text"
+                          value={friendQuery}
+                        />
+                      </label>
+                      <div className="dialog-selected-count">
+                        {isGroupCreateDialog
+                          ? `${recipientIds.length + 1}/${GROUP_DM_MAX_PARTICIPANTS} personas`
+                          : `${recipientIds.length} seleccionadas • ${activeGroup?.participants?.length || 0}/${GROUP_DM_MAX_PARTICIPANTS} ya dentro`}
+                      </div>
+                      <div className="dialog-friend-list discord-like">
+                        {filteredFriendUsers.map((user) => {
+                          const selected = recipientIds.includes(user.id);
+                          const atCapacity = !selected && recipientIds.length >= groupRecipientLimit;
+                          return (
+                            <button
+                              className={`dialog-friend-option ${selected ? "selected" : ""} ${
+                                atCapacity ? "disabled" : ""
+                              }`.trim()}
+                              disabled={atCapacity}
+                              key={user.id}
+                              onClick={() => toggleRecipient(user.id)}
+                              type="button"
+                            >
+                              <span className="dialog-friend-check" aria-hidden="true">
+                                {selected ? <Icon name="check" size={14} /> : null}
+                              </span>
+                              <span className="dialog-friend-copy">
+                                <strong>{user.display_name || user.username}</strong>
+                                <small>
+                                  @{user.username}
+                                  {user.custom_status ? ` - ${user.custom_status}` : ""}
+                                </small>
+                              </span>
+                            </button>
+                          );
+                        })}
+
+                        {!filteredFriendUsers.length ? (
+                          <div className="dialog-friends-empty">
+                            <strong>No encontramos sombras</strong>
+                            <span>
+                              {isGroupInviteDialog
+                                ? "Prueba otra busqueda o revisa si ya estan dentro del grupo."
+                                : "Prueba otra busqueda dentro de tu lista de amigos."}
+                            </span>
+                          </div>
+                        ) : null}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="dialog-friends-empty prominent">
+                      <strong>
+                        {isGroupInviteDialog ? "No quedan sombras para invitar" : "No tienes sombras"}
+                      </strong>
+                      <span>
+                        {isGroupInviteDialog
+                          ? groupRecipientLimit <= 0
+                            ? "Este grupo ya llego al limite de 10 personas."
+                            : "Todas tus amistades disponibles ya forman parte del grupo."
+                          : "Cuando tengas amistades reales en Umbra, aqui podras reunirlas en un grupo DM como en Discord."}
+                      </span>
                     </div>
-                  </>
-                ) : (
-                  <div className="dialog-friends-empty prominent">
-                    <strong>No tienes sombras</strong>
-                    <span>
-                      Cuando tengas amistades reales en Umbra, aqui podras reunirlas en un grupo DM
-                      como en Discord.
-                    </span>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
+              ) : null}
             </>
           ) : (
             <>
@@ -575,13 +647,20 @@ export function Dialog({ dialog, guildChannels = [], onClose, onSubmit, users })
             </button>
             <button
               className="primary-button"
-              disabled={busy || (dialog.type === "dm_group" && users.length === 0)}
+              disabled={
+                busy ||
+                ((isGroupCreateDialog || isGroupInviteDialog) && eligibleFriendUsers.length === 0)
+              }
               type="submit"
             >
               <Icon
                 name={
-                  dialog.type === "dm_group"
+                  isGroupCreateDialog
                     ? "friends"
+                    : isGroupEditDialog
+                      ? "save"
+                      : isGroupInviteDialog
+                        ? "userAdd"
                     : dialog.type === "forward"
                       ? "forward"
                       : dialog.type === "dm"
@@ -592,9 +671,15 @@ export function Dialog({ dialog, guildChannels = [], onClose, onSubmit, users })
               <span>
                 {busy
                   ? "Guardando..."
+                  : isGroupEditDialog
+                    ? "Guardar cambios"
+                    : isGroupInviteDialog
+                      ? "Invitar"
                   : dialog.type === "forward"
                     ? "Reenviar"
-                    : "Confirmar"}
+                    : isGroupCreateDialog
+                      ? "Crear grupo"
+                      : "Confirmar"}
               </span>
             </button>
           </div>

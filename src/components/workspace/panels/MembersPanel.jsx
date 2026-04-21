@@ -1,7 +1,7 @@
 import React from "react";
 
 import { Avatar } from "../../Avatar.jsx";
-import { DirectMessageSidebar } from "../DirectMessagePanels.jsx";
+import { DirectMessageSidebar, GroupDirectSidebar } from "../DirectMessagePanels.jsx";
 
 export function MembersPanel({
   activeChannel,
@@ -15,6 +15,8 @@ export function MembersPanel({
   onBlockUser,
   onCancelFriendRequest,
   onCopyProfileId,
+  onEditGroup,
+  onInvitePeople,
   onOpenDm,
   onOpenFullProfile,
   onOpenProfileCard,
@@ -57,6 +59,20 @@ export function MembersPanel({
           onReportUser={onReportUser}
           onShowNotice={onShowNotice}
           profile={directMessageProfile}
+        />
+      </aside>
+    );
+  }
+
+  if (activeSelectionKind === "dm" && activeChannel?.type === "group_dm") {
+    return (
+      <aside className="members-panel">
+        <GroupDirectSidebar
+          currentUserId={currentUser?.id || ""}
+          group={activeChannel}
+          onEditGroup={onEditGroup}
+          onInvitePeople={onInvitePeople}
+          onOpenProfileCard={onOpenProfileCard}
         />
       </aside>
     );

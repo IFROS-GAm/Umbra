@@ -65,7 +65,95 @@ export function registerSocialRoutes({
     }
   });
 
-  app.post("/api/friends/requests", requireViewer, async (req, res) => {
+  app.patch("/api/dms/:channelId", requireViewer, async (req, res) => {
+
+    try {
+
+      const payload = await store.updateGroupDm({
+
+        channelId: req.params.channelId,
+
+        clearIcon: Boolean(req.body.clearIcon),
+
+        iconUrl: req.body.iconUrl,
+
+        name: req.body.name,
+
+        userId: req.viewer.id
+
+      });
+
+
+
+      const affectedUserIds = await store.listChannelAudienceIds(req.params.channelId);
+
+
+
+      emitNavigationUpdateToUsers(affectedUserIds, {
+
+        channelId: req.params.channelId,
+
+        type: "dm:update",
+
+        userId: req.viewer.id
+
+      });
+
+
+
+      res.json(payload);
+
+    } catch (error) {
+
+      sendError(res, error);
+
+    }
+
+  });
+
+
+
+  app.post("/api/dms/:channelId/members", requireViewer, async (req, res) => {
+
+    try {
+
+      const payload = await store.inviteGroupDmMembers({
+
+        channelId: req.params.channelId,
+
+        recipientIds: Array.isArray(req.body.recipientIds) ? req.body.recipientIds : [],
+
+        userId: req.viewer.id
+
+      });
+
+
+
+      emitNavigationUpdateToUsers(payload?.affected_user_ids || [req.viewer.id], {
+
+        channelId: req.params.channelId,
+
+        type: "dm:update",
+
+        userId: req.viewer.id
+
+      });
+
+
+
+      res.status(201).json(payload);
+
+    } catch (error) {
+
+      sendError(res, error);
+
+    }
+
+  });
+
+
+
+  app.post("/api/friends/requests", requireViewer, async (req, res) => {
     try {
       const payload = await store.sendFriendRequest({
         recipientId: req.body.recipientId,

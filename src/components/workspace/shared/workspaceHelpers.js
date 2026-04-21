@@ -109,11 +109,42 @@ export function getDmSummary(dm, currentUserId) {
   }
 
   if (dm.type === "group_dm") {
-    return `${dm.participants?.length || 0} miembros`;
+    const creatorLabel = formatGroupDmCreatorLabel(dm, currentUserId);
+    const memberLabel = `${dm.participants?.length || 0} miembros`;
+    return creatorLabel ? `${creatorLabel} · ${memberLabel}` : memberLabel;
   }
 
   const other = dm.participants?.find((participant) => participant.id !== currentUserId);
   return other?.custom_status || dm.last_message_preview || "Sin mensajes todavia";
+}
+
+export function resolveGroupDmCreator(dm) {
+  if (!dm || dm.type !== "group_dm") {
+    return null;
+  }
+
+  const creator =
+    dm.participants?.find((participant) => participant.id === dm.created_by) || null;
+
+  if (!creator) {
+    return null;
+  }
+
+  return {
+    ...creator,
+    displayName: creator.display_name || creator.displayName || creator.username || "Umbra"
+  };
+}
+
+export function formatGroupDmCreatorLabel(dm, currentUserId = "") {
+  const creator = resolveGroupDmCreator(dm);
+  if (!creator) {
+    return "";
+  }
+
+  return creator.id === currentUserId
+    ? "Creado por ti"
+    : `Creado por ${creator.displayName}`;
 }
 
 export function resolveDirectChannelVisual(dm, currentUserId) {

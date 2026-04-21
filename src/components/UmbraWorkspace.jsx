@@ -347,6 +347,25 @@ export function UmbraWorkspace({
     showUiNotice,
     workspace
   });
+  function handleEditGroup() {
+    if (activeChannel?.type !== "group_dm") {
+      return;
+    }
+
+    openDialog("dm_group_edit", {
+      channel: activeChannel
+    });
+  }
+
+  function handleInvitePeople() {
+    if (activeChannel?.type !== "group_dm") {
+      return;
+    }
+
+    openDialog("dm_group_invite", {
+      channel: activeChannel
+    });
+  }
 
   const {
     activeNowUsers,
@@ -730,6 +749,7 @@ export function UmbraWorkspace({
           handleComposerShortcut={handleComposerShortcut}
           handleDeleteMessage={handleDeleteMessage}
           handleEditMessage={handleEditMessage}
+          handleEditGroup={handleEditGroup}
           handleJoinDirectCall={handleJoinDirectCall}
           handleJumpToLatest={handleJumpToLatest}
           handleOpenDmFromCard={handleOpenDmFromCard}
@@ -747,6 +767,7 @@ export function UmbraWorkspace({
           handleScroll={handleScroll}
           handleSelectGuildChannel={handleSelectGuildChannel}
           handleSendFriendRequest={handleSendFriendRequest}
+          handleInvitePeople={handleInvitePeople}
           handleForwardMessage={handleForwardMessage}
           handleStartMembersResize={handleStartMembersResize}
           handleStartReply={handleStartReply}
