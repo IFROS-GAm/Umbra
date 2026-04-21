@@ -3,9 +3,12 @@ import { Room, RoomEvent, Track } from "livekit-client";
 import { api } from "../../../../api.js";
 import {
   applySinkId,
+  buildParticipantAudioMix,
   clampUnitVolume,
   createHiddenAudioElement,
+  getSharedVoiceAudioContext,
   hasTrack,
+  normalizeVoiceParticipantAudioPrefsMap,
   primeSharedVoiceAudioContext
 } from "./voiceRtcSessionConfig.js";
 
@@ -108,7 +111,10 @@ function createRemoteAudioEntry() {
   return {
     attachedTrackSid: "",
     element: createHiddenAudioElement(),
-    track: null
+    playbackMode: "direct",
+    processedAudio: null,
+    track: null,
+    userId: ""
   };
 }
 
@@ -161,7 +167,8 @@ export function createLiveKitVoiceSession({
   let playbackState = {
     deafened: Boolean(deafened),
     outputDeviceId,
-    outputVolume: clampUnitVolume(outputVolume)
+    outputVolume: clampUnitVolume(outputVolume),
+    participantAudioPrefs: normalizeVoiceParticipantAudioPrefsMap()
   };
   let participantState = {
     deafened: Boolean(deafened),
@@ -189,6 +196,166 @@ export function createLiveKitVoiceSession({
     }
   };
 
+  function getParticipantAudioMix(remoteAudio) {
+    const participantPref = remoteAudio?.userId
+      ? playbackState?.participantAudioPrefs?.[remoteAudio.userId]
+      : null;
+
+    return buildParticipantAudioMix(participantPref, playbackState);
+  }
+
+  function cleanupProcessedRemoteAudio(remoteAudio) {
+    if (!remoteAudio?.processedAudio) {
+      return;
+    }
+
+    const {
+      compressor,
+      intensityGain,
+      outputGain,
+      source
+    } = remoteAudio.processedAudio;
+
+    try {
+      source?.disconnect?.();
+      compressor?.disconnect?.();
+      intensityGain?.disconnect?.();
+      outputGain?.disconnect?.();
+    } catch {
+      // Ignore audio node disconnect issues during teardown.
+    }
+
+    remoteAudio.processedAudio = null;
+    remoteAudio.playbackMode = "direct";
+  }
+
+  function safePlayRemoteAudio(remoteAudio, peerId) {
+    remoteAudio?.element?.play?.().catch((error) => {
+      log(
+        "audio:play-blocked",
+        {
+          message: error?.message || String(error),
+          targetPeerId: peerId
+        },
+        "warn"
+      );
+    });
+  }
+
+  async function ensureDirectRemoteAudio(remoteAudio) {
+    if (!remoteAudio?.element || !remoteAudio?.track) {
+      return;
+    }
+
+    if (remoteAudio.playbackMode !== "direct") {
+      cleanupProcessedRemoteAudio(remoteAudio);
+      remoteAudio.element.srcObject = null;
+      remoteAudio.track.attach(remoteAudio.element);
+    }
+
+    remoteAudio.playbackMode = "direct";
+  }
+
+  async function ensureProcessedRemoteAudio(remoteAudio, mix, peerId) {
+    const mediaTrack = remoteAudio?.track?.mediaStreamTrack || null;
+    if (!remoteAudio?.element || !mediaTrack) {
+      return false;
+    }
+
+    let context = getSharedVoiceAudioContext();
+    if (!context) {
+      return false;
+    }
+
+    if (context.state === "suspended") {
+      try {
+        context = await primeSharedVoiceAudioContext();
+      } catch (error) {
+        log(
+          "audio:context:prime-failed",
+          {
+            message: error?.message || String(error),
+            targetPeerId: peerId
+          },
+          "warn"
+        );
+      }
+    }
+
+    if (!context) {
+      return false;
+    }
+
+    const trackId = String(mediaTrack.id || "").trim();
+    const needsNewGraph =
+      remoteAudio.playbackMode !== "processed" ||
+      remoteAudio.processedAudio?.trackId !== trackId ||
+      remoteAudio.processedAudio?.useCompressor !== Boolean(mix.useCompressor);
+
+    if (needsNewGraph) {
+      try {
+        remoteAudio.track?.detach?.(remoteAudio.element);
+      } catch {
+        // Ignore detach races when switching playback mode.
+      }
+
+      cleanupProcessedRemoteAudio(remoteAudio);
+
+      const sourceStream = new MediaStream([mediaTrack]);
+      const source = context.createMediaStreamSource(sourceStream);
+      let lastNode = source;
+      let compressor = null;
+
+      if (mix.useCompressor) {
+        compressor = context.createDynamicsCompressor();
+        compressor.attack.value = 0.004;
+        compressor.knee.value = 22;
+        compressor.ratio.value = 3.5;
+        compressor.release.value = 0.2;
+        compressor.threshold.value = -25;
+        lastNode.connect(compressor);
+        lastNode = compressor;
+      }
+
+      const intensityGain = context.createGain();
+      const outputGain = context.createGain();
+      const destination = context.createMediaStreamDestination();
+
+      lastNode.connect(intensityGain);
+      intensityGain.connect(outputGain);
+      outputGain.connect(destination);
+
+      remoteAudio.processedAudio = {
+        compressor,
+        destination,
+        intensityGain,
+        outputGain,
+        source,
+        trackId,
+        useCompressor: Boolean(mix.useCompressor)
+      };
+      remoteAudio.element.srcObject = destination.stream;
+      remoteAudio.playbackMode = "processed";
+    }
+
+    if (!remoteAudio.processedAudio) {
+      return false;
+    }
+
+    remoteAudio.processedAudio.intensityGain.gain.setTargetAtTime(
+      mix.processedIntensityGain,
+      0,
+      0.05
+    );
+    remoteAudio.processedAudio.outputGain.gain.setTargetAtTime(
+      mix.processedOutputGain,
+      0,
+      0.05
+    );
+
+    return true;
+  }
+
   function emitPresenceSnapshot() {
     if (typeof onPresencePeersChange !== "function") {
       return;
@@ -207,6 +374,7 @@ export function createLiveKitVoiceSession({
   function removeRemoteParticipant(peerId) {
     const remoteAudio = remoteAudioEntries.get(peerId);
     if (remoteAudio) {
+      cleanupProcessedRemoteAudio(remoteAudio);
       try {
         remoteAudio.track?.detach?.(remoteAudio.element);
       } catch {
@@ -230,10 +398,27 @@ export function createLiveKitVoiceSession({
   }
 
   async function applyPlaybackToRemoteAudio() {
-    for (const remoteAudio of remoteAudioEntries.values()) {
-      remoteAudio.element.muted = Boolean(playbackState.deafened);
-      remoteAudio.element.volume = clampUnitVolume(playbackState.outputVolume, 1);
+    for (const [peerId, remoteAudio] of remoteAudioEntries.entries()) {
+      const mix = getParticipantAudioMix(remoteAudio);
+      const usingProcessedAudio =
+        mix.usesProcessing &&
+        (await ensureProcessedRemoteAudio(remoteAudio, mix, peerId));
+
+      if (!usingProcessedAudio) {
+        await ensureDirectRemoteAudio(remoteAudio);
+        remoteAudio.element.defaultMuted = Boolean(mix.muted);
+        remoteAudio.element.muted = Boolean(mix.muted);
+        remoteAudio.element.volume = mix.directVolume;
+      } else {
+        remoteAudio.element.defaultMuted = false;
+        remoteAudio.element.muted = false;
+        remoteAudio.element.volume = 1;
+      }
+
       await applySinkId(remoteAudio.element, playbackState.outputDeviceId);
+      if (remoteAudio.element.srcObject) {
+        safePlayRemoteAudio(remoteAudio, peerId);
+      }
     }
   }
 
@@ -281,7 +466,11 @@ export function createLiveKitVoiceSession({
   async function ensureRemoteAudioTrack(participant) {
     const publication = participant?.getTrackPublication?.(Track.Source.Microphone);
     const track = publication?.track || null;
-    const peerId = String(participant?.identity || "").trim();
+    const snapshot = createParticipantSnapshot({
+      channelId,
+      participant
+    });
+    const peerId = snapshot.peerId;
 
     if (!peerId) {
       return;
@@ -290,6 +479,7 @@ export function createLiveKitVoiceSession({
     if (!track) {
       const existingEntry = remoteAudioEntries.get(peerId);
       if (existingEntry) {
+        cleanupProcessedRemoteAudio(existingEntry);
         try {
           existingEntry.track?.detach?.(existingEntry.element);
         } catch {
@@ -297,6 +487,7 @@ export function createLiveKitVoiceSession({
         }
         existingEntry.track = null;
         existingEntry.attachedTrackSid = "";
+        existingEntry.userId = snapshot.userId;
         existingEntry.element.srcObject = null;
       }
       return;
@@ -307,6 +498,7 @@ export function createLiveKitVoiceSession({
       remoteAudio = createRemoteAudioEntry();
       remoteAudioEntries.set(peerId, remoteAudio);
     }
+    remoteAudio.userId = snapshot.userId;
 
     const trackSid = String(publication?.trackSid || track?.sid || "").trim();
     if (remoteAudio.attachedTrackSid !== trackSid) {
@@ -318,43 +510,22 @@ export function createLiveKitVoiceSession({
 
       remoteAudio.track = track;
       remoteAudio.attachedTrackSid = trackSid;
+      cleanupProcessedRemoteAudio(remoteAudio);
+      remoteAudio.playbackMode = "direct";
       track.attach(remoteAudio.element);
       remoteAudio.element.autoplay = true;
       remoteAudio.element.defaultMuted = false;
-      remoteAudio.element.muted = Boolean(playbackState.deafened);
+      remoteAudio.element.muted = false;
       remoteAudio.element.playsInline = true;
       remoteAudio.element.volume = clampUnitVolume(playbackState.outputVolume, 1);
-      await applySinkId(remoteAudio.element, playbackState.outputDeviceId);
-
-      try {
-        await primeSharedVoiceAudioContext();
-      } catch (error) {
-        log(
-          "audio:context:prime-failed",
-          {
-            message: error?.message || String(error),
-            targetPeerId: peerId
-          },
-          "warn"
-        );
-      }
-
-      remoteAudio.element.play().catch((error) => {
-        log(
-          "audio:play-blocked",
-          {
-            message: error?.message || String(error),
-            targetPeerId: peerId
-          },
-          "warn"
-        );
-      });
 
       log("audio:attached", {
         targetPeerId: peerId,
         trackSid
       });
     }
+
+    await applyPlaybackToRemoteAudio();
   }
 
   async function syncParticipant(participant) {
@@ -636,6 +807,7 @@ export function createLiveKitVoiceSession({
     },
     async updatePlayback(nextPlayback = {}) {
       playbackState = {
+        ...playbackState,
         deafened:
           typeof nextPlayback.deafened === "boolean"
             ? nextPlayback.deafened
@@ -649,10 +821,19 @@ export function createLiveKitVoiceSession({
 
       await applyPlaybackToRemoteAudio();
     },
+    async updateParticipantAudioPrefs(nextPrefsByUserId = {}) {
+      playbackState = {
+        ...playbackState,
+        participantAudioPrefs: normalizeVoiceParticipantAudioPrefsMap(nextPrefsByUserId)
+      };
+
+      await applyPlaybackToRemoteAudio();
+    },
     async destroy() {
       destroyed = true;
 
       for (const remoteAudio of remoteAudioEntries.values()) {
+        cleanupProcessedRemoteAudio(remoteAudio);
         try {
           remoteAudio.track?.detach?.(remoteAudio.element);
         } catch {

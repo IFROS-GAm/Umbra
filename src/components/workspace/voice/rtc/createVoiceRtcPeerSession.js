@@ -1,5 +1,6 @@
 import {
   applySinkId,
+  buildParticipantAudioMix,
   buildRtcConfiguration,
   createHiddenAudioElement,
   createRemoteStream,
@@ -170,16 +171,162 @@ export function createVoiceRtcPeerSession({
     });
   }
 
+  function getParticipantAudioMix(entry) {
+    const playbackState = getPlaybackState();
+    const participantPref = entry?.userId
+      ? playbackState?.participantAudioPrefs?.[entry.userId]
+      : null;
+
+    return {
+      mix: buildParticipantAudioMix(participantPref, playbackState),
+      playbackState
+    };
+  }
+
+  function getRemoteAudioStreamKey(stream) {
+    return (stream?.getAudioTracks?.() || [])
+      .filter((track) => track.readyState !== "ended")
+      .map((track) => track.id)
+      .sort()
+      .join("|");
+  }
+
+  function cleanupProcessedRemoteAudio(entry) {
+    if (!entry?.processedAudio) {
+      return;
+    }
+
+    const {
+      compressor,
+      intensityGain,
+      outputGain,
+      source
+    } = entry.processedAudio;
+
+    try {
+      source?.disconnect?.();
+      compressor?.disconnect?.();
+      intensityGain?.disconnect?.();
+      outputGain?.disconnect?.();
+    } catch {
+      // Ignore audio node disconnect issues during teardown.
+    }
+
+    entry.processedAudio = null;
+    entry.playbackMode = "direct";
+  }
+
+  function ensureDirectRemoteAudio(entry) {
+    if (!entry?.audioElement) {
+      return;
+    }
+
+    if (entry.playbackMode !== "direct") {
+      cleanupProcessedRemoteAudio(entry);
+    }
+
+    if (entry.audioElement.srcObject !== entry.remoteAudioStream) {
+      entry.audioElement.srcObject = entry.remoteAudioStream;
+    }
+
+    entry.playbackMode = "direct";
+  }
+
+  function ensureProcessedRemoteAudio(entry, mix) {
+    if (!entry?.audioElement) {
+      return false;
+    }
+
+    const context = getRemoteAudioContext();
+    const streamKey = getRemoteAudioStreamKey(entry.remoteAudioStream);
+    if (!context || !streamKey) {
+      return false;
+    }
+
+    const needsNewGraph =
+      entry.playbackMode !== "processed" ||
+      entry.processedAudio?.streamKey !== streamKey ||
+      entry.processedAudio?.useCompressor !== Boolean(mix.useCompressor);
+
+    if (needsNewGraph) {
+      cleanupProcessedRemoteAudio(entry);
+
+      const source = context.createMediaStreamSource(entry.remoteAudioStream);
+      let lastNode = source;
+      let compressor = null;
+
+      if (mix.useCompressor) {
+        compressor = context.createDynamicsCompressor();
+        compressor.attack.value = 0.004;
+        compressor.knee.value = 22;
+        compressor.ratio.value = 3.5;
+        compressor.release.value = 0.2;
+        compressor.threshold.value = -25;
+        lastNode.connect(compressor);
+        lastNode = compressor;
+      }
+
+      const intensityGain = context.createGain();
+      const outputGain = context.createGain();
+      const destination = context.createMediaStreamDestination();
+
+      lastNode.connect(intensityGain);
+      intensityGain.connect(outputGain);
+      outputGain.connect(destination);
+
+      entry.processedAudio = {
+        compressor,
+        destination,
+        intensityGain,
+        outputGain,
+        source,
+        streamKey,
+        useCompressor: Boolean(mix.useCompressor)
+      };
+      entry.audioElement.srcObject = destination.stream;
+      entry.playbackMode = "processed";
+    }
+
+    if (!entry.processedAudio) {
+      return false;
+    }
+
+    entry.processedAudio.intensityGain.gain.setTargetAtTime(
+      mix.processedIntensityGain,
+      0,
+      0.05
+    );
+    entry.processedAudio.outputGain.gain.setTargetAtTime(
+      mix.processedOutputGain,
+      0,
+      0.05
+    );
+
+    return true;
+  }
+
   function applyPlaybackToPeer(entry) {
     if (!entry?.audioElement) {
       return;
     }
 
-    const playbackState = getPlaybackState();
-    entry.audioElement.defaultMuted = Boolean(playbackState.deafened);
-    entry.audioElement.muted = Boolean(playbackState.deafened);
-    entry.audioElement.volume = playbackState.deafened ? 0 : playbackState.outputVolume;
+    const { mix, playbackState } = getParticipantAudioMix(entry);
+    const canProcess = mix.usesProcessing && hasLiveRemoteTrack(entry.remoteAudioStream, "audio");
+    const usingProcessedAudio = canProcess && ensureProcessedRemoteAudio(entry, mix);
+
+    if (!usingProcessedAudio) {
+      ensureDirectRemoteAudio(entry);
+      entry.audioElement.defaultMuted = Boolean(mix.muted);
+      entry.audioElement.muted = Boolean(mix.muted);
+      entry.audioElement.volume = mix.directVolume;
+    } else {
+      entry.audioElement.defaultMuted = false;
+      entry.audioElement.muted = false;
+      entry.audioElement.volume = 1;
+    }
+
     applySinkId(entry.audioElement, playbackState.outputDeviceId);
+    safePlayAudio(entry);
   }
 
   function safePlayAudio(entry) {
@@ -513,11 +660,7 @@ export function createVoiceRtcPeerSession({
       }
 
       if (kind === "audio") {
-        entry.audioElement.srcObject = entry.remoteAudioStream;
         applyPlaybackToPeer(entry);
-        if (!track.muted && track.readyState !== "ended") {
-          safePlayAudio(entry);
-        }
         startRemoteAudioAnalysis(entry);
       }
 
@@ -529,6 +672,7 @@ export function createVoiceRtcPeerSession({
         kind === "audio" ? entry.remoteAudioStream : entry.remoteVideoStream;
       stream.removeTrack(track);
       if (kind === "audio") {
+        applyPlaybackToPeer(entry);
         startRemoteAudioAnalysis(entry);
       }
       entry.remoteTrackListeners.get(listenerKey)?.cleanup?.();
@@ -617,6 +761,7 @@ export function createVoiceRtcPeerSession({
     updateAudioUnlockListeners();
     clearPeerMedia(entry);
     stopRemoteAudioAnalysis(entry);
+    cleanupProcessedRemoteAudio(entry);
 
     entry.remoteTrackListeners.forEach(({ cleanup }) => {
       cleanup?.();
@@ -669,6 +814,8 @@ export function createVoiceRtcPeerSession({
       peerConnection,
       peerId: peer.peerId,
       pendingRemoteCandidates: [],
+      playbackMode: "direct",
+      processedAudio: null,
       remoteAudioAnalysis: null,
       remoteAudioStream: createRemoteStream(),
       remoteTrackListeners: new Map(),
@@ -683,7 +830,6 @@ export function createVoiceRtcPeerSession({
     audioElement.srcObject = entry.remoteAudioStream;
     peers.set(entry.peerId, entry);
     applyPlaybackToPeer(entry);
-    safePlayAudio(entry);
 
     peerConnection.onicecandidate = (event) => {
       if (entry.destroyed || !event.candidate) {
@@ -718,10 +864,8 @@ export function createVoiceRtcPeerSession({
           entry.remoteAudioStream.addTrack(event.track);
         }
         attachRemoteTrackLifecycle(entry, event.track, "audio");
-        entry.audioElement.srcObject = entry.remoteAudioStream;
         applyPlaybackToPeer(entry);
         startRemoteAudioAnalysis(entry);
-        safePlayAudio(entry);
         emitPeerMedia(entry);
         return;
       }
@@ -831,6 +975,7 @@ export function createVoiceRtcPeerSession({
         });
       }
 
+      applyPlaybackToPeer(existing);
       emitPeerMedia(existing);
       return existing;
     }

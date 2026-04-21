@@ -3,15 +3,11 @@ import { createPortal } from "react-dom";
 
 import { translate } from "../../../i18n.js";
 import { Icon } from "../../Icon.jsx";
-
-function clampVolume(value) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) {
-    return 100;
-  }
-
-  return Math.max(0, Math.min(200, Math.round(numeric)));
-}
+import {
+  MAX_VOICE_PARTICIPANT_INTENSITY,
+  MAX_VOICE_PARTICIPANT_VOLUME,
+  normalizeVoiceParticipantAudioPref
+} from "./rtc/voiceRtcSessionConfig.js";
 
 export function VoiceParticipantContextMenu({
   language = "es",
@@ -23,6 +19,7 @@ export function VoiceParticipantContextMenu({
   onSendMessage,
   onToggleMuted,
   onToggleVideoHidden,
+  onUpdateIntensity,
   onUpdateVolume,
   prefs
 }) {
@@ -114,11 +111,7 @@ export function VoiceParticipantContextMenu({
 
   const profile = menu.profile || null;
   const isCurrentUser = Boolean(profile?.isCurrentUser || menu.user.id === menu.currentUserId);
-  const safePrefs = {
-    muted: Boolean(prefs?.muted),
-    videoHidden: Boolean(prefs?.videoHidden),
-    volume: clampVolume(prefs?.volume)
-  };
+  const safePrefs = normalizeVoiceParticipantAudioPref(prefs);
 
   const content = (
     <div
@@ -171,11 +164,28 @@ export function VoiceParticipantContextMenu({
           <input
             aria-label={t("voice.participant.volume", "Volumen de usuario")}
             className="voice-participant-menu-slider"
-            max="200"
+            max={String(MAX_VOICE_PARTICIPANT_VOLUME)}
             min="0"
             onChange={(event) => onUpdateVolume?.(menu.user.id, event.target.value)}
             type="range"
             value={safePrefs.volume}
+          />
+        </div>
+
+        <div className="voice-participant-menu-slider-block">
+          <div className="voice-participant-menu-slider-top">
+            <strong>{t("voice.participant.intensity", "Intensidad local")}</strong>
+            <span>{safePrefs.intensity}%</span>
+          </div>
+
+          <input
+            aria-label={t("voice.participant.intensity", "Intensidad local")}
+            className="voice-participant-menu-slider"
+            max={String(MAX_VOICE_PARTICIPANT_INTENSITY)}
+            min="0"
+            onChange={(event) => onUpdateIntensity?.(menu.user.id, event.target.value)}
+            type="range"
+            value={safePrefs.intensity}
           />
         </div>
 

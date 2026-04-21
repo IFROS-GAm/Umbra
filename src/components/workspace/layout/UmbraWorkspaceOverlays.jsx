@@ -56,6 +56,7 @@ export function UmbraWorkspaceOverlays({
   handleStatusChange,
   handleToggleVoiceParticipantMuted,
   handleToggleVoiceParticipantVideo,
+  handleUpdateVoiceParticipantIntensity,
   handleUpdateVoiceParticipantVolume,
   incomingCall,
   inviteModalState,
@@ -226,6 +227,7 @@ export function UmbraWorkspaceOverlays({
             onSendMessage={handleOpenDmFromCard}
             onToggleMuted={handleToggleVoiceParticipantMuted}
             onToggleVideoHidden={handleToggleVoiceParticipantVideo}
+            onUpdateIntensity={handleUpdateVoiceParticipantIntensity}
             onUpdateVolume={handleUpdateVoiceParticipantVolume}
             prefs={getVoiceParticipantPref(voiceParticipantMenu.user.id)}
           />

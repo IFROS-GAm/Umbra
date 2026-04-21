@@ -81,6 +81,8 @@ const ENV_ICE_SERVERS = parseIceServersFromEnv();
 const SHOULD_FORCE_RELAY =
   String(import.meta.env.VITE_WEBRTC_FORCE_RELAY || "").trim().toLowerCase() === "true";
 const LIVEKIT_SERVER_URL = String(import.meta.env.VITE_LIVEKIT_URL || "").trim();
+export const MAX_VOICE_PARTICIPANT_VOLUME = 300;
+export const MAX_VOICE_PARTICIPANT_INTENSITY = 200;
 let sharedVoiceAudioContext = null;
 
 export function hasLiveKitVoiceClientConfig() {
@@ -116,6 +118,70 @@ export function buildRtcConfiguration() {
 export function clampUnitVolume(value, fallback = 1) {
   const numeric = Number.isFinite(Number(value)) ? Number(value) : fallback;
   return Math.max(0, Math.min(1, numeric));
+}
+
+export function clampParticipantVolume(value, fallback = 100) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric)
+    ? Math.max(0, Math.min(MAX_VOICE_PARTICIPANT_VOLUME, Math.round(numeric)))
+    : fallback;
+}
+
+export function clampParticipantIntensity(value, fallback = 100) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric)
+    ? Math.max(0, Math.min(MAX_VOICE_PARTICIPANT_INTENSITY, Math.round(numeric)))
+    : fallback;
+}
+
+export function normalizeVoiceParticipantAudioPref(pref = {}) {
+  return {
+    intensity: clampParticipantIntensity(pref.intensity, 100),
+    muted: Boolean(pref.muted),
+    videoHidden: Boolean(pref.videoHidden),
+    volume: clampParticipantVolume(pref.volume, 100)
+  };
+}
+
+export function normalizeVoiceParticipantAudioPrefsMap(prefsByUserId = {}) {
+  return Object.fromEntries(
+    Object.entries(prefsByUserId || {}).flatMap(([userId, pref]) => {
+      const safeUserId = String(userId || "").trim();
+      if (!safeUserId) {
+        return [];
+      }
+
+      return [[safeUserId, normalizeVoiceParticipantAudioPref(pref)]];
+    })
+  );
+}
+
+export function buildParticipantAudioMix(pref = {}, playbackState = {}) {
+  const normalizedPref = normalizeVoiceParticipantAudioPref(pref);
+  const outputVolume = clampUnitVolume(playbackState.outputVolume, 1);
+  const muted =
+    Boolean(playbackState.deafened) ||
+    normalizedPref.muted ||
+    outputVolume <= 0 ||
+    normalizedPref.volume <= 0 ||
+    normalizedPref.intensity <= 0;
+  const scaledVolume = outputVolume * (normalizedPref.volume / 100);
+  const intensityGain = normalizedPref.intensity / 100;
+  const usesProcessing =
+    !muted &&
+    (normalizedPref.volume > 100 || normalizedPref.intensity !== 100);
+
+  return {
+    ...normalizedPref,
+    directVolume: muted ? 0 : clampUnitVolume(scaledVolume, 1),
+    muted,
+    processedOutputGain: muted ? 0 : scaledVolume,
+    processedIntensityGain: muted ? 0 : intensityGain,
+    useCompressor:
+      !muted &&
+      (normalizedPref.volume > 100 || normalizedPref.intensity > 100),
+    usesProcessing
+  };
 }
 
 export async function applySinkId(audioElement, outputDeviceId) {

@@ -120,6 +120,7 @@ export function useUmbraWorkspaceCore({
   const workspaceRef = useRef(workspace);
   const voiceInputSessionRef = useRef(null);
   const cameraSessionRef = useRef(null);
+  const voiceRtcSessionRef = useRef(null);
   const messageCacheRef = useRef(new Map());
   const messageRequestIdRef = useRef(0);
   const bootstrapRequestIdRef = useRef(0);
@@ -413,6 +414,7 @@ export function useUmbraWorkspaceCore({
     voiceInputSessionRef,
     voiceInputSpeaking,
     voiceLocalPeerIdRef,
+    voiceRtcSessionRef,
     voiceInputStream,
     voiceMenu,
     voicePeerMedia,
@@ -534,6 +536,6 @@ export function useUmbraWorkspaceCore({
       setScreenShareStream, setSubmittingMessage, setUiNotice, setVoiceDevices, setVoiceMenu, setVoicePeerMedia, setVoicePresencePeers, setVoicePresenceUsers, setVoiceSessions, setVoiceState, setVoiceJoinReadyChannelId, settingsOpen, showUiNotice,
     submittingMessage, theme, toggleHeaderPanel, toggleVoiceMenu, toggleVoiceState, topbarActionsRef, typingEvents, typingUsers,
     uiNotice, updateVoiceSetting, uploadingAttachments, voiceDevices, voiceInputLevel, voiceInputStatus,
-    voiceInputSpeaking, voiceJoinReadyChannelId, voiceJoinReadyChannelIdRef, voiceLocalPeerIdRef, voiceMenu, voicePeerMedia, voicePresencePeers, voicePresenceUsers, voiceSessions, voiceState, voiceUserIds, screenShareStream, workspace, pendingSocialRealtimeActionsRef
+    voiceInputSpeaking, voiceJoinReadyChannelId, voiceJoinReadyChannelIdRef, voiceLocalPeerIdRef, voiceMenu, voicePeerMedia, voicePresencePeers, voicePresenceUsers, voiceRtcSessionRef, voiceSessions, voiceState, voiceUserIds, screenShareStream, workspace, pendingSocialRealtimeActionsRef
   };
 }
