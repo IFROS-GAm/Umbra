@@ -329,79 +329,81 @@ export function VoiceRoomStage({
             </div>
 
             <div className="direct-call-stage-center">
-              <div className="direct-call-stage-avatar-row">
-                {directCallHeroMembers.map((user) => (
+              <div className="direct-call-stage-scroll">
+                <div className="direct-call-stage-avatar-row">
+                  {directCallHeroMembers.map((user) => (
+                    <button
+                      className={`direct-call-stage-avatar-card ${user.isSpeaking ? "speaking" : ""}`.trim()}
+                      key={user.id}
+                      onClick={(event) => onOpenProfileCard(event, user, user.display_name)}
+                      onContextMenu={(event) => onOpenParticipantMenu?.(event, user)}
+                      style={user.stageStyle}
+                      type="button"
+                    >
+                      <div className="direct-call-stage-avatar-visual">
+                        {user.isCameraOn && user.localCameraStream ? (
+                          <div className="direct-call-stage-avatar-video">
+                            <VoiceStageVideo
+                              muted={user.mediaMuted}
+                              stream={user.localCameraStream}
+                              user={user}
+                              volume={user.mediaVolume}
+                            />
+                          </div>
+                        ) : (
+                          <Avatar
+                            hue={user.avatar_hue}
+                            label={user.display_name || user.username}
+                            size={112}
+                            src={user.avatar_url}
+                            status={user.status}
+                          />
+                        )}
+
+                        <div className="direct-call-stage-avatar-icons">
+                          {renderParticipantMediaBadges(user, { compact: true })}
+                          {user.isMuted || user.isDeafened ? (
+                            <span className="direct-call-stage-mini-chip danger">
+                              <Icon name={user.isDeafened ? "deafen" : "micOff"} size={12} />
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="direct-call-stage-avatar-copy">
+                        <strong>{user.display_name || user.username}</strong>
+                        <span>
+                          {user.inCall
+                            ? user.isCurrentUser
+                              ? "Tu voz esta conectada"
+                              : "En llamada"
+                            : user.custom_status || user.status || "Disponible"}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+
+                  {directCallOverflowCount > 0 ? (
+                    <div className="direct-call-stage-avatar-overflow">
+                      +{directCallOverflowCount}
+                    </div>
+                  ) : null}
+                </div>
+
+                {featuredStreamUser ? (
                   <button
-                    className={`direct-call-stage-avatar-card ${user.isSpeaking ? "speaking" : ""}`.trim()}
-                    key={user.id}
-                    onClick={(event) => onOpenProfileCard(event, user, user.display_name)}
-                    onContextMenu={(event) => onOpenParticipantMenu?.(event, user)}
-                    style={user.stageStyle}
+                    className="direct-call-stage-stream-preview"
+                    onClick={() => setExpandedStreamOpen(true)}
                     type="button"
                   >
-                    <div className="direct-call-stage-avatar-visual">
-                      {user.isCameraOn && user.localCameraStream ? (
-                        <div className="direct-call-stage-avatar-video">
-                          <VoiceStageVideo
-                            muted={user.mediaMuted}
-                            stream={user.localCameraStream}
-                            user={user}
-                            volume={user.mediaVolume}
-                          />
-                        </div>
-                      ) : (
-                        <Avatar
-                          hue={user.avatar_hue}
-                          label={user.display_name || user.username}
-                          size={112}
-                          src={user.avatar_url}
-                          status={user.status}
-                        />
-                      )}
-
-                      <div className="direct-call-stage-avatar-icons">
-                        {renderParticipantMediaBadges(user, { compact: true })}
-                        {user.isMuted || user.isDeafened ? (
-                          <span className="direct-call-stage-mini-chip danger">
-                            <Icon name={user.isDeafened ? "deafen" : "micOff"} size={12} />
-                          </span>
-                        ) : null}
-                      </div>
+                    <div className="direct-call-stage-stream-copy">
+                      <strong>{featuredStreamUser.display_name || featuredStreamUser.username}</strong>
+                      <span>esta compartiendo pantalla</span>
                     </div>
-
-                    <div className="direct-call-stage-avatar-copy">
-                      <strong>{user.display_name || user.username}</strong>
-                      <span>
-                        {user.inCall
-                          ? user.isCurrentUser
-                            ? "Tu voz esta conectada"
-                            : "En llamada"
-                          : user.custom_status || user.status || "Disponible"}
-                      </span>
-                    </div>
+                    <span className="inline-pill active">{screenShareQualityLabel}</span>
                   </button>
-                ))}
-
-                {directCallOverflowCount > 0 ? (
-                  <div className="direct-call-stage-avatar-overflow">
-                    +{directCallOverflowCount}
-                  </div>
                 ) : null}
               </div>
-
-              {featuredStreamUser ? (
-                <button
-                  className="direct-call-stage-stream-preview"
-                  onClick={() => setExpandedStreamOpen(true)}
-                  type="button"
-                >
-                  <div className="direct-call-stage-stream-copy">
-                    <strong>{featuredStreamUser.display_name || featuredStreamUser.username}</strong>
-                    <span>esta compartiendo pantalla</span>
-                  </div>
-                  <span className="inline-pill active">{screenShareQualityLabel}</span>
-                </button>
-              ) : null}
 
               {joinedVoiceChannelId === activeChannel?.id ? (
                 voiceControlDock

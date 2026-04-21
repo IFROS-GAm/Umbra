@@ -191,6 +191,16 @@ export function createLiveKitVoiceSession({
   };
 
   const handleSessionError = (error) => {
+    const message = String(error?.message || error || "").toLowerCase();
+    if (
+      destroyed ||
+      message.includes("client initiated disconnect") ||
+      message.includes("cancelled") ||
+      message.includes("canceled")
+    ) {
+      return;
+    }
+
     if (typeof onError === "function") {
       onError(error);
     }

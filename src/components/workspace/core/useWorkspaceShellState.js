@@ -11,7 +11,11 @@ export function useWorkspaceShellState({
   const [fullProfile, setFullProfile] = useState(null);
   const [isResizingMembersPanel, setIsResizingMembersPanel] = useState(false);
   const [viewportWidth, setViewportWidth] = useState(() =>
-    typeof window !== "undefined" ? window.visualViewport?.width || window.innerWidth : 1440
+    typeof window !== "undefined"
+      ? window.visualViewport?.width ||
+        document.documentElement?.clientWidth ||
+        window.innerWidth
+      : 1440
   );
   const [membersPanelWidth, setMembersPanelWidth] = useState(() => {
     try {
@@ -152,36 +156,39 @@ export function useWorkspaceShellState({
       return undefined;
     }
 
+    let frameId = 0;
+
     function updateViewportWidth() {
       const measuredWidth =
-        appShellRef.current?.getBoundingClientRect?.().width ||
-        desktopShellRef.current?.getBoundingClientRect?.().width ||
         window.visualViewport?.width ||
+        document.documentElement?.clientWidth ||
         window.innerWidth;
       setViewportWidth((previous) =>
         Math.abs(previous - measuredWidth) > 1 ? measuredWidth : previous
       );
     }
 
-    updateViewportWidth();
+    function scheduleViewportWidthUpdate() {
+      if (frameId) {
+        return;
+      }
 
-    let resizeObserver;
-    if (typeof ResizeObserver !== "undefined") {
-      resizeObserver = new ResizeObserver(() => updateViewportWidth());
-      if (desktopShellRef.current) {
-        resizeObserver.observe(desktopShellRef.current);
-      }
-      if (appShellRef.current) {
-        resizeObserver.observe(appShellRef.current);
-      }
+      frameId = window.requestAnimationFrame(() => {
+        frameId = 0;
+        updateViewportWidth();
+      });
     }
 
-    window.addEventListener("resize", updateViewportWidth);
-    window.visualViewport?.addEventListener("resize", updateViewportWidth);
+    updateViewportWidth();
+
+    window.addEventListener("resize", scheduleViewportWidthUpdate);
+    window.visualViewport?.addEventListener("resize", scheduleViewportWidthUpdate);
     return () => {
-      window.removeEventListener("resize", updateViewportWidth);
-      window.visualViewport?.removeEventListener("resize", updateViewportWidth);
-      resizeObserver?.disconnect();
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
+      window.removeEventListener("resize", scheduleViewportWidthUpdate);
+      window.visualViewport?.removeEventListener("resize", scheduleViewportWidthUpdate);
     };
   }, []);
 
