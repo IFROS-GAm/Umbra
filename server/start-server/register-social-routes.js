@@ -22,6 +22,8 @@ export function registerSocialRoutes({
         channel = await store.createGroupDm({
           iconUrl: req.body.iconUrl || "",
 
+          manageMode: req.body.manageMode,
+
           name: req.body.name || "",
           ownerId: req.viewer.id,
           recipientIds
@@ -76,6 +78,8 @@ export function registerSocialRoutes({
         clearIcon: Boolean(req.body.clearIcon),
 
         iconUrl: req.body.iconUrl,
+
+        manageMode: req.body.manageMode,
 
         name: req.body.name,
 

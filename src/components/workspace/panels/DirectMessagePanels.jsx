@@ -308,6 +308,12 @@ export function GroupDirectSidebar({
   const memberCount = group.participants?.length || 0;
   const displayName = group.display_name || group.name || "Grupo directo";
   const isFullGroup = memberCount >= 10;
+  const canEditGroup = Boolean(group.can_edit_group);
+  const canInvitePeople = Boolean(group.can_invite_group_members);
+  const manageModeLabel =
+    group.group_manage_mode === "members"
+      ? "Todos pueden editar e invitar"
+      : "Solo el creador puede editar e invitar";
 
   return (
     <aside className="dm-sidebar-card">
@@ -339,28 +345,44 @@ export function GroupDirectSidebar({
           ) : (
             <span className="user-profile-chip muted">Avatar automatico</span>
           )}
+          <span className="user-profile-chip muted">{manageModeLabel}</span>
         </div>
 
         <section className="dm-sidebar-section">
           <h4>Gestion</h4>
           <div className="dm-sidebar-list">
+            <p>{manageModeLabel}.</p>
             <p>Cambia el nombre, actualiza la foto del grupo o suma amistades nuevas sin recrearlo.</p>
           </div>
-          <div className="dm-sidebar-action-row">
-            <button className="ghost-button dm-sidebar-inline-button" onClick={() => onEditGroup?.(group)} type="button">
-              <Icon name="edit" size={16} />
-              <span>Editar grupo</span>
-            </button>
-            <button
-              className="primary-button dm-sidebar-inline-button"
-              disabled={isFullGroup}
-              onClick={() => onInvitePeople?.(group)}
-              type="button"
-            >
-              <Icon name="userAdd" size={16} />
-              <span>Invitar personas</span>
-            </button>
-          </div>
+          {canEditGroup || canInvitePeople ? (
+            <div className="dm-sidebar-action-row">
+              {canEditGroup ? (
+                <button
+                  className="ghost-button dm-sidebar-inline-button"
+                  onClick={() => onEditGroup?.(group)}
+                  type="button"
+                >
+                  <Icon name="edit" size={16} />
+                  <span>Editar grupo</span>
+                </button>
+              ) : null}
+              {canInvitePeople ? (
+                <button
+                  className="primary-button dm-sidebar-inline-button"
+                  disabled={isFullGroup}
+                  onClick={() => onInvitePeople?.(group)}
+                  type="button"
+                >
+                  <Icon name="userAdd" size={16} />
+                  <span>Invitar personas</span>
+                </button>
+              ) : null}
+            </div>
+          ) : (
+            <div className="dm-sidebar-subsection">
+              <p>Solo el creador puede cambiar este grupo y enviar invitaciones ahora mismo.</p>
+            </div>
+          )}
           {isFullGroup ? (
             <div className="dm-sidebar-subsection">
               <p>Este grupo ya alcanzo el maximo de 10 personas.</p>
@@ -372,6 +394,7 @@ export function GroupDirectSidebar({
           <h4>Detalles</h4>
           <div className="dm-sidebar-list">
             <p>{creator ? creatorLabel : "El creador original no esta visible ahora mismo."}</p>
+            <p>{manageModeLabel}.</p>
             {createdAtLabel ? <p>Creado el {createdAtLabel}.</p> : null}
           </div>
         </section>

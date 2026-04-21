@@ -401,22 +401,24 @@ export const api = {
       })
     });
   },
-  createGroupDm({ iconUrl = "", name = "", recipientIds = [] }) {
+  createGroupDm({ iconUrl = "", manageMode = "owner", name = "", recipientIds = [] }) {
     return request("/api/dms", {
       method: "POST",
       body: JSON.stringify({
         iconUrl,
+        manageMode,
         name,
         recipientIds
       })
     });
   },
-  updateGroupDm({ channelId, clearIcon = false, iconUrl, name = "" }) {
+  updateGroupDm({ channelId, clearIcon = false, iconUrl, manageMode, name = "" }) {
     return request(`/api/dms/${channelId}`, {
       method: "PATCH",
       body: JSON.stringify({
         clearIcon,
         iconUrl,
+        manageMode,
         name
       })
     });

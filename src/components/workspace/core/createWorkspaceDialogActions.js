@@ -290,15 +290,10 @@ export function createWorkspaceDialogActions(context, shared = {}) {
         const iconUrl = await uploadGroupIconFile(values.iconFile);
         const payload = await api.createGroupDm({
           iconUrl,
+          manageMode: values.manageMode,
           name: values.name,
           recipientIds: values.recipientIds
         });
-
-        if (values.iconFile && !payload?.channel?.icon_url) {
-          showUiNotice(
-            "El grupo se creo, pero la foto quedara disponible cuando apliques el schema nuevo en Supabase."
-          );
-        }
 
         await loadBootstrap(
           {
@@ -314,20 +309,15 @@ export function createWorkspaceDialogActions(context, shared = {}) {
 
       if (dialog.type === "dm_group_edit") {
         const iconUrl = values.iconFile ? await uploadGroupIconFile(values.iconFile) : undefined;
-        const payload = await api.updateGroupDm({
+        await api.updateGroupDm({
           channelId: values.channelId,
           clearIcon: values.clearIcon,
           iconUrl,
+          manageMode: values.manageMode,
           name: values.name
         });
 
-        if (values.iconFile && !payload?.channel?.icon_url) {
-          showUiNotice(
-            "El grupo se actualizo, pero la foto quedara disponible cuando apliques el schema nuevo en Supabase."
-          );
-        } else {
-          showUiNotice("Grupo actualizado.");
-        }
+        showUiNotice("Grupo actualizado.");
 
         await loadBootstrap(activeSelectionRef.current, {
           selectionMode: "target"

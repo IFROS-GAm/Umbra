@@ -9,6 +9,7 @@ import {
   REACTION_SELECT,
   ROLE_PERMISSION_SELECT,
   assertInviteUsable,
+  buildStoredGroupDmTopic,
   buildDirectDmKey,
   buildFriendshipPair,
   buildGuildBanMessage,
@@ -18,12 +19,15 @@ import {
   buildMessagePreview,
   buildChannelMovePatchPlan,
   buildDefaultGuildStickerRows,
+  canChangeGroupDmManageMode,
+  canManageGroupDm,
   createError,
   createId,
   enrichMessages,
   expectData,
   getDefaultGuildChannel,
   isGuildVoiceChannel,
+  normalizeGroupDmManageMode,
   normalizeBanExpiration,
   normalizePrivacySettings,
   normalizeProfileColor,
@@ -37,7 +41,8 @@ import {
   sanitizeStickerName,
   sanitizeUsername,
   sortByDateDesc,
-  sortGuildStickers
+  sortGuildStickers,
+  resolveGroupDmChannelState
 } from "./shared.js";
 
 function isMissingChannelIconColumnError(error) {
@@ -392,7 +397,7 @@ export const supabaseStoreRuntimeInviteDmMethods = {
     };
   }
 ,
-  async createGroupDm({ iconUrl = "", name = "", ownerId, recipientIds }) {
+  async createGroupDm({ iconUrl = "", manageMode = "owner", name = "", ownerId, recipientIds }) {
     const uniqueRecipientIds = [...new Set((recipientIds || []).map((id) => String(id)).filter(Boolean))]
       .filter((id) => id !== ownerId);
     const maxRecipients = 9;
@@ -433,13 +438,19 @@ export const supabaseStoreRuntimeInviteDmMethods = {
     );
 
     const now = new Date().toISOString();
+    const normalizedIconUrl = String(iconUrl || "").trim();
+    const normalizedManageMode = normalizeGroupDmManageMode(manageMode);
     const channel = {
       id: createId(),
       guild_id: null,
       type: CHANNEL_TYPES.GROUP_DM,
-      icon_url: String(iconUrl || "").trim(),
+      icon_url: normalizedIconUrl,
       name: String(name || "").trim(),
-      topic: "Grupo directo",
+      topic: buildStoredGroupDmTopic({
+        iconUrl: normalizedIconUrl,
+        manageMode: normalizedManageMode,
+        topic: "Grupo directo"
+      }),
       position: 0,
       parent_id: null,
       created_by: ownerId,
@@ -460,7 +471,6 @@ export const supabaseStoreRuntimeInviteDmMethods = {
 
       const { icon_url: _ignoredIconUrl, ...fallbackChannel } = channel;
       await expectData(this.client.from("channels").insert(fallbackChannel));
-      channel.icon_url = "";
     }
 
     await expectData(
@@ -476,9 +486,9 @@ export const supabaseStoreRuntimeInviteDmMethods = {
       )
     );
 
-    return channel;
+    return resolveGroupDmChannelState(channel);
   },
-  async updateGroupDm({ channelId, clearIcon = false, iconUrl, name, userId }) {
+  async updateGroupDm({ channelId, clearIcon = false, iconUrl, manageMode, name, userId }) {
     const [channelRows, membershipRows] = await Promise.all([
       expectData(
         this.client
@@ -507,21 +517,46 @@ export const supabaseStoreRuntimeInviteDmMethods = {
       throw createError("No puedes editar este grupo.", 403);
     }
 
+    const resolvedChannel = resolveGroupDmChannelState(channel);
+    if (!canManageGroupDm(resolvedChannel, userId)) {
+      throw createError("Solo el creador puede editar este grupo.", 403);
+    }
+
+    if (
+      manageMode !== undefined &&
+      !canChangeGroupDmManageMode(resolvedChannel, userId)
+    ) {
+      throw createError("Solo el creador puede cambiar los permisos del grupo.", 403);
+    }
+
     const nextName = String(name || "").trim();
+    const nextIconUrl = clearIcon
+      ? ""
+      : iconUrl !== undefined
+        ? String(iconUrl || "").trim()
+        : resolvedChannel.icon_url || "";
+    const nextManageMode =
+      manageMode !== undefined
+        ? normalizeGroupDmManageMode(manageMode)
+        : normalizeGroupDmManageMode(resolvedChannel.group_manage_mode);
     const now = new Date().toISOString();
     const patch = {
       name: nextName,
+      topic: buildStoredGroupDmTopic({
+        iconUrl: nextIconUrl,
+        manageMode: nextManageMode,
+        topic: resolvedChannel.topic || "Grupo directo"
+      }),
       updated_at: now
     };
 
     if (clearIcon) {
       patch.icon_url = "";
     } else if (iconUrl !== undefined) {
-      patch.icon_url = String(iconUrl || "").trim();
+      patch.icon_url = nextIconUrl;
     }
 
     let updatedRows = [];
-    let iconColumnMissing = false;
 
     try {
       updatedRows = await expectData(
@@ -532,7 +567,6 @@ export const supabaseStoreRuntimeInviteDmMethods = {
         throw error;
       }
 
-      iconColumnMissing = true;
       const { icon_url: _ignoredIconUrl, ...fallbackPatch } = patch;
       updatedRows = await expectData(
         this.client.from("channels").update(fallbackPatch).eq("id", channelId).select("*").limit(1)
@@ -540,17 +574,16 @@ export const supabaseStoreRuntimeInviteDmMethods = {
     }
 
     return {
-      channel: {
+      channel: resolveGroupDmChannelState({
         ...channel,
         ...(updatedRows[0] || {}),
         icon_url:
-          clearIcon || iconColumnMissing
-            ? ""
-            : patch.icon_url !== undefined
-              ? patch.icon_url
-              : channel.icon_url || updatedRows[0]?.icon_url || "",
-        name: nextName
-      }
+          patch.icon_url !== undefined
+            ? nextIconUrl
+            : resolvedChannel.icon_url || updatedRows[0]?.icon_url || channel.icon_url || "",
+        name: nextName,
+        topic: patch.topic
+      })
     };
   },
   async inviteGroupDmMembers({ channelId, recipientIds, userId }) {
@@ -578,6 +611,11 @@ export const supabaseStoreRuntimeInviteDmMethods = {
 
     if (!membershipRows.some((membership) => membership.user_id === userId)) {
       throw createError("No puedes invitar personas a este grupo.", 403);
+    }
+
+    const resolvedChannel = resolveGroupDmChannelState(channel);
+    if (!canManageGroupDm(resolvedChannel, userId)) {
+      throw createError("Solo el creador puede invitar personas a este grupo.", 403);
     }
 
     const existingParticipantIds = new Set(membershipRows.map((membership) => membership.user_id));

@@ -1,5 +1,13 @@
 import { CHANNEL_TYPES } from "../../constants.js";
-import { createId, upsertChannelMembership } from "../helpers.js";
+import {
+  buildStoredGroupDmTopic,
+  canChangeGroupDmManageMode,
+  canManageGroupDm,
+  createId,
+  normalizeGroupDmManageMode,
+  resolveGroupDmChannelState,
+  upsertChannelMembership
+} from "../helpers.js";
 import {
   buildDirectDmKey,
   buildFriendshipPair,
@@ -141,7 +149,7 @@ export const demoStoreDmMethods = {
     };
   }
 ,
-  async createGroupDm({ iconUrl = "", name = "", ownerId, recipientIds }) {
+  async createGroupDm({ iconUrl = "", manageMode = "owner", name = "", ownerId, recipientIds }) {
     const uniqueRecipientIds = [...new Set((recipientIds || []).map((id) => String(id)).filter(Boolean))]
       .filter((id) => id !== ownerId);
     const maxRecipients = 9;
@@ -183,13 +191,20 @@ export const demoStoreDmMethods = {
     }
 
     const now = new Date().toISOString();
+    const normalizedIconUrl = String(iconUrl || "").trim();
+    const normalizedManageMode = normalizeGroupDmManageMode(manageMode);
     const channel = {
       id: createId(),
       guild_id: null,
       type: CHANNEL_TYPES.GROUP_DM,
-      icon_url: String(iconUrl || "").trim(),
+      icon_url: normalizedIconUrl,
       name: String(name || "").trim(),
-      topic: "Grupo directo",
+      topic: buildStoredGroupDmTopic({
+        iconUrl: normalizedIconUrl,
+        manageMode: normalizedManageMode,
+        topic: "Grupo directo"
+      }),
+      group_manage_mode: normalizedManageMode,
       position: 0,
       parent_id: null,
       created_by: ownerId,
@@ -215,9 +230,9 @@ export const demoStoreDmMethods = {
 
     await this.save();
 
-    return channel;
+    return resolveGroupDmChannelState(channel);
   },
-  async updateGroupDm({ channelId, clearIcon = false, iconUrl, name, userId }) {
+  async updateGroupDm({ channelId, clearIcon = false, iconUrl, manageMode, name, userId }) {
     const channel = this.getChannel(channelId);
     if (!channel || channel.type !== CHANNEL_TYPES.GROUP_DM) {
       throw createError("Grupo no encontrado.", 404);
@@ -230,18 +245,43 @@ export const demoStoreDmMethods = {
       throw createError("No puedes editar este grupo.", 403);
     }
 
-    channel.name = String(name || "").trim();
-    if (clearIcon) {
-      channel.icon_url = "";
-    } else if (iconUrl !== undefined) {
-      channel.icon_url = String(iconUrl || "").trim();
+    const resolvedChannel = resolveGroupDmChannelState(channel);
+    if (!canManageGroupDm(resolvedChannel, userId)) {
+      throw createError("Solo el creador puede editar este grupo.", 403);
     }
+
+    if (
+      manageMode !== undefined &&
+      !canChangeGroupDmManageMode(resolvedChannel, userId)
+    ) {
+      throw createError("Solo el creador puede cambiar los permisos del grupo.", 403);
+    }
+
+    const nextName = String(name || "").trim();
+    const nextIconUrl = clearIcon
+      ? ""
+      : iconUrl !== undefined
+        ? String(iconUrl || "").trim()
+        : resolvedChannel.icon_url || "";
+    const nextManageMode =
+      manageMode !== undefined
+        ? normalizeGroupDmManageMode(manageMode)
+        : normalizeGroupDmManageMode(resolvedChannel.group_manage_mode);
+
+    channel.name = nextName;
+    channel.icon_url = nextIconUrl;
+    channel.group_manage_mode = nextManageMode;
+    channel.topic = buildStoredGroupDmTopic({
+      iconUrl: nextIconUrl,
+      manageMode: nextManageMode,
+      topic: resolvedChannel.topic || "Grupo directo"
+    });
     channel.updated_at = new Date().toISOString();
 
     await this.save();
 
     return {
-      channel
+      channel: resolveGroupDmChannelState(channel)
     };
   },
   async inviteGroupDmMembers({ channelId, recipientIds, userId }) {
@@ -255,6 +295,11 @@ export const demoStoreDmMethods = {
     );
     if (!membership) {
       throw createError("No puedes invitar personas a este grupo.", 403);
+    }
+
+    const resolvedChannel = resolveGroupDmChannelState(channel);
+    if (!canManageGroupDm(resolvedChannel, userId)) {
+      throw createError("Solo el creador puede invitar personas a este grupo.", 403);
     }
 
     const currentMemberships = this.db.channel_members.filter((item) => item.channel_id === channelId);

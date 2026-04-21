@@ -93,6 +93,12 @@ export function Dialog({ dialog, guildChannels = [], onClose, onSubmit, users })
   const isGroupInviteDialog = dialog.type === "dm_group_invite";
   const isGroupAvatarDialog = isGroupCreateDialog || isGroupEditDialog;
   const activeGroup = dialog.channel || null;
+  const canChangeGroupManageMode =
+    isGroupCreateDialog ||
+    Boolean(
+      activeGroup?.can_change_group_permissions ||
+        String(activeGroup?.created_by || "") === String(dialog.currentUserId || "")
+    );
   const activeGroupParticipantIds = useMemo(
     () => new Set((activeGroup?.participants || []).map((participant) => participant.id).filter(Boolean)),
     [activeGroup]
@@ -113,6 +119,7 @@ export function Dialog({ dialog, guildChannels = [], onClose, onSubmit, users })
   const [friendQuery, setFriendQuery] = useState("");
   const [groupIconFile, setGroupIconFile] = useState(null);
   const [groupIconPreview, setGroupIconPreview] = useState("");
+  const [groupManageMode, setGroupManageMode] = useState("owner");
   const [clearGroupIconRequested, setClearGroupIconRequested] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -161,6 +168,9 @@ export function Dialog({ dialog, guildChannels = [], onClose, onSubmit, users })
     setRecipientIds([]);
     setFriendQuery("");
     setGroupIconFile(null);
+    setGroupManageMode(
+      isGroupEditDialog ? String(activeGroup?.group_manage_mode || "owner") : "owner"
+    );
     setClearGroupIconRequested(false);
     setGroupIconPreview((previous) => {
       releasePreviewUrl(previous);
@@ -265,6 +275,7 @@ export function Dialog({ dialog, guildChannels = [], onClose, onSubmit, users })
         description,
         iconFile: groupIconFile,
         kind,
+        manageMode: groupManageMode,
         name,
         parentId: parentId || null,
         recipientId,
@@ -507,6 +518,47 @@ export function Dialog({ dialog, guildChannels = [], onClose, onSubmit, users })
                     value={name}
                   />
                 </label>
+              ) : null}
+
+              {isGroupCreateDialog || isGroupEditDialog ? (
+                <div className="dialog-field">
+                  <span className="dialog-field-label">
+                    <Icon name="settings" />
+                    <em>Permisos del grupo</em>
+                  </span>
+                  {canChangeGroupManageMode ? (
+                    <>
+                      <div className="dialog-field-helper">
+                        Decide si solo el creador puede editar el grupo e invitar personas, o si
+                        cualquier integrante tambien puede hacerlo.
+                      </div>
+                      <div className="dialog-segmented-control">
+                        <button
+                          className={groupManageMode === "owner" ? "active" : ""}
+                          onClick={() => setGroupManageMode("owner")}
+                          type="button"
+                        >
+                          <Icon name="profile" size={16} />
+                          <span>Solo el creador</span>
+                        </button>
+                        <button
+                          className={groupManageMode === "members" ? "active" : ""}
+                          onClick={() => setGroupManageMode("members")}
+                          type="button"
+                        >
+                          <Icon name="community" size={16} />
+                          <span>Todos</span>
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="dialog-field-helper">
+                      {groupManageMode === "members"
+                        ? "Ahora mismo todos los integrantes pueden editar el grupo e invitar personas."
+                        : "Ahora mismo solo el creador puede editar el grupo e invitar personas."}
+                    </div>
+                  )}
+                </div>
               ) : null}
 
               {isGroupEditDialog ? (

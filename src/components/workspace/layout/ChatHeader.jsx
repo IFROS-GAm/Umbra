@@ -84,6 +84,8 @@ export function ChatHeader({
           label: activeChannel?.display_name || title
         }
       : null;
+  const canEditDirectGroup = Boolean(activeChannel?.can_edit_group);
+  const canInviteDirectGroupMembers = Boolean(activeChannel?.can_invite_group_members);
 
   return (
     <header className="chat-header">
@@ -237,26 +239,30 @@ export function ChatHeader({
                 </button>
                 {isDirectGroupConversation ? (
                   <>
-                    <button
-                      aria-label="Invitar personas"
-                      className="ghost-button icon-only tooltip-anchor"
-                      data-tooltip="Invitar personas"
-                      data-tooltip-position="bottom"
-                      onClick={() => onInviteDirectGroupMembers?.()}
-                      type="button"
-                    >
-                      <Icon name="userAdd" />
-                    </button>
-                    <button
-                      aria-label="Editar grupo"
-                      className="ghost-button icon-only tooltip-anchor"
-                      data-tooltip="Editar grupo"
-                      data-tooltip-position="bottom"
-                      onClick={() => onEditDirectGroup?.()}
-                      type="button"
-                    >
-                      <Icon name="edit" />
-                    </button>
+                    {canInviteDirectGroupMembers ? (
+                      <button
+                        aria-label="Invitar personas"
+                        className="ghost-button icon-only tooltip-anchor"
+                        data-tooltip="Invitar personas"
+                        data-tooltip-position="bottom"
+                        onClick={() => onInviteDirectGroupMembers?.()}
+                        type="button"
+                      >
+                        <Icon name="userAdd" />
+                      </button>
+                    ) : null}
+                    {canEditDirectGroup ? (
+                      <button
+                        aria-label="Editar grupo"
+                        className="ghost-button icon-only tooltip-anchor"
+                        data-tooltip="Editar grupo"
+                        data-tooltip-position="bottom"
+                        onClick={() => onEditDirectGroup?.()}
+                        type="button"
+                      >
+                        <Icon name="edit" />
+                      </button>
+                    ) : null}
                   </>
                 ) : null}
                 {!isDirectGroupConversation && directFriendAction.visible ? (

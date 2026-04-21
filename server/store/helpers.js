@@ -15,6 +15,9 @@ const statusOrder = {
   offline: 3,
   invisible: 4
 };
+const GROUP_DM_META_PREFIX = "[[group-dm-meta:";
+const GROUP_DM_META_SUFFIX = "]]";
+const DEFAULT_GROUP_DM_TOPIC = "Grupo directo";
 
 export function createId() {
   return uuidv4();
@@ -103,6 +106,97 @@ export function buildMessagePreview(content = "", attachments = [], sticker = nu
   }
 
   return `[${attachmentCount} adjuntos]`;
+}
+
+export function normalizeGroupDmManageMode(candidate = "") {
+  return String(candidate || "").trim().toLowerCase() === "members" ? "members" : "owner";
+}
+
+export function parseStoredGroupDmTopic(candidate = "") {
+  const raw = String(candidate || "");
+  if (!raw.startsWith(GROUP_DM_META_PREFIX)) {
+    return {
+      iconUrl: "",
+      manageMode: "owner",
+      topic: raw || DEFAULT_GROUP_DM_TOPIC
+    };
+  }
+
+  const suffixIndex = raw.indexOf(GROUP_DM_META_SUFFIX, GROUP_DM_META_PREFIX.length);
+  if (suffixIndex === -1) {
+    return {
+      iconUrl: "",
+      manageMode: "owner",
+      topic: raw || DEFAULT_GROUP_DM_TOPIC
+    };
+  }
+
+  const encodedPayload = raw.slice(GROUP_DM_META_PREFIX.length, suffixIndex);
+  const visibleTopic = raw.slice(suffixIndex + GROUP_DM_META_SUFFIX.length).trim();
+
+  try {
+    const parsed = JSON.parse(decodeURIComponent(encodedPayload));
+    return {
+      iconUrl: String(parsed?.iconUrl || "").trim(),
+      manageMode: normalizeGroupDmManageMode(parsed?.manageMode),
+      topic: visibleTopic || DEFAULT_GROUP_DM_TOPIC
+    };
+  } catch {
+    return {
+      iconUrl: "",
+      manageMode: "owner",
+      topic: visibleTopic || DEFAULT_GROUP_DM_TOPIC
+    };
+  }
+}
+
+export function buildStoredGroupDmTopic({ iconUrl = "", manageMode = "owner", topic = "" } = {}) {
+  const payload = encodeURIComponent(
+    JSON.stringify({
+      iconUrl: String(iconUrl || "").trim(),
+      manageMode: normalizeGroupDmManageMode(manageMode)
+    })
+  );
+  const visibleTopic = String(topic || "").trim() || DEFAULT_GROUP_DM_TOPIC;
+  return `${GROUP_DM_META_PREFIX}${payload}${GROUP_DM_META_SUFFIX} ${visibleTopic}`;
+}
+
+export function resolveGroupDmChannelState(channel = {}) {
+  if (channel?.type !== CHANNEL_TYPES.GROUP_DM) {
+    return {
+      ...channel
+    };
+  }
+
+  const parsedTopic = parseStoredGroupDmTopic(channel.topic || "");
+  return {
+    ...channel,
+    group_manage_mode: normalizeGroupDmManageMode(
+      channel.group_manage_mode || parsedTopic.manageMode
+    ),
+    icon_url: String(channel.icon_url || parsedTopic.iconUrl || "").trim(),
+    topic: parsedTopic.topic
+  };
+}
+
+export function canManageGroupDm(channel = {}, userId = "") {
+  if (!channel || channel.type !== CHANNEL_TYPES.GROUP_DM || !userId) {
+    return false;
+  }
+
+  if (String(channel.created_by || "") === String(userId || "")) {
+    return true;
+  }
+
+  const resolved = resolveGroupDmChannelState(channel);
+  return normalizeGroupDmManageMode(resolved.group_manage_mode) === "members";
+}
+
+export function canChangeGroupDmManageMode(channel = {}, userId = "") {
+  return (
+    channel?.type === CHANNEL_TYPES.GROUP_DM &&
+    String(channel.created_by || "") === String(userId || "")
+  );
 }
 
 export function resolveMentionUserIds(content, profiles, options = {}) {
@@ -767,6 +861,7 @@ export function buildBootstrapState(db, userId) {
         .map((profile) => ({
           id: profile.id,
           username: profile.username,
+          display_name: profile.username,
           discriminator: profile.discriminator,
           avatar_hue: profile.avatar_hue,
           avatar_url: profile.avatar_url || "",
@@ -788,8 +883,10 @@ export function buildBootstrapState(db, userId) {
         return null;
       }
 
+      const resolvedChannel = resolveGroupDmChannelState(channel);
+
       const fallbackName =
-        channel.type === CHANNEL_TYPES.DM
+        resolvedChannel.type === CHANNEL_TYPES.DM
           ? otherParticipants[0]?.username ||
             "DM"
           : otherParticipants
@@ -798,18 +895,30 @@ export function buildBootstrapState(db, userId) {
 
       const membership = userChannelMembershipById.get(channel.id);
       const unread =
-        Boolean(channel.last_message_at) &&
-        channel.last_message_author_id !== viewerId &&
+        Boolean(resolvedChannel.last_message_at) &&
+        resolvedChannel.last_message_author_id !== viewerId &&
         (!membership?.last_read_at ||
           new Date(membership.last_read_at).getTime() <
-            new Date(channel.last_message_at).getTime())
+            new Date(resolvedChannel.last_message_at).getTime())
           ? 1
           : 0;
 
+      const canManageGroup = canManageGroupDm(resolvedChannel, viewerId);
+      const canChangeGroupPermissions = canChangeGroupDmManageMode(
+        resolvedChannel,
+        viewerId
+      );
+
       return {
-        ...channel,
-        display_name: channel.name || fallbackName || "Conversacion",
+        ...resolvedChannel,
+        display_name: resolvedChannel.name || fallbackName || "Conversacion",
         unread_count: unread,
+        can_change_group_permissions: canChangeGroupPermissions,
+        can_edit_group: canManageGroup,
+        can_invite_group_members: canManageGroup,
+        is_group_creator:
+          resolvedChannel.type === CHANNEL_TYPES.GROUP_DM &&
+          String(resolvedChannel.created_by || "") === String(viewerId || ""),
         participants
       };
     })

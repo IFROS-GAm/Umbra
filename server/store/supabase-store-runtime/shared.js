@@ -6,23 +6,30 @@ import {
   SYSTEM_REACTIONS
 } from "../../constants.js";
 import {
+  buildStoredGroupDmTopic,
   buildInvitePreview,
   buildChannelMovePatchPlan,
   buildStoredRoleName,
   buildDefaultGuildStickerRows,
   buildGuildMovePatchPlan,
   buildMessagePreview,
+  canChangeGroupDmManageMode,
+  canManageGroupDm,
   createId,
   enrichMessages,
   getDefaultGuildChannel,
   isGuildVoiceChannel,
+  normalizeGroupDmManageMode,
   normalizeRoleIcon,
+  parseStoredGroupDmTopic,
   resolveMentionUserIds,
+  resolveGroupDmChannelState,
   splitStoredRoleName,
   sortByDateDesc
 } from "../helpers.js";
 
 export {
+  buildStoredGroupDmTopic,
   CHANNEL_TYPES,
   GUILD_CHANNEL_KINDS,
   GUILD_TEMPLATES,
@@ -34,12 +41,17 @@ export {
   buildDefaultGuildStickerRows,
   buildGuildMovePatchPlan,
   buildMessagePreview,
+  canChangeGroupDmManageMode,
+  canManageGroupDm,
   createId,
   enrichMessages,
   getDefaultGuildChannel,
   isGuildVoiceChannel,
+  normalizeGroupDmManageMode,
   normalizeRoleIcon,
+  parseStoredGroupDmTopic,
   resolveMentionUserIds,
+  resolveGroupDmChannelState,
   splitStoredRoleName,
   sortByDateDesc
 };
