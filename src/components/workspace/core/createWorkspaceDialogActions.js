@@ -288,6 +288,13 @@ export function createWorkspaceDialogActions(context, shared = {}) {
           name: values.name,
           recipientIds: values.recipientIds
         });
+
+        if (values.iconFile && !payload?.channel?.icon_url) {
+          showUiNotice(
+            "El grupo se creo, pero la foto quedara disponible cuando apliques el schema nuevo en Supabase."
+          );
+        }
+
         await loadBootstrap(
           {
             channelId: payload.channel.id,

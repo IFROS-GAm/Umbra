@@ -40,6 +40,31 @@ import {
   sortGuildStickers
 } from "./shared.js";
 
+function isMissingChannelIconColumnError(error) {
+  const cause = error?.cause || error;
+  const haystack = [
+    error?.message,
+    cause?.message,
+    cause?.hint,
+    cause?.details
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (!haystack) {
+    return false;
+  }
+
+  return (
+    (haystack.includes("schema cache") ||
+      haystack.includes("could not find the column") ||
+      (haystack.includes("column") && haystack.includes("does not exist"))) &&
+    haystack.includes("icon_url") &&
+    haystack.includes("channels")
+  );
+}
+
 export const supabaseStoreRuntimeInviteDmMethods = {
   async createInvite({ guildId, userId }) {
     const guildRows = await expectData(
@@ -426,7 +451,18 @@ export const supabaseStoreRuntimeInviteDmMethods = {
       updated_at: now
     };
 
-    await expectData(this.client.from("channels").insert(channel));
+    try {
+      await expectData(this.client.from("channels").insert(channel));
+    } catch (error) {
+      if (!isMissingChannelIconColumnError(error)) {
+        throw error;
+      }
+
+      const { icon_url: _ignoredIconUrl, ...fallbackChannel } = channel;
+      await expectData(this.client.from("channels").insert(fallbackChannel));
+      channel.icon_url = "";
+    }
+
     await expectData(
       this.client.from("channel_members").insert(
         participantIds.map((userId) => ({
