@@ -1,5 +1,8 @@
 import { supabase } from "../../../../supabase-browser.js";
-import { clampUnitVolume } from "./voiceRtcSessionConfig.js";
+import {
+  clampUnitVolume,
+  normalizeVoiceParticipantAudioPrefsMap
+} from "./voiceRtcSessionConfig.js";
 
 export function createVoiceRtcSessionControls({
   applyPlaybackToPeer,
@@ -94,6 +97,7 @@ export function createVoiceRtcSessionControls({
     updatePlayback(nextPlayback = {}) {
       const playbackState = getPlaybackState();
       setPlaybackState({
+        ...playbackState,
         deafened:
           typeof nextPlayback.deafened === "boolean"
             ? nextPlayback.deafened
@@ -103,6 +107,17 @@ export function createVoiceRtcSessionControls({
           nextPlayback.outputVolume === undefined
             ? playbackState.outputVolume
             : clampUnitVolume(nextPlayback.outputVolume, playbackState.outputVolume)
+      });
+
+      for (const entry of getPeers().values()) {
+        applyPlaybackToPeer(entry);
+      }
+    },
+    updateParticipantAudioPrefs(nextPrefsByUserId = {}) {
+      const playbackState = getPlaybackState();
+      setPlaybackState({
+        ...playbackState,
+        participantAudioPrefs: normalizeVoiceParticipantAudioPrefsMap(nextPrefsByUserId)
       });
 
       for (const entry of getPeers().values()) {

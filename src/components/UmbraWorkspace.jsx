@@ -74,7 +74,7 @@ export function UmbraWorkspace({
     showUiNotice, submittingMessage, toggleHeaderPanel, toggleVoiceMenu, toggleVoiceState, topbarActionsRef,
     screenShareStream, setScreenShareStream,
     typingUsers, uiNotice, updateVoiceSetting, uploadingAttachments, voiceDevices, voiceMenu,
-    voiceLocalPeerIdRef, voicePeerMedia, voicePresencePeers, voicePresenceUsers, voiceSessions, voiceState, voiceUserIds, voiceInputLevel, voiceInputSpeaking, voiceInputStatus, workspace,
+    voiceLocalPeerIdRef, voicePeerMedia, voicePresencePeers, voicePresenceUsers, voiceRtcSessionRef, voiceSessions, voiceState, voiceUserIds, voiceInputLevel, voiceInputSpeaking, voiceInputStatus, workspace,
     pendingSocialRealtimeActionsRef,
     updateComposerAttachment,
     cycleVoiceDevice, getSelectedDeviceLabel, selectedVoiceDevices
@@ -215,6 +215,10 @@ export function UmbraWorkspace({
     setVoiceParticipantMenu(null);
   }, [activeChannel?.id, joinedVoiceChannelId, setVoiceParticipantMenu]);
 
+  useEffect(() => {
+    voiceRtcSessionRef.current?.updateParticipantAudioPrefs?.(voiceParticipantPrefs || {});
+  }, [joinedVoiceChannelId, voiceParticipantPrefs, voiceRtcSessionRef]);
+
   useEffect(
     () => () => {
       if (membersResizeCleanupRef.current) {
@@ -231,6 +235,7 @@ export function UmbraWorkspace({
     handleStartMembersResize,
     handleToggleVoiceParticipantMuted,
     handleToggleVoiceParticipantVideo,
+    handleUpdateVoiceParticipantIntensity,
     handleUpdateVoiceParticipantVolume,
     openFullProfile,
     openProfileCard,
@@ -880,6 +885,7 @@ export function UmbraWorkspace({
           handleStatusChange={handleStatusChange}
           handleToggleVoiceParticipantMuted={handleToggleVoiceParticipantMuted}
           handleToggleVoiceParticipantVideo={handleToggleVoiceParticipantVideo}
+          handleUpdateVoiceParticipantIntensity={handleUpdateVoiceParticipantIntensity}
           handleUpdateVoiceParticipantVolume={handleUpdateVoiceParticipantVolume}
           incomingCall={incomingCall}
           inviteModalState={inviteModalState}

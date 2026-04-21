@@ -81,6 +81,8 @@ const ENV_ICE_SERVERS = parseIceServersFromEnv();
 const SHOULD_FORCE_RELAY =
   String(import.meta.env.VITE_WEBRTC_FORCE_RELAY || "").trim().toLowerCase() === "true";
 const LIVEKIT_SERVER_URL = String(import.meta.env.VITE_LIVEKIT_URL || "").trim();
+export const MAX_VOICE_PARTICIPANT_VOLUME = 300;
+export const MAX_VOICE_PARTICIPANT_INTENSITY = 220;
 let sharedVoiceAudioContext = null;
 
 export function hasLiveKitVoiceClientConfig() {
@@ -118,6 +120,62 @@ export function clampUnitVolume(value, fallback = 1) {
   return Math.max(0, Math.min(1, numeric));
 }
 
+export function clampParticipantVolume(value, fallback = 100) {
+  const numeric = Number.isFinite(Number(value)) ? Number(value) : fallback;
+  return Math.max(0, Math.min(MAX_VOICE_PARTICIPANT_VOLUME, Math.round(numeric)));
+}
+
+export function clampParticipantIntensity(value, fallback = 100) {
+  const numeric = Number.isFinite(Number(value)) ? Number(value) : fallback;
+  return Math.max(0, Math.min(MAX_VOICE_PARTICIPANT_INTENSITY, Math.round(numeric)));
+}
+
+export function normalizeVoiceParticipantAudioPref(pref = {}) {
+  return {
+    intensity: clampParticipantIntensity(pref?.intensity, 100),
+    muted: Boolean(pref?.muted),
+    videoHidden: Boolean(pref?.videoHidden),
+    volume: clampParticipantVolume(pref?.volume, 100)
+  };
+}
+
+export function normalizeVoiceParticipantAudioPrefsMap(prefsByUserId = {}) {
+  if (!prefsByUserId || typeof prefsByUserId !== "object") {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(prefsByUserId)
+      .filter(([userId]) => String(userId || "").trim())
+      .map(([userId, pref]) => [String(userId).trim(), normalizeVoiceParticipantAudioPref(pref)])
+  );
+}
+
+export function buildParticipantAudioMix(pref = {}) {
+  const normalized = normalizeVoiceParticipantAudioPref(pref);
+  const intensityNormalized = clampParticipantIntensity(normalized.intensity, 100) / 100;
+  const boost = normalized.muted ? 0 : normalized.volume / 100;
+  const intensityGain = normalized.muted
+    ? 0
+    : intensityNormalized <= 1
+      ? Math.max(0.45, intensityNormalized)
+      : 1 + Math.max(0, normalized.intensity - 100) / 100;
+  const compressorAmount =
+    Math.max(0, normalized.intensity - 100) / 120 + Math.max(0, boost - 1) / 2.4;
+  const compressorEnabled = compressorAmount > 0.001;
+
+  return {
+    compressorAttack: compressorEnabled ? 0.003 : 0.001,
+    compressorKnee: compressorEnabled ? 22 : 0,
+    compressorRatio: compressorEnabled ? 1.8 + compressorAmount * 5.2 : 1,
+    compressorRelease: compressorEnabled ? 0.16 : 0.05,
+    compressorThreshold: compressorEnabled ? -18 - compressorAmount * 14 : 0,
+    intensityGain,
+    normalized,
+    outputGain: boost
+  };
+}
+
 export async function applySinkId(audioElement, outputDeviceId) {
   if (!audioElement?.setSinkId || !outputDeviceId) {
     return;
@@ -125,6 +183,18 @@ export async function applySinkId(audioElement, outputDeviceId) {
 
   try {
     await audioElement.setSinkId(outputDeviceId);
+  } catch {
+    // Keep the default device when Chromium blocks explicit routing.
+  }
+}
+
+export async function applyAudioContextSinkId(context, outputDeviceId) {
+  if (!context?.setSinkId || !outputDeviceId) {
+    return;
+  }
+
+  try {
+    await context.setSinkId(outputDeviceId);
   } catch {
     // Keep the default device when Chromium blocks explicit routing.
   }

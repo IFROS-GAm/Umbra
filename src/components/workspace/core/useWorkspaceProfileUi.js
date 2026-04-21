@@ -1,6 +1,10 @@
 import { useEffect } from "react";
 
 import { buildWorkspaceProfileCardData } from "../workspaceProfileCard.js";
+import {
+  clampParticipantIntensity,
+  clampParticipantVolume
+} from "../voice/rtc/voiceRtcSessionConfig.js";
 
 export function useWorkspaceProfileUi({
   activeChannel,
@@ -102,12 +106,12 @@ export function useWorkspaceProfileUi({
 
   function getVoiceParticipantPref(userId) {
     const current = voiceParticipantPrefs?.[userId] || {};
-    const volume = Number(current.volume);
 
     return {
+      intensity: clampParticipantIntensity(current.intensity, 100),
       muted: Boolean(current.muted),
       videoHidden: Boolean(current.videoHidden),
-      volume: Number.isFinite(volume) ? Math.max(0, Math.min(200, Math.round(volume))) : 100
+      volume: clampParticipantVolume(current.volume, 100)
     };
   }
 
@@ -122,10 +126,8 @@ export function useWorkspaceProfileUi({
         ...current,
         ...nextValues
       };
-      const nextVolume = Number(nextPref.volume);
-      nextPref.volume = Number.isFinite(nextVolume)
-        ? Math.max(0, Math.min(200, Math.round(nextVolume)))
-        : 100;
+      nextPref.intensity = clampParticipantIntensity(nextPref.intensity, 100);
+      nextPref.volume = clampParticipantVolume(nextPref.volume, 100);
 
       return {
         ...previous,
@@ -151,6 +153,12 @@ export function useWorkspaceProfileUi({
   function handleUpdateVoiceParticipantVolume(userId, value) {
     updateVoiceParticipantPref(userId, {
       volume: value
+    });
+  }
+
+  function handleUpdateVoiceParticipantIntensity(userId, value) {
+    updateVoiceParticipantPref(userId, {
+      intensity: value
     });
   }
 
@@ -262,6 +270,7 @@ export function useWorkspaceProfileUi({
     handleStartMembersResize,
     handleToggleVoiceParticipantMuted,
     handleToggleVoiceParticipantVideo,
+    handleUpdateVoiceParticipantIntensity,
     handleUpdateVoiceParticipantVolume,
     openFullProfile,
     openProfileCard,
