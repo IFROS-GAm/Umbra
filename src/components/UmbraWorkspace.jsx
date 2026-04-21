@@ -432,6 +432,7 @@ export function UmbraWorkspace({
     rejectIncomingCall
   } = useWorkspaceDesktopNotifications({
     accessToken,
+    activeSelection,
     dmMenuPrefs,
     guildMenuPrefs,
     handleVoiceLeave: handleLeaveVoiceSession,

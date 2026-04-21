@@ -68,8 +68,21 @@ function findCallParticipant(workspace, channel, callerId) {
   );
 }
 
+function isDocumentActivelyVisible() {
+  if (typeof document === "undefined") {
+    return false;
+  }
+
+  const isVisible = document.visibilityState !== "hidden";
+  const isFocused =
+    typeof document.hasFocus === "function" ? document.hasFocus() : true;
+
+  return isVisible && isFocused;
+}
+
 export function useWorkspaceDesktopNotifications({
   accessToken,
+  activeSelection,
   dmMenuPrefs,
   guildMenuPrefs,
   handleVoiceLeave,
@@ -83,6 +96,7 @@ export function useWorkspaceDesktopNotifications({
   const desktopBridge = getDesktopBridge();
   const currentUserId = workspace?.current_user?.id || "";
   const stateRef = useRef({
+    activeSelection,
     currentUserId,
     dmMenuPrefs,
     guildMenuPrefs,
@@ -101,6 +115,7 @@ export function useWorkspaceDesktopNotifications({
 
   useEffect(() => {
     stateRef.current = {
+      activeSelection,
       currentUserId,
       dmMenuPrefs,
       guildMenuPrefs,
@@ -110,6 +125,7 @@ export function useWorkspaceDesktopNotifications({
       workspace
     };
   }, [
+    activeSelection,
     currentUserId,
     dmMenuPrefs,
     guildMenuPrefs,
@@ -255,6 +271,14 @@ export function useWorkspaceDesktopNotifications({
       const runtimeWorkspace = nextWorkspace || currentWorkspace;
 
       if (!message?.id || message.author?.id === nextCurrentUserId || !runtimeWorkspace) {
+        return;
+      }
+
+      const isActiveChannelMessage =
+        String(stateRef.current.activeSelection?.channelId || "").trim() ===
+        String(message.channel_id || "").trim();
+
+      if (isActiveChannelMessage && isDocumentActivelyVisible()) {
         return;
       }
 
