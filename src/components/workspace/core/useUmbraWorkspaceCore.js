@@ -142,6 +142,7 @@ export function useUmbraWorkspaceCore({
   });
   const attachmentUploadCounterRef = useRef(0);
   const previousComposerAttachmentsRef = useRef([]);
+  const pendingSocialRealtimeActionsRef = useRef([]);
 
   useEffect(() => {
     initializeUmbraSoundEffects();
@@ -360,6 +361,7 @@ export function useUmbraWorkspaceCore({
     messageMenuFor,
     onIncomingMessage,
     onVoiceUpdateNotification,
+    pendingSocialRealtimeActionsRef,
     patchChannelMessages,
     queueMarkRead,
     readChannelCache,
@@ -532,6 +534,6 @@ export function useUmbraWorkspaceCore({
       setScreenShareStream, setSubmittingMessage, setUiNotice, setVoiceDevices, setVoiceMenu, setVoicePeerMedia, setVoicePresencePeers, setVoicePresenceUsers, setVoiceSessions, setVoiceState, setVoiceJoinReadyChannelId, settingsOpen, showUiNotice,
     submittingMessage, theme, toggleHeaderPanel, toggleVoiceMenu, toggleVoiceState, topbarActionsRef, typingEvents, typingUsers,
     uiNotice, updateVoiceSetting, uploadingAttachments, voiceDevices, voiceInputLevel, voiceInputStatus,
-    voiceInputSpeaking, voiceJoinReadyChannelId, voiceJoinReadyChannelIdRef, voiceLocalPeerIdRef, voiceMenu, voicePeerMedia, voicePresencePeers, voicePresenceUsers, voiceSessions, voiceState, voiceUserIds, screenShareStream, workspace
+    voiceInputSpeaking, voiceJoinReadyChannelId, voiceJoinReadyChannelIdRef, voiceLocalPeerIdRef, voiceMenu, voicePeerMedia, voicePresencePeers, voicePresenceUsers, voiceSessions, voiceState, voiceUserIds, screenShareStream, workspace, pendingSocialRealtimeActionsRef
   };
 }

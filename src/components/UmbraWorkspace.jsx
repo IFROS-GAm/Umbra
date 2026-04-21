@@ -75,6 +75,7 @@ export function UmbraWorkspace({
     screenShareStream, setScreenShareStream,
     typingUsers, uiNotice, updateVoiceSetting, uploadingAttachments, voiceDevices, voiceMenu,
     voiceLocalPeerIdRef, voicePeerMedia, voicePresencePeers, voicePresenceUsers, voiceSessions, voiceState, voiceUserIds, voiceInputLevel, voiceInputSpeaking, voiceInputStatus, workspace,
+    pendingSocialRealtimeActionsRef,
     updateComposerAttachment,
     cycleVoiceDevice, getSelectedDeviceLabel, selectedVoiceDevices
   } = useUmbraWorkspaceCore({ accessToken, initialSelection, onSignOut });
@@ -272,12 +273,14 @@ export function UmbraWorkspace({
     currentUserId,
     loadBootstrap,
     openingDmRequestsRef,
+    pendingSocialRealtimeActionsRef,
     setActiveSelection,
     setAppError,
     setFullProfile,
     setHeaderPanel,
     setProfileCard,
     setSettingsOpen,
+    setWorkspace,
     showUiNotice,
     workspace
   });

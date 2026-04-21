@@ -24,6 +24,7 @@ export function useWorkspaceSocketRealtimeEffects({
   localReadStateRef,
   onIncomingMessage,
   onVoiceUpdateNotification,
+  pendingSocialRealtimeActionsRef,
   patchChannelMessages,
   queueMarkRead,
   readChannelCache,
@@ -47,6 +48,46 @@ export function useWorkspaceSocketRealtimeEffects({
 
     const socket = getSocket(accessToken);
 
+    const shouldSkipOptimisticSocialRefresh = (payload = {}) => {
+      if (payload?.type !== "friends:update" || !pendingSocialRealtimeActionsRef) {
+        return false;
+      }
+
+      const currentUserId = String(workspaceRef.current?.current_user?.id || "").trim();
+      const initiatorUserId = String(payload.userId || "").trim();
+      const targetUserId = String(payload.targetUserId || "").trim();
+
+      if (!currentUserId || initiatorUserId !== currentUserId || !targetUserId) {
+        return false;
+      }
+
+      const now = Date.now();
+      const pendingEntries = Array.isArray(pendingSocialRealtimeActionsRef.current)
+        ? pendingSocialRealtimeActionsRef.current
+        : [];
+      let matched = false;
+
+      pendingSocialRealtimeActionsRef.current = pendingEntries.filter((entry) => {
+        if (!entry?.expiresAt || entry.expiresAt <= now) {
+          return false;
+        }
+
+        const sameEntry =
+          !matched &&
+          String(entry.userId || "") === initiatorUserId &&
+          String(entry.targetUserId || "") === targetUserId;
+
+        if (sameEntry) {
+          matched = true;
+          return false;
+        }
+
+        return true;
+      });
+
+      return matched;
+    };
+
     const refreshNavigation = async (payload = {}) => {
       if (
         ![
@@ -58,6 +99,10 @@ export function useWorkspaceSocketRealtimeEffects({
           "friends:update"
         ].includes(payload?.type)
       ) {
+        return;
+      }
+
+      if (shouldSkipOptimisticSocialRefresh(payload)) {
         return;
       }
 
