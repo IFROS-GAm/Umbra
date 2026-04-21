@@ -319,7 +319,6 @@ export function useWorkspaceDesktopNotifications({
       }
 
       if (isActiveChannelMessage && isDocumentActivelyVisible()) {
-        playUmbraSound("notification", { volume: 0.1 });
         return;
       }
 
