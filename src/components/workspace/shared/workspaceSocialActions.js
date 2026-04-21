@@ -439,32 +439,86 @@ export function createWorkspaceSocialActions({
   }
 
   async function handleSendFriendRequest(profile) {
-    if (!profile?.id || profile.isCurrentUser || profile.isBlockedByMe || profile.isFriend) {
+    const targetUserId = String(profile?.id || "").trim();
+    if (!targetUserId) {
       return;
     }
 
+    const latestTargetUser = resolveWorkspaceUser(workspace, profile || { id: targetUserId });
+    const receivedRequest = (workspace?.friend_requests_received || []).find(
+      (request) =>
+        String(request?.user?.id || request?.requester_id || "").trim() === targetUserId
+    );
+    const sentRequest = (workspace?.friend_requests_sent || []).find(
+      (request) =>
+        String(request?.user?.id || request?.recipient_id || "").trim() === targetUserId
+    );
+    const isCurrentUser = String(workspace?.current_user?.id || "").trim() === targetUserId;
+    const isBlockedByMe = (workspace?.blocked_users || []).some(
+      (user) => String(user?.id || "").trim() === targetUserId
+    );
+    const isFriend = (workspace?.friends || []).some(
+      (user) => String(user?.id || "").trim() === targetUserId
+    );
+
+    if (isCurrentUser) {
+      showUiNotice("No puedes enviarte una solicitud a ti mismo.");
+      return;
+    }
+
+    if (isBlockedByMe) {
+      showUiNotice("Desbloquea a esta persona para enviarle una solicitud.");
+      return;
+    }
+
+    if (isFriend) {
+      showUiNotice("Ya son sombras.");
+      return;
+    }
+
+    let optimisticRequest = null;
+
     try {
-      if (profile.friendRequestState === "received" && profile.friendRequestId) {
-        await api.acceptFriendRequest({ requestId: profile.friendRequestId });
-        queueLocalSocialSyncSkip(profile.id);
+      if (receivedRequest?.id) {
+        await api.acceptFriendRequest({ requestId: receivedRequest.id });
+        queueLocalSocialSyncSkip(targetUserId);
         applyFriendshipState({
-          requestId: profile.friendRequestId,
-          targetUser: profile
+          requestId: receivedRequest.id,
+          targetUser: latestTargetUser,
+          targetUserId
         });
         showUiNotice("Ahora son sombras.");
         return;
       }
 
-      if (profile.friendRequestState === "sent") {
+      if (sentRequest?.id) {
+        showUiNotice("La solicitud ya fue enviada.");
         return;
       }
 
-      const payload = await api.sendFriendRequest({ recipientId: profile.id });
-      queueLocalSocialSyncSkip(profile.id);
+      optimisticRequest = buildPendingRequest({
+        currentUserId,
+        direction: "sent",
+        otherUser: latestTargetUser,
+        request: null
+      });
+
+      applyPendingFriendRequestState({
+        request: optimisticRequest,
+        targetUser: latestTargetUser
+      });
+
+      const payload = await api.sendFriendRequest({ recipientId: targetUserId });
+      queueLocalSocialSyncSkip(targetUserId);
       if (payload?.status === "accepted") {
         applyFriendshipState({
-          requestId: payload?.request_id || payload?.request?.id || profile.friendRequestId || null,
-          targetUser: profile
+          requestId:
+            payload?.request_id ||
+            payload?.request?.id ||
+            receivedRequest?.id ||
+            optimisticRequest.id,
+          targetUser: latestTargetUser,
+          targetUserId
         });
         showUiNotice("Ahora son sombras.");
         return;
@@ -472,10 +526,18 @@ export function createWorkspaceSocialActions({
 
       applyPendingFriendRequestState({
         request: payload?.request || null,
-        targetUser: profile
+        targetUser: latestTargetUser
       });
-      showUiNotice(`Solicitud enviada a ${profile.displayName || profile.username}.`);
+      showUiNotice(
+        `Solicitud enviada a ${latestTargetUser?.display_name || latestTargetUser?.displayName || latestTargetUser?.username || profile.displayName || profile.username}.`
+      );
     } catch (error) {
+      if (optimisticRequest?.id) {
+        clearPendingFriendRequestState({
+          requestId: optimisticRequest.id,
+          targetUserId
+        });
+      }
       setAppError(error.message);
     }
   }
