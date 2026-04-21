@@ -278,10 +278,6 @@ export function useWorkspaceDesktopNotifications({
         String(stateRef.current.activeSelection?.channelId || "").trim() ===
         String(message.channel_id || "").trim();
 
-      if (isActiveChannelMessage && isDocumentActivelyVisible()) {
-        return;
-      }
-
       const messageId = String(message.id);
       if (notifiedMessageIdsRef.current.has(messageId)) {
         return;
@@ -319,6 +315,11 @@ export function useWorkspaceDesktopNotifications({
       }
 
       if (!shouldNotify) {
+        return;
+      }
+
+      if (isActiveChannelMessage && isDocumentActivelyVisible()) {
+        playUmbraSound("notification", { volume: 0.1 });
         return;
       }
 
