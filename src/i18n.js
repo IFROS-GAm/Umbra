@@ -925,7 +925,23 @@ export function applyLanguageToDocument(language) {
   document.documentElement.lang = language || DEFAULT_LANGUAGE;
 }
 
-export function translate(language, key, fallback = "") {
+function interpolateTemplate(template, params = null) {
+  const source = String(template || "");
+  if (!params || typeof params !== "object") {
+    return source;
+  }
+
+  return source.replace(/\{([a-zA-Z0-9_]+)\}/g, (match, token) => {
+    if (!Object.prototype.hasOwnProperty.call(params, token)) {
+      return match;
+    }
+
+    return String(params[token] ?? "");
+  });
+}
+
+export function translate(language, key, fallback = "", params = null) {
   const lang = MESSAGES[language] ? language : DEFAULT_LANGUAGE;
-  return MESSAGES[lang]?.[key] || MESSAGES[DEFAULT_LANGUAGE]?.[key] || fallback || key;
+  const message = MESSAGES[lang]?.[key] || MESSAGES[DEFAULT_LANGUAGE]?.[key] || fallback || key;
+  return interpolateTemplate(message, params);
 }

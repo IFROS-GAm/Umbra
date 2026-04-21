@@ -280,7 +280,7 @@ export function useWorkspaceDesktopNotifications({
       let title = "Umbra";
       const senderName = message.display_name || message.author?.username || "Usuario";
       const bodyPreview = getMessagePreview(message, preview);
-      const t = (key, fallback) => translate(nextLanguage, key, fallback);
+      const t = (key, fallback, params = null) => translate(nextLanguage, key, fallback, params);
 
       if (target.kind === "dm") {
         const dmPrefs = nextDmPrefs?.[target.channel.id] || { muted: false };
@@ -333,13 +333,16 @@ export function useWorkspaceDesktopNotifications({
         }
       }
 
-      const t = (key, fallback) => translate(nextLanguage, key, fallback);
+      const t = (key, fallback, params = null) => translate(nextLanguage, key, fallback, params);
       const senderName =
         requester?.display_name || requester?.username || t("friends.request.userFallback", "Una sombra");
       const title = t("friends.request.notificationTitle", "Nueva solicitud de amistad");
       const body = t(
         "friends.request.notificationBody",
-        `${senderName} quiere unirse a tus sombras.`
+        `${senderName} quiere unirse a tus sombras.`,
+        {
+          name: senderName
+        }
       );
 
       playUmbraSound("notification");
@@ -416,11 +419,15 @@ export function useWorkspaceDesktopNotifications({
       const caller = findCallParticipant(runtimeWorkspace, channel, newlyJoined[0]);
       const callerName = caller?.display_name || caller?.username || channel.display_name || "Umbra";
       const groupName = channel.display_name || callerName;
-      const t = (key, fallback) => translate(nextLanguage, key, fallback);
+      const t = (key, fallback, params = null) => translate(nextLanguage, key, fallback, params);
       const body =
         channel.type === "group_dm"
-          ? t("notifications.groupCallBody", `Llamada entrante en ${groupName}`)
-          : t("notifications.directCallBody", `${callerName} te esta llamando`);
+          ? t("notifications.groupCallBody", `Llamada entrante en ${groupName}`, {
+              name: groupName
+            })
+          : t("notifications.directCallBody", `${callerName} te esta llamando`, {
+              name: callerName
+            });
       const popupPayload = {
         avatarUrl: caller?.avatar_url || "",
         body,
