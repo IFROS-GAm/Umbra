@@ -11,6 +11,11 @@ import {
   normalizeVoiceParticipantAudioPrefsMap,
   primeSharedVoiceAudioContext
 } from "./voiceRtcSessionConfig.js";
+import {
+  isRetryableVoiceSignalAbortError,
+  normalizeVoiceErrorMessage,
+  shouldSilenceVoiceSessionError
+} from "./voiceRtcSessionErrors.js";
 
 function safeParseMetadata(metadata) {
   if (!metadata) {
@@ -180,6 +185,7 @@ export function createLiveKitVoiceSession({
   let localScreenShareStream = null;
   let lastMetadataPayload = "";
   let localTrackSyncPromise = Promise.resolve();
+  const CONNECT_RETRY_DELAY_MS = 250;
 
   const log = (event, details = {}, level = "info") => {
     const logger = typeof console[level] === "function" ? console[level] : console.info;
@@ -191,13 +197,7 @@ export function createLiveKitVoiceSession({
   };
 
   const handleSessionError = (error) => {
-    const message = String(error?.message || error || "").toLowerCase();
-    if (
-      destroyed ||
-      message.includes("client initiated disconnect") ||
-      message.includes("cancelled") ||
-      message.includes("canceled")
-    ) {
+    if (shouldSilenceVoiceSessionError(error, { destroyed })) {
       return;
     }
 
@@ -205,6 +205,29 @@ export function createLiveKitVoiceSession({
       onError(error);
     }
   };
+
+  function waitForReconnectWindow() {
+    return new Promise((resolve) => {
+      window.setTimeout(resolve, CONNECT_RETRY_DELAY_MS);
+    });
+  }
+
+  async function connectToRoom() {
+    log("token:request", {});
+    const payload = await api.fetchLiveKitToken({
+      peerId: selfPeerId,
+      room: channelId
+    });
+
+    if (destroyed) {
+      return;
+    }
+
+    log("room:connecting", {
+      url: payload?.url || null
+    });
+    await room.connect(payload.url, payload.token);
+  }
 
   function getParticipantAudioMix(remoteAudio) {
     const participantPref = remoteAudio?.userId
@@ -725,21 +748,37 @@ export function createLiveKitVoiceSession({
 
   connectPromise = (async () => {
     try {
-      log("token:request", {});
-      const payload = await api.fetchLiveKitToken({
-        peerId: selfPeerId,
-        room: channelId
-      });
+      await connectToRoom();
+    } catch (error) {
+      if (!destroyed && isRetryableVoiceSignalAbortError(error)) {
+        log(
+          "room:connect:retry",
+          {
+            message: normalizeVoiceErrorMessage(error)
+          },
+          "warn"
+        );
+        try {
+          room.disconnect();
+        } catch {
+          // Ignore disconnect races while resetting the initial handshake.
+        }
 
-      if (destroyed) {
-        return;
+        await waitForReconnectWindow();
+
+        if (destroyed) {
+          return;
+        }
+
+        try {
+          await connectToRoom();
+          return;
+        } catch (retryError) {
+          handleSessionError(retryError);
+          throw retryError;
+        }
       }
 
-      log("room:connecting", {
-        url: payload?.url || null
-      });
-      await room.connect(payload.url, payload.token);
-    } catch (error) {
       handleSessionError(error);
       throw error;
     }

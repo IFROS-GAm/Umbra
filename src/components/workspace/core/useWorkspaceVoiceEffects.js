@@ -11,6 +11,7 @@ import {
 } from "../voiceRealtimeHelpers.js";
 import { createRealtimePresenceSync } from "../voice/presence/createRealtimePresenceSync.js";
 import { createLiveKitVoiceSession } from "../voice/rtc/createLiveKitVoiceSession.js";
+import { getVoiceErrorNoticeMessage } from "../voice/rtc/voiceRtcSessionErrors.js";
 import { shouldUseLiveKitVoice } from "../voice/rtc/voiceRtcSessionConfig.js";
 import { createVoiceRtcSession } from "../voiceRtcSession.js";
 
@@ -541,8 +542,9 @@ export function useWorkspaceVoiceEffects({
           localPeerId: voiceLocalPeerIdRef.current,
           micMuted: Boolean(voiceState.micMuted),
           onError: (error) => {
-            if (error?.message) {
-              setUiNotice(error.message);
+            const noticeMessage = getVoiceErrorNoticeMessage(error);
+            if (noticeMessage) {
+              setUiNotice(noticeMessage);
             }
           },
           onPeerMediaChange: applyPeerMediaPayload,
@@ -567,8 +569,9 @@ export function useWorkspaceVoiceEffects({
           localPeerId: voiceLocalPeerIdRef.current,
           micMuted: Boolean(voiceState.micMuted),
           onError: (error) => {
-            if (error?.message) {
-              setUiNotice(error.message);
+            const noticeMessage = getVoiceErrorNoticeMessage(error);
+            if (noticeMessage) {
+              setUiNotice(noticeMessage);
             }
           },
           onPeerMediaChange: applyPeerMediaPayload,
@@ -606,7 +609,10 @@ export function useWorkspaceVoiceEffects({
         session.destroy().catch(() => {});
       };
     } catch (error) {
-      setUiNotice(error.message || "No se pudo iniciar la sesion de voz.");
+      const noticeMessage = getVoiceErrorNoticeMessage(error);
+      if (noticeMessage) {
+        setUiNotice(noticeMessage);
+      }
       return undefined;
     }
   }, [
