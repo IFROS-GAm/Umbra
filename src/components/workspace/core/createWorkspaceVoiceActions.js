@@ -100,6 +100,10 @@ export function createWorkspaceVoiceActions(context, shared) {
 
   function getSelectedDeviceLabel(kind) {
     const selectedId = selectedVoiceDevices[kind];
+    if (selectedId === "default") {
+      return "Configuracion predeterminada";
+    }
+
     const devices = voiceDevices[kind] || [];
     const index = devices.findIndex((device) => device.deviceId === selectedId);
     const device = index >= 0 ? devices[index] : devices[0];

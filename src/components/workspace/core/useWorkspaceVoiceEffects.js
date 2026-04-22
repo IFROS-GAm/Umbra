@@ -341,10 +341,10 @@ export function useWorkspaceVoiceEffects({
               ? previous.audioinput
               : nextDevices.audioinput[0]?.deviceId || "default",
           audiooutput:
-            previous.audiooutput !== "default" &&
-            nextDevices.audiooutput.some((device) => device.deviceId === previous.audiooutput)
-              ? previous.audiooutput
-              : nextDevices.audiooutput[0]?.deviceId || "default",
+            previous.audiooutput === "default" ||
+            !nextDevices.audiooutput.some((device) => device.deviceId === previous.audiooutput)
+              ? "default"
+              : previous.audiooutput,
           videoinput:
             previous.videoinput !== "default" &&
             nextDevices.videoinput.some((device) => device.deviceId === previous.videoinput)
