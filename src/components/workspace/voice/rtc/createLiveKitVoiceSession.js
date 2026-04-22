@@ -185,6 +185,7 @@ export function createLiveKitVoiceSession({
   let localScreenShareStream = null;
   let lastMetadataPayload = "";
   let localTrackSyncPromise = Promise.resolve();
+  let removeAudioUnlockListeners = null;
   const CONNECT_RETRY_DELAY_MS = 250;
 
   const log = (event, details = {}, level = "info") => {
@@ -205,6 +206,56 @@ export function createLiveKitVoiceSession({
       onError(error);
     }
   };
+
+  function updateAudioUnlockListeners() {
+    if (destroyed || room.canPlaybackAudio) {
+      removeAudioUnlockListeners?.();
+      removeAudioUnlockListeners = null;
+      return;
+    }
+
+    if (removeAudioUnlockListeners || typeof window === "undefined") {
+      return;
+    }
+
+    const unlockPlayback = () => {
+      room.startAudio?.()
+        .then(() => {
+          log("audio:playback:unlocked", {
+            canPlaybackAudio: Boolean(room.canPlaybackAudio)
+          });
+          updateAudioUnlockListeners();
+          applyPlaybackToRemoteAudio().catch((error) => {
+            handleSessionError(error);
+          });
+        })
+        .catch((error) => {
+          log(
+            "audio:playback:unlock-blocked",
+            {
+              message: error?.message || String(error)
+            },
+            "warn"
+          );
+        });
+    };
+
+    const listenerOptions = {
+      capture: true,
+      passive: true
+    };
+    const eventNames = ["pointerdown", "keydown", "touchstart"];
+
+    eventNames.forEach((eventName) => {
+      window.addEventListener(eventName, unlockPlayback, listenerOptions);
+    });
+
+    removeAudioUnlockListeners = () => {
+      eventNames.forEach((eventName) => {
+        window.removeEventListener(eventName, unlockPlayback, listenerOptions);
+      });
+    };
+  }
 
   function waitForReconnectWindow() {
     return new Promise((resolve) => {
@@ -263,16 +314,21 @@ export function createLiveKitVoiceSession({
   }
 
   function safePlayRemoteAudio(remoteAudio, peerId) {
-    remoteAudio?.element?.play?.().catch((error) => {
-      log(
-        "audio:play-blocked",
-        {
-          message: error?.message || String(error),
-          targetPeerId: peerId
-        },
-        "warn"
-      );
-    });
+    remoteAudio?.element?.play?.()
+      .then(() => {
+        updateAudioUnlockListeners();
+      })
+      .catch((error) => {
+        log(
+          "audio:play-blocked",
+          {
+            message: error?.message || String(error),
+            targetPeerId: peerId
+          },
+          "warn"
+        );
+        updateAudioUnlockListeners();
+      });
   }
 
   async function ensureDirectRemoteAudio(remoteAudio) {
@@ -685,9 +741,19 @@ export function createLiveKitVoiceSession({
       log("room:connected", {
         participantCount: room.remoteParticipants.size
       });
+      updateAudioUnlockListeners();
       await syncParticipantMetadata();
       await queueLocalTrackSync();
       await syncAllParticipants();
+    })
+    .on(RoomEvent.AudioPlaybackStatusChanged, () => {
+      log("audio:playback:status", {
+        canPlaybackAudio: Boolean(room.canPlaybackAudio)
+      });
+      updateAudioUnlockListeners();
+      applyPlaybackToRemoteAudio().catch((error) => {
+        handleSessionError(error);
+      });
     })
     .on(RoomEvent.ParticipantConnected, async (participant) => {
       log("participant:connected", {
@@ -743,6 +809,7 @@ export function createLiveKitVoiceSession({
         reason: reason || null
       });
       connected = false;
+      updateAudioUnlockListeners();
       emitPresenceSnapshot();
     });
 
@@ -880,6 +947,8 @@ export function createLiveKitVoiceSession({
     },
     async destroy() {
       destroyed = true;
+      removeAudioUnlockListeners?.();
+      removeAudioUnlockListeners = null;
 
       for (const remoteAudio of remoteAudioEntries.values()) {
         cleanupProcessedRemoteAudio(remoteAudio);

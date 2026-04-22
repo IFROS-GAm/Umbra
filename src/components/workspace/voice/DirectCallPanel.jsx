@@ -217,12 +217,6 @@ export function DirectCallPanel({
     return null;
   }, [connectedParticipants, expandedMedia, screenShareQualityLabel]);
 
-  useEffect(() => {
-    if (expandedMedia && !expandedMediaEntry) {
-      setExpandedMedia(null);
-    }
-  }, [expandedMedia, expandedMediaEntry]);
-
   function openExpandedMedia(user, kind) {
     if (kind === "screen" && user?.localScreenShareStream) {
       setExpandedMedia({
