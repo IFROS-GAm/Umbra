@@ -328,6 +328,7 @@ export function UmbraWorkspaceStage({
                     onToggleCamera={() => handleToggleVoiceState("cameraEnabled")}
                     onToggleMute={() => handleToggleVoiceState("micMuted")}
                     onToggleScreenShare={handleToggleScreenShare}
+                    screenShareQualityLabel={screenShareQualityLabel}
                     voiceStageParticipants={voiceStageParticipants}
                     voiceState={voiceState}
                   />

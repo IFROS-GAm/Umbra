@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import { Avatar } from "../../Avatar.jsx";
 import { Icon } from "../../Icon.jsx";
@@ -156,9 +156,11 @@ export function DirectCallPanel({
   onToggleCamera,
   onToggleMute,
   onToggleScreenShare,
+  screenShareQualityLabel = "720P 30 FPS",
   voiceStageParticipants,
   voiceState
 }) {
+  const [expandedMedia, setExpandedMedia] = useState(null);
   const currentUserId = currentUser?.id || null;
   const participants = useMemo(
     () =>
@@ -180,6 +182,78 @@ export function DirectCallPanel({
       ? "Ambos estan conectados en esta llamada."
       : "Llamada privada activa. Esperando a la otra persona o sigue chateando mientras hablas.";
   const panelTopic = normalizeConversationCopy(activeChannel?.topic || callSummary);
+  const expandedMediaEntry = useMemo(() => {
+    if (!expandedMedia?.userId || !expandedMedia?.kind) {
+      return null;
+    }
+
+    const targetUser =
+      connectedParticipants.find((participant) => participant.id === expandedMedia.userId) || null;
+
+    if (!targetUser) {
+      return null;
+    }
+
+    if (expandedMedia.kind === "screen" && targetUser.localScreenShareStream) {
+      return {
+        kind: "screen",
+        label: targetUser.screenShareQualityLabel || screenShareQualityLabel,
+        stream: targetUser.localScreenShareStream,
+        sublabel: targetUser.custom_status || "Transmision activa",
+        user: targetUser
+      };
+    }
+
+    if (expandedMedia.kind === "camera" && targetUser.localCameraStream) {
+      return {
+        kind: "camera",
+        label: "Camara",
+        stream: targetUser.localCameraStream,
+        sublabel: getParticipantPresenceLabel(targetUser),
+        user: targetUser
+      };
+    }
+
+    return null;
+  }, [connectedParticipants, expandedMedia, screenShareQualityLabel]);
+
+  useEffect(() => {
+    if (expandedMedia && !expandedMediaEntry) {
+      setExpandedMedia(null);
+    }
+  }, [expandedMedia, expandedMediaEntry]);
+
+  function openExpandedMedia(user, kind) {
+    if (kind === "screen" && user?.localScreenShareStream) {
+      setExpandedMedia({
+        kind,
+        userId: user.id
+      });
+      return true;
+    }
+
+    if (kind === "camera" && user?.localCameraStream) {
+      setExpandedMedia({
+        kind,
+        userId: user.id
+      });
+      return true;
+    }
+
+    return false;
+  }
+
+  function handlePrimaryMediaClick(event, user) {
+    if (openExpandedMedia(user, "screen")) {
+      return;
+    }
+
+    if (openExpandedMedia(user, "camera")) {
+      return;
+    }
+
+    onOpenProfileCard?.(event, user, user.display_name);
+  }
 
   return (
     <section className={`direct-call-panel direct-call-panel-${displayMode}`.trim()}>
@@ -203,13 +277,11 @@ export function DirectCallPanel({
         )}`.trim()}
       >
         {connectedParticipants.map((user) => (
-          <button
+          <div
             className={`direct-call-panel-participant ${user.isStreaming ? "streaming" : ""} ${user.isSpeaking ? "speaking" : ""}`.trim()}
             key={user.id}
             onContextMenu={(event) => onOpenParticipantMenu?.(event, user)}
-            onClick={(event) => onOpenProfileCard?.(event, user, user.display_name)}
             style={user.stageStyle}
-            type="button"
           >
             <div className="direct-call-panel-tile-top">
               <span className="direct-call-panel-tile-status">{getParticipantTileStatus(user)}</span>
@@ -229,18 +301,68 @@ export function DirectCallPanel({
               </div>
             </div>
 
-            <div className="direct-call-panel-participant-media">
-              {user.isStreaming && user.localScreenShareStream ? (
-                <div className="direct-call-panel-video-shell">
-                  <DirectCallVideo
-                    muted={user.mediaMuted}
-                    stream={user.localScreenShareStream}
-                    user={user}
-                    volume={user.mediaVolume}
+            <button
+              className={`direct-call-panel-media-button ${
+                user.isStreaming || user.isCameraOn ? "has-media" : ""
+              }`.trim()}
+              onClick={(event) => handlePrimaryMediaClick(event, user)}
+              type="button"
+            >
+              <div className="direct-call-panel-participant-media">
+                {user.isStreaming && user.localScreenShareStream ? (
+                  <div className="direct-call-panel-video-shell">
+                    <DirectCallVideo
+                      muted={user.mediaMuted}
+                      stream={user.localScreenShareStream}
+                      user={user}
+                      volume={user.mediaVolume}
+                    />
+                  </div>
+                ) : user.isCameraOn && user.localCameraStream ? (
+                  <div className="direct-call-panel-video-shell">
+                    <DirectCallVideo
+                      muted={user.mediaMuted}
+                      stream={user.localCameraStream}
+                      user={user}
+                      volume={user.mediaVolume}
+                    />
+                  </div>
+                ) : user.isVideoHiddenForMe && (user.isStreaming || user.isCameraOn) ? (
+                  <div className="voice-stage-hidden-media">
+                    <Avatar
+                      hue={user.avatar_hue}
+                      label={user.display_name || user.username}
+                      size={84}
+                      src={user.avatar_url}
+                      status={user.status}
+                    />
+                    <span>{user.hiddenVideoLabel || "Video oculto"}</span>
+                  </div>
+                ) : (
+                  <Avatar
+                    hue={user.avatar_hue}
+                    label={user.display_name || user.username}
+                    size={displayMode === "call" ? 132 : 108}
+                    src={user.avatar_url}
+                    status={user.status}
                   />
-                </div>
-              ) : user.isCameraOn && user.localCameraStream ? (
-                <div className="direct-call-panel-video-shell">
+                )}
+              </div>
+
+              {user.isStreaming || user.isCameraOn ? (
+                <span className="direct-call-panel-expand-chip">
+                  <Icon name="expand" size={14} />
+                </span>
+              ) : null}
+            </button>
+
+            {user.isStreaming && user.localScreenShareStream && user.isCameraOn && user.localCameraStream ? (
+              <button
+                className="direct-call-panel-camera-pip"
+                onClick={() => openExpandedMedia(user, "camera")}
+                type="button"
+              >
+                <div className="voice-stage-video-shell pip direct-call-panel-pip-shell">
                   <DirectCallVideo
                     muted={user.mediaMuted}
                     stream={user.localCameraStream}
@@ -248,35 +370,21 @@ export function DirectCallPanel({
                     volume={user.mediaVolume}
                   />
                 </div>
-              ) : user.isVideoHiddenForMe && (user.isStreaming || user.isCameraOn) ? (
-                <div className="voice-stage-hidden-media">
-                  <Avatar
-                    hue={user.avatar_hue}
-                    label={user.display_name || user.username}
-                    size={84}
-                    src={user.avatar_url}
-                    status={user.status}
-                  />
-                  <span>{user.hiddenVideoLabel || "Video oculto"}</span>
-                </div>
-              ) : (
-                <Avatar
-                  hue={user.avatar_hue}
-                  label={user.display_name || user.username}
-                  size={displayMode === "call" ? 132 : 108}
-                  src={user.avatar_url}
-                  status={user.status}
-                />
-              )}
-            </div>
+                <span className="direct-call-panel-pip-label">Camara</span>
+              </button>
+            ) : null}
 
-            <div className="direct-call-panel-nameplate">
+            <button
+              className="direct-call-panel-nameplate direct-call-panel-nameplate-button"
+              onClick={(event) => onOpenProfileCard?.(event, user, user.display_name)}
+              type="button"
+            >
               <div className="direct-call-panel-copy">
                 <strong>{user.display_name || user.username}</strong>
                 <span>{getParticipantPresenceLabel(user)}</span>
               </div>
-            </div>
-          </button>
+            </button>
+          </div>
         ))}
       </div>
 
@@ -338,6 +446,54 @@ export function DirectCallPanel({
           <Icon name="screenShare" size={14} />
           <span>La llamada esta compartiendo pantalla. Cambia a solo llamada para verla mejor.</span>
         </button>
+      ) : null}
+
+      {expandedMediaEntry ? (
+        <div
+          className="voice-stage-stream-overlay"
+          onClick={() => setExpandedMedia(null)}
+          role="presentation"
+        >
+          <div
+            className="voice-stage-stream-modal"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <div className="voice-stage-stream-modal-top">
+              <div className="voice-stage-stream-modal-badges">
+                <span className="voice-stage-quality">{expandedMediaEntry.label}</span>
+                {expandedMediaEntry.kind === "screen" ? (
+                  <span className="voice-stage-live">EN VIVO</span>
+                ) : null}
+              </div>
+              <button
+                className="voice-stage-stream-close"
+                onClick={() => setExpandedMedia(null)}
+                type="button"
+              >
+                <Icon name="close" size={16} />
+              </button>
+            </div>
+
+            <div className="voice-stage-stream-frame">
+              <div className="voice-stage-video-shell stream-modal">
+                <DirectCallVideo
+                  muted={expandedMediaEntry.user.mediaMuted}
+                  stream={expandedMediaEntry.stream}
+                  user={expandedMediaEntry.user}
+                  volume={expandedMediaEntry.user.mediaVolume}
+                />
+              </div>
+
+              <div className="voice-stage-stream-chip">
+                <strong>
+                  {expandedMediaEntry.user.display_name || expandedMediaEntry.user.username}
+                </strong>
+                <small>{expandedMediaEntry.sublabel}</small>
+              </div>
+            </div>
+          </div>
+        </div>
       ) : null}
     </section>
   );

@@ -406,6 +406,17 @@
     transform 140ms ease;
 }
 
+.direct-call-panel-media-button,
+.direct-call-panel-nameplate-button,
+.direct-call-panel-camera-pip {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  margin: 0;
+  padding: 0;
+}
+
 .direct-call-panel-participant:hover {
   border-color: rgba(255, 255, 255, 0.14);
   transform: translateY(-1px);
@@ -420,6 +431,23 @@
   box-shadow:
     inset 0 0 0 1px rgba(91, 132, 255, 0.9),
     0 0 0 1px rgba(91, 132, 255, 0.14);
+}
+
+.direct-call-panel-media-button {
+  cursor: pointer;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  text-align: inherit;
+  width: 100%;
+}
+
+.direct-call-panel-media-button:focus-visible,
+.direct-call-panel-nameplate-button:focus-visible,
+.direct-call-panel-camera-pip:focus-visible {
+  outline: 2px solid rgba(183, 201, 255, 0.94);
+  outline-offset: 2px;
 }
 
 .direct-call-panel-tile-top {
@@ -460,6 +488,7 @@
   justify-content: center;
   min-height: 0;
   position: relative;
+  width: 100%;
 }
 
 .direct-call-panel-video-shell {
@@ -478,6 +507,54 @@
   width: 100%;
 }
 
+.direct-call-panel-expand-chip {
+  align-items: center;
+  background: rgba(18, 20, 25, 0.76);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  color: var(--text-0);
+  display: inline-flex;
+  height: 32px;
+  justify-content: center;
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 32px;
+  z-index: 2;
+}
+
+.direct-call-panel-camera-pip {
+  aspect-ratio: 16 / 10;
+  bottom: 88px;
+  cursor: pointer;
+  overflow: visible;
+  position: absolute;
+  right: 16px;
+  width: clamp(124px, 26%, 188px);
+  z-index: 2;
+}
+
+.direct-call-panel-pip-shell {
+  border-radius: 18px;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+.direct-call-panel-pip-label {
+  background: rgba(18, 20, 25, 0.82);
+  border-radius: 999px;
+  bottom: 10px;
+  color: var(--text-0);
+  font-size: 0.72rem;
+  font-weight: 800;
+  left: 10px;
+  padding: 5px 9px;
+  position: absolute;
+  z-index: 1;
+}
+
 .direct-call-panel-nameplate {
   align-items: flex-end;
   background: rgba(18, 20, 25, 0.82);
@@ -494,6 +571,15 @@
   position: absolute;
   right: 16px;
   z-index: 1;
+}
+
+.direct-call-panel-nameplate-button {
+  cursor: pointer;
+  text-align: left;
+}
+
+.direct-call-panel-nameplate-button:hover {
+  background: rgba(28, 31, 39, 0.88);
 }
 
 .direct-call-panel-state-chip {
@@ -544,6 +630,10 @@
 .direct-call-panel-participant .avatar-shell {
   position: relative;
   z-index: 1;
+}
+
+.direct-call-panel-participant .voice-stage-hidden-media {
+  min-height: 100%;
 }
 
 .direct-call-panel-controls {

@@ -198,6 +198,12 @@
     min-height: 220px;
   }
 
+  .direct-call-panel-camera-pip {
+    bottom: 76px;
+    right: 12px;
+    width: clamp(108px, 30%, 156px);
+  }
+
   .direct-call-panel-nameplate {
     bottom: 12px;
     left: 12px;
