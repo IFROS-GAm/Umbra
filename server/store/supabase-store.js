@@ -1070,18 +1070,18 @@ export class SupabaseStore {
     return rows[0] || null;
   }
 
-  async canAccessChannel({ channelId, userId }) {
-    const channel = await this.getChannel(channelId);
-    if (!channel) {
+  async canAccessChannel({ channel, channelId, userId }) {
+    const resolvedChannel = channel || (await this.getChannel(channelId));
+    if (!resolvedChannel) {
       return false;
     }
 
-    if (channel.guild_id) {
+    if (resolvedChannel.guild_id) {
       const memberships = await expectData(
         this.client
           .from("guild_members")
           .select("guild_id")
-          .eq("guild_id", channel.guild_id)
+          .eq("guild_id", resolvedChannel.guild_id)
           .eq("user_id", userId)
           .limit(1)
       );
@@ -1093,7 +1093,7 @@ export class SupabaseStore {
       this.client
         .from("channel_members")
         .select("channel_id,hidden")
-        .eq("channel_id", channelId)
+        .eq("channel_id", resolvedChannel.id || channelId)
         .eq("user_id", userId)
         .limit(1)
     );

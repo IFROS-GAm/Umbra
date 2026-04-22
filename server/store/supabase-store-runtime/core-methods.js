@@ -187,7 +187,7 @@ export const supabaseStoreRuntimeCoreMethods = {
       return null;
     }
 
-    if (!(await this.canAccessChannel({ channelId, userId }))) {
+    if (!(await this.canAccessChannel({ channel, channelId, userId }))) {
       throw createError("No puedes acceder a este canal.", 403);
     }
 

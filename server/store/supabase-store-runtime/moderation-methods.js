@@ -72,7 +72,7 @@ export const supabaseStoreRuntimeModerationMethods = {
       throw createError("Canal no encontrado.", 404);
     }
 
-    if (!(await this.canAccessChannel({ channelId, userId }))) {
+    if (!(await this.canAccessChannel({ channel, channelId, userId }))) {
       throw createError("No puedes acceder a este canal.", 403);
     }
 
@@ -678,7 +678,7 @@ export const supabaseStoreRuntimeModerationMethods = {
       return null;
     }
 
-    if (!(await this.canAccessChannel({ channelId, userId }))) {
+    if (!(await this.canAccessChannel({ channel, channelId, userId }))) {
       throw createError("No puedes acceder a este canal.", 403);
     }
 

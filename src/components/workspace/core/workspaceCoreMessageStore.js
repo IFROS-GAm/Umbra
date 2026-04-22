@@ -387,21 +387,24 @@ export function createWorkspaceMessageStore({
 
   function rememberLocalRead(channelId, lastReadAt, lastReadMessageId) {
     if (!channelId || !lastReadMessageId) {
-      return;
+      return false;
     }
 
     const previous = localReadStateRef.current.get(channelId);
     const previousTime = previous?.lastReadAt ? new Date(previous.lastReadAt).getTime() : 0;
     const nextTime = lastReadAt ? new Date(lastReadAt).getTime() : 0;
+    const sameMessageId =
+      String(previous?.lastReadMessageId || "") === String(lastReadMessageId || "");
 
-    if (previous && previousTime > nextTime) {
-      return;
+    if (previous && (previousTime > nextTime || (sameMessageId && previousTime >= nextTime))) {
+      return false;
     }
 
     localReadStateRef.current.set(channelId, {
       lastReadAt,
       lastReadMessageId
     });
+    return true;
   }
 
   async function loadBootstrap(
@@ -468,7 +471,10 @@ export function createWorkspaceMessageStore({
       return;
     }
 
-    rememberLocalRead(channelId, lastReadAt, lastReadMessageId);
+    const didAdvanceReadState = rememberLocalRead(channelId, lastReadAt, lastReadMessageId);
+    if (!didAdvanceReadState) {
+      return;
+    }
 
     setWorkspace((previous) =>
       mergeLocalReadStateIntoWorkspace(

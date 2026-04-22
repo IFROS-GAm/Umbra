@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 
 import { api } from "../../../api.js";
+import { getSocket } from "../../../socket.js";
 import { BACKGROUND_PREFETCH_COOLDOWN_MS } from "../workspaceCoreMessageStore.js";
 import { shouldUseLiveKitVoice } from "../voice/rtc/voiceRtcSessionConfig.js";
 import {
@@ -10,6 +11,46 @@ import {
   isChannelCacheFresh,
   listLikelyChannelIds
 } from "../workspaceHelpers.js";
+
+function isRealtimeSocketConnected(accessToken) {
+  if (!accessToken) {
+    return false;
+  }
+
+  try {
+    return Boolean(getSocket(accessToken)?.connected);
+  } catch {
+    return false;
+  }
+}
+
+function scheduleAdaptiveLoop(run, getDelayMs) {
+  let timeoutId = null;
+  let cancelled = false;
+
+  async function tick() {
+    try {
+      await run();
+    } catch {
+      // Individual sync loops stay best-effort and should never break scheduling.
+    }
+
+    if (cancelled) {
+      return;
+    }
+
+    timeoutId = window.setTimeout(tick, getDelayMs());
+  }
+
+  tick();
+
+  return () => {
+    cancelled = true;
+    if (timeoutId) {
+      window.clearTimeout(timeoutId);
+    }
+  };
+}
 
 export function useWorkspaceBackgroundEffects({
   accessToken,
@@ -50,6 +91,11 @@ export function useWorkspaceBackgroundEffects({
         return;
       }
 
+      const socketConnected = isRealtimeSocketConnected(accessToken);
+      if (socketConnected && historyScrollStateRef?.current?.autoSyncToLatest !== false) {
+        return;
+      }
+
       if (historyScrollStateRef?.current?.autoSyncToLatest === false) {
         return;
       }
@@ -70,16 +116,18 @@ export function useWorkspaceBackgroundEffects({
       }
     }
 
-    syncActiveChannelMessages();
+    const stopLoop = scheduleAdaptiveLoop(syncActiveChannelMessages, () => {
+      const socketConnected = isRealtimeSocketConnected(accessToken);
+      if (socketConnected) {
+        return document.hidden ? 120_000 : 45_000;
+      }
 
-    const interval = window.setInterval(
-      syncActiveChannelMessages,
-      document.hidden ? 1800 : 900
-    );
+      return document.hidden ? 30_000 : 12_000;
+    });
 
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
+      stopLoop();
       channelFallbackSyncRef.current = false;
     };
   }, [accessToken, activeChannel?.is_voice, activeSelection.channelId, Boolean(workspace)]);
@@ -96,6 +144,10 @@ export function useWorkspaceBackgroundEffects({
         return;
       }
 
+      if (isRealtimeSocketConnected(accessToken)) {
+        return;
+      }
+
       bootstrapFallbackSyncRef.current = true;
 
       try {
@@ -109,16 +161,13 @@ export function useWorkspaceBackgroundEffects({
       }
     }
 
-    syncWorkspaceShellFromCurrentSelection();
-
-    const interval = window.setInterval(
-      syncWorkspaceShellFromCurrentSelection,
-      document.hidden ? 3600 : 1800
+    const stopLoop = scheduleAdaptiveLoop(syncWorkspaceShellFromCurrentSelection, () =>
+      document.hidden ? 120_000 : 60_000
     );
 
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
+      stopLoop();
       bootstrapFallbackSyncRef.current = false;
     };
   }, [accessToken, Boolean(workspace)]);
@@ -164,6 +213,10 @@ export function useWorkspaceBackgroundEffects({
         return;
       }
 
+      if (isRealtimeSocketConnected(accessToken)) {
+        return;
+      }
+
       voiceFallbackSyncRef.current = true;
 
       try {
@@ -187,16 +240,13 @@ export function useWorkspaceBackgroundEffects({
       }
     }
 
-    syncLiveKitOccupancy();
-
-    const interval = window.setInterval(
-      syncLiveKitOccupancy,
-      document.hidden ? 4200 : 1800
+    const stopLoop = scheduleAdaptiveLoop(syncLiveKitOccupancy, () =>
+      document.hidden ? 60_000 : 20_000
     );
 
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
+      stopLoop();
       voiceFallbackSyncRef.current = false;
     };
   }, [
@@ -239,6 +289,10 @@ export function useWorkspaceBackgroundEffects({
         : (handle) => window.clearTimeout(handle);
 
     const handle = scheduleIdle(async () => {
+      if (document.hidden) {
+        return;
+      }
+
       for (const channelId of candidateIds) {
         const cachedEntry = readChannelCache(channelId);
         if (cancelled || (cachedEntry && isChannelCacheFresh(cachedEntry))) {
