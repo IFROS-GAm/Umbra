@@ -2,7 +2,6 @@ import {
   applySinkId,
   buildParticipantAudioMix,
   buildRtcConfiguration,
-  createDualMonoOutput,
   createHiddenAudioElement,
   createRemoteStream,
   getSharedVoiceAudioContext,
@@ -45,18 +44,10 @@ export function createVoiceRtcPeerSession({
           state: context.state
         });
         updateAudioUnlockListeners();
-        for (const entry of peers.values()) {
-          applyPlaybackToPeer(entry);
-        }
       }).catch(() => {
         updateAudioUnlockListeners();
       });
       updateAudioUnlockListeners();
-      return null;
-    }
-
-    if (context.state !== "running") {
-      return null;
     }
 
     return context;
@@ -88,9 +79,6 @@ export function createVoiceRtcPeerSession({
             via: "user-gesture"
           });
           updateAudioUnlockListeners();
-          for (const entry of peers.values()) {
-            applyPlaybackToPeer(entry);
-          }
         }).catch((error) => {
           log("audio:context:resume-blocked", {
             message: error?.message || "No se pudo reanudar el AudioContext.",
@@ -211,9 +199,7 @@ export function createVoiceRtcPeerSession({
     const {
       compressor,
       intensityGain,
-      monoMixer,
       outputGain,
-      stereoMerger,
       source
     } = entry.processedAudio;
 
@@ -221,9 +207,7 @@ export function createVoiceRtcPeerSession({
       source?.disconnect?.();
       compressor?.disconnect?.();
       intensityGain?.disconnect?.();
-      monoMixer?.disconnect?.();
       outputGain?.disconnect?.();
-      stereoMerger?.disconnect?.();
     } catch {
       // Ignore audio node disconnect issues during teardown.
     }
@@ -285,25 +269,17 @@ export function createVoiceRtcPeerSession({
       const intensityGain = context.createGain();
       const outputGain = context.createGain();
       const destination = context.createMediaStreamDestination();
-      const dualMonoOutput = createDualMonoOutput(context, outputGain);
 
       lastNode.connect(intensityGain);
       intensityGain.connect(outputGain);
-
-      if (dualMonoOutput) {
-        dualMonoOutput.stereoMerger.connect(destination);
-      } else {
-        outputGain.connect(destination);
-      }
+      outputGain.connect(destination);
 
       entry.processedAudio = {
         compressor,
         destination,
         intensityGain,
-        monoMixer: dualMonoOutput?.monoMixer || null,
         outputGain,
         source,
-        stereoMerger: dualMonoOutput?.stereoMerger || null,
         streamKey,
         useCompressor: Boolean(mix.useCompressor)
       };
@@ -335,8 +311,8 @@ export function createVoiceRtcPeerSession({
     }
 
     const { mix, playbackState } = getParticipantAudioMix(entry);
-    const canRouteAudio = hasLiveRemoteTrack(entry.remoteAudioStream, "audio");
-    const usingProcessedAudio = canRouteAudio && ensureProcessedRemoteAudio(entry, mix);
+    const canProcess = mix.usesProcessing && hasLiveRemoteTrack(entry.remoteAudioStream, "audio");
+    const usingProcessedAudio = canProcess && ensureProcessedRemoteAudio(entry, mix);
 
     if (!usingProcessedAudio) {
       ensureDirectRemoteAudio(entry);

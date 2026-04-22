@@ -243,28 +243,6 @@ export async function primeSharedVoiceAudioContext() {
   return context;
 }
 
-export function createDualMonoOutput(context, inputNode) {
-  if (!context || !inputNode) {
-    return null;
-  }
-
-  const monoMixer = context.createGain();
-  monoMixer.channelCount = 1;
-  monoMixer.channelCountMode = "explicit";
-  monoMixer.channelInterpretation = "speakers";
-
-  const stereoMerger = context.createChannelMerger(2);
-
-  inputNode.connect(monoMixer);
-  monoMixer.connect(stereoMerger, 0, 0);
-  monoMixer.connect(stereoMerger, 0, 1);
-
-  return {
-    monoMixer,
-    stereoMerger
-  };
-}
-
 export function createRemoteStream() {
   return new MediaStream();
 }

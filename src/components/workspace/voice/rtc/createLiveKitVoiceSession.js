@@ -5,7 +5,6 @@ import {
   applySinkId,
   buildParticipantAudioMix,
   clampUnitVolume,
-  createDualMonoOutput,
   createHiddenAudioElement,
   getSharedVoiceAudioContext,
   hasTrack,
@@ -209,11 +208,7 @@ export function createLiveKitVoiceSession({
   };
 
   function updateAudioUnlockListeners() {
-    const voiceAudioContext =
-      remoteAudioEntries.size > 0 ? getSharedVoiceAudioContext() : null;
-    const needsVoiceAudioUnlock = voiceAudioContext?.state === "suspended";
-
-    if (destroyed || (room.canPlaybackAudio && !needsVoiceAudioUnlock)) {
+    if (destroyed || room.canPlaybackAudio) {
       removeAudioUnlockListeners?.();
       removeAudioUnlockListeners = null;
       return;
@@ -224,55 +219,25 @@ export function createLiveKitVoiceSession({
     }
 
     const unlockPlayback = () => {
-      const unlockTasks = [];
-
-      if (!room.canPlaybackAudio && typeof room.startAudio === "function") {
-        unlockTasks.push(
-          room.startAudio().catch((error) => {
-            log(
-              "audio:playback:unlock-blocked",
-              {
-                message: error?.message || String(error)
-              },
-              "warn"
-            );
-          })
-        );
-      }
-
-      const sharedAudioContext =
-        remoteAudioEntries.size > 0 ? getSharedVoiceAudioContext() : null;
-      if (sharedAudioContext?.state === "suspended") {
-        unlockTasks.push(
-          primeSharedVoiceAudioContext().then((context) => {
-            log("audio:context:resumed", {
-              state: context?.state || "unknown",
-              via: "user-gesture"
-            });
-          }).catch((error) => {
-            log(
-              "audio:context:resume-blocked",
-              {
-                message: error?.message || String(error),
-                state: sharedAudioContext.state
-              },
-              "warn"
-            );
-          })
-        );
-      }
-
-      Promise.allSettled(unlockTasks).finally(() => {
-        log("audio:playback:unlocked", {
-          canPlaybackAudio: Boolean(room.canPlaybackAudio),
-          voiceAudioContextState:
-            (remoteAudioEntries.size > 0 ? getSharedVoiceAudioContext() : null)?.state || "idle"
+      room.startAudio?.()
+        .then(() => {
+          log("audio:playback:unlocked", {
+            canPlaybackAudio: Boolean(room.canPlaybackAudio)
+          });
+          updateAudioUnlockListeners();
+          applyPlaybackToRemoteAudio().catch((error) => {
+            handleSessionError(error);
+          });
+        })
+        .catch((error) => {
+          log(
+            "audio:playback:unlock-blocked",
+            {
+              message: error?.message || String(error)
+            },
+            "warn"
+          );
         });
-        updateAudioUnlockListeners();
-        applyPlaybackToRemoteAudio().catch((error) => {
-          handleSessionError(error);
-        });
-      });
     };
 
     const listenerOptions = {
@@ -331,9 +296,7 @@ export function createLiveKitVoiceSession({
     const {
       compressor,
       intensityGain,
-      monoMixer,
       outputGain,
-      stereoMerger,
       source
     } = remoteAudio.processedAudio;
 
@@ -341,9 +304,7 @@ export function createLiveKitVoiceSession({
       source?.disconnect?.();
       compressor?.disconnect?.();
       intensityGain?.disconnect?.();
-      monoMixer?.disconnect?.();
       outputGain?.disconnect?.();
-      stereoMerger?.disconnect?.();
     } catch {
       // Ignore audio node disconnect issues during teardown.
     }
@@ -410,7 +371,7 @@ export function createLiveKitVoiceSession({
       }
     }
 
-    if (!context || context.state !== "running") {
+    if (!context) {
       return false;
     }
 
@@ -448,25 +409,17 @@ export function createLiveKitVoiceSession({
       const intensityGain = context.createGain();
       const outputGain = context.createGain();
       const destination = context.createMediaStreamDestination();
-      const dualMonoOutput = createDualMonoOutput(context, outputGain);
 
       lastNode.connect(intensityGain);
       intensityGain.connect(outputGain);
-
-      if (dualMonoOutput) {
-        dualMonoOutput.stereoMerger.connect(destination);
-      } else {
-        outputGain.connect(destination);
-      }
+      outputGain.connect(destination);
 
       remoteAudio.processedAudio = {
         compressor,
         destination,
         intensityGain,
-        monoMixer: dualMonoOutput?.monoMixer || null,
         outputGain,
         source,
-        stereoMerger: dualMonoOutput?.stereoMerger || null,
         trackId,
         useCompressor: Boolean(mix.useCompressor)
       };
@@ -536,9 +489,8 @@ export function createLiveKitVoiceSession({
   async function applyPlaybackToRemoteAudio() {
     for (const [peerId, remoteAudio] of remoteAudioEntries.entries()) {
       const mix = getParticipantAudioMix(remoteAudio);
-      const canRouteAudio = Boolean(remoteAudio?.track?.mediaStreamTrack);
       const usingProcessedAudio =
-        canRouteAudio &&
+        mix.usesProcessing &&
         (await ensureProcessedRemoteAudio(remoteAudio, mix, peerId));
 
       if (!usingProcessedAudio) {
