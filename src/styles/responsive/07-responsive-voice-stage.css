@@ -598,6 +598,12 @@
   white-space: nowrap;
 }
 
+.direct-call-panel-state-chip.active {
+  background: rgba(60, 201, 124, 0.16);
+  border-color: rgba(60, 201, 124, 0.28);
+  color: #b2f1cb;
+}
+
 .direct-call-panel-state-chip.danger {
   background: rgba(217, 75, 86, 0.18);
   border-color: rgba(255, 172, 180, 0.24);

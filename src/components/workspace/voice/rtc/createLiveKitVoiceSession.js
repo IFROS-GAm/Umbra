@@ -80,7 +80,11 @@ function createParticipantSnapshot({ channelId, participant }) {
   };
 }
 
-function buildRemoteMediaPayload({ channelId, participant }) {
+function buildRemoteMediaPayload({
+  channelId,
+  participant,
+  resolveRemoteAudioState = null
+}) {
   const snapshot = createParticipantSnapshot({
     channelId,
     participant
@@ -92,6 +96,11 @@ function buildRemoteMediaPayload({ channelId, participant }) {
     participant?.getTrackPublication?.(Track.Source.ScreenShareAudio)?.track || null;
   const audioTrack =
     participant?.getTrackPublication?.(Track.Source.Microphone)?.track || null;
+  const microphoneAudioState = resolveRemoteAudioState?.(snapshot.peerId, Track.Source.Microphone);
+  const screenShareAudioState = resolveRemoteAudioState?.(
+    snapshot.peerId,
+    Track.Source.ScreenShareAudio
+  );
 
   return {
     audioLevel: Math.max(
@@ -104,8 +113,12 @@ function buildRemoteMediaPayload({ channelId, participant }) {
     deafened: snapshot.deafened,
     hasAudio: Boolean(audioTrack || screenAudioTrack),
     micMuted: snapshot.micMuted,
+    microphoneAudioPlaying: Boolean(microphoneAudioState?.playing),
+    microphoneHasAudio: Boolean(audioTrack),
     peerId: snapshot.peerId,
     removed: false,
+    screenShareAudioPlaying: Boolean(screenShareAudioState?.playing),
+    screenShareHasAudio: Boolean(screenAudioTrack),
     screenShareEnabled: snapshot.screenShareEnabled,
     screenShareStream: buildMediaStreamFromTrack(screenTrack),
     speaking: Boolean(participant?.isSpeaking || snapshot.speaking),
@@ -123,7 +136,10 @@ function createRemoteAudioEntry(source = Track.Source.Microphone) {
     attachedTrackSid: "",
     element: createHiddenAudioElement(),
     playbackMode: "direct",
+    playbackBlocked: false,
+    peerId: "",
     processedAudio: null,
+    replayOnMediaReady: null,
     source,
     track: null,
     userId: ""
@@ -158,6 +174,7 @@ export function createLiveKitVoiceSession({
     dynacast: true,
     stopLocalTrackOnUnpublish: false
   });
+  const pendingRemoteAudioEntries = new Set();
   const remoteAudioEntries = new Map();
   const localTracks = {
     audio: {
@@ -219,7 +236,12 @@ export function createLiveKitVoiceSession({
   };
 
   function updateAudioUnlockListeners() {
-    if (destroyed || room.canPlaybackAudio) {
+    const sharedAudioContext = getSharedVoiceAudioContext();
+    const audioContextBlocked = sharedAudioContext?.state === "suspended";
+    if (
+      destroyed ||
+      (room.canPlaybackAudio && pendingRemoteAudioEntries.size === 0 && !audioContextBlocked)
+    ) {
       removeAudioUnlockListeners?.();
       removeAudioUnlockListeners = null;
       return;
@@ -230,15 +252,34 @@ export function createLiveKitVoiceSession({
     }
 
     const unlockPlayback = () => {
-      room.startAudio?.()
-        .then(() => {
-          log("audio:playback:unlocked", {
-            canPlaybackAudio: Boolean(room.canPlaybackAudio)
+      Promise.allSettled([
+        room.startAudio?.(),
+        primeSharedVoiceAudioContext()
+      ])
+        .then((results) => {
+          const rejectedResult = results.find((result) => result.status === "rejected");
+          if (rejectedResult) {
+            log(
+              "audio:playback:unlock-blocked",
+              {
+                message: rejectedResult.reason?.message || String(rejectedResult.reason)
+              },
+              "warn"
+            );
+          } else {
+            log("audio:playback:unlocked", {
+              canPlaybackAudio: Boolean(room.canPlaybackAudio)
+            });
+          }
+
+          [...pendingRemoteAudioEntries].forEach((remoteAudio) => {
+            safePlayRemoteAudio(remoteAudio, remoteAudio.peerId);
           });
-          updateAudioUnlockListeners();
+
           applyPlaybackToRemoteAudio().catch((error) => {
             handleSessionError(error);
           });
+          updateAudioUnlockListeners();
         })
         .catch((error) => {
           log(
@@ -324,12 +365,64 @@ export function createLiveKitVoiceSession({
     remoteAudio.playbackMode = "direct";
   }
 
+  function resolveRemoteAudioState(peerId, source) {
+    const entryKey = buildRemoteAudioEntryKey(peerId, source);
+    const remoteAudio = remoteAudioEntries.get(entryKey);
+    const element = remoteAudio?.element || null;
+
+    return {
+      blocked: Boolean(remoteAudio?.playbackBlocked),
+      playing: Boolean(
+        remoteAudio?.track &&
+          element?.srcObject &&
+          !remoteAudio?.playbackBlocked &&
+          !element?.muted &&
+          !element?.paused
+      )
+    };
+  }
+
+  function emitRemoteParticipantMediaByPeerId(peerId) {
+    if (typeof onPeerMediaChange !== "function") {
+      return;
+    }
+
+    const participant = room.remoteParticipants.get(String(peerId || "").trim());
+    if (!participant) {
+      return;
+    }
+
+    onPeerMediaChange(
+      buildRemoteMediaPayload({
+        channelId,
+        participant,
+        resolveRemoteAudioState
+      })
+    );
+  }
+
   function safePlayRemoteAudio(remoteAudio, peerId) {
-    remoteAudio?.element?.play?.()
+    const playResult = remoteAudio?.element?.play?.();
+    if (!playResult?.catch) {
+      pendingRemoteAudioEntries.delete(remoteAudio);
+      if (remoteAudio) {
+        remoteAudio.playbackBlocked = false;
+      }
+      updateAudioUnlockListeners();
+      emitRemoteParticipantMediaByPeerId(peerId);
+      return;
+    }
+
+    playResult
       .then(() => {
+        pendingRemoteAudioEntries.delete(remoteAudio);
+        remoteAudio.playbackBlocked = false;
         updateAudioUnlockListeners();
+        emitRemoteParticipantMediaByPeerId(peerId);
       })
       .catch((error) => {
+        pendingRemoteAudioEntries.add(remoteAudio);
+        remoteAudio.playbackBlocked = true;
         log(
           "audio:play-blocked",
           {
@@ -339,7 +432,26 @@ export function createLiveKitVoiceSession({
           "warn"
         );
         updateAudioUnlockListeners();
+        emitRemoteParticipantMediaByPeerId(peerId);
       });
+  }
+
+  function attachRemoteAudioReplayListeners(remoteAudio) {
+    if (!remoteAudio?.element || remoteAudio.replayOnMediaReady) {
+      return;
+    }
+
+    const replayOnMediaReady = () => {
+      if (!remoteAudio.track && !remoteAudio.element?.srcObject) {
+        return;
+      }
+
+      safePlayRemoteAudio(remoteAudio, remoteAudio.peerId);
+    };
+
+    remoteAudio.replayOnMediaReady = replayOnMediaReady;
+    remoteAudio.element.addEventListener("loadedmetadata", replayOnMediaReady);
+    remoteAudio.element.addEventListener("canplay", replayOnMediaReady);
   }
 
   async function ensureDirectRemoteAudio(remoteAudio) {
@@ -477,8 +589,13 @@ export function createLiveKitVoiceSession({
       return;
     }
 
+    pendingRemoteAudioEntries.delete(remoteAudio);
     cleanupProcessedRemoteAudio(remoteAudio);
     try {
+      if (remoteAudio.replayOnMediaReady) {
+        remoteAudio.element.removeEventListener("loadedmetadata", remoteAudio.replayOnMediaReady);
+        remoteAudio.element.removeEventListener("canplay", remoteAudio.replayOnMediaReady);
+      }
       remoteAudio.track?.detach?.(remoteAudio.element);
     } catch {
       // Ignore detach races.
@@ -528,7 +645,7 @@ export function createLiveKitVoiceSession({
       }
 
       await applySinkId(remoteAudio.element, playbackState.outputDeviceId);
-      if (remoteAudio.element.srcObject) {
+      if (remoteAudio.track || remoteAudio.element.srcObject) {
         safePlayRemoteAudio(remoteAudio, peerId);
       }
     }
@@ -596,8 +713,10 @@ export function createLiveKitVoiceSession({
       remoteAudioEntries.set(entryKey, remoteAudio);
     }
 
+    remoteAudio.peerId = peerId;
     remoteAudio.source = source;
     remoteAudio.userId = userId;
+    attachRemoteAudioReplayListeners(remoteAudio);
 
     const trackSid = String(publication?.trackSid || track?.sid || "").trim();
     if (remoteAudio.attachedTrackSid !== trackSid) {
@@ -669,7 +788,8 @@ export function createLiveKitVoiceSession({
       onPeerMediaChange(
         buildRemoteMediaPayload({
           channelId,
-          participant
+          participant,
+          resolveRemoteAudioState
         })
       );
     }

@@ -123,6 +123,37 @@ function renderAudioStateChip(user) {
   return null;
 }
 
+function renderScreenShareAudioChip(user) {
+  if (!user?.isStreaming) {
+    return null;
+  }
+
+  if (user?.screenShareAudioPlaying) {
+    return (
+      <span className="direct-call-panel-state-chip active">
+        <Icon name="volume" size={12} />
+        <span>Audio</span>
+      </span>
+    );
+  }
+
+  if (user?.screenShareHasAudio) {
+    return (
+      <span className="direct-call-panel-state-chip">
+        <Icon name="volume" size={12} />
+        <span>Audio listo</span>
+      </span>
+    );
+  }
+
+  return (
+    <span className="direct-call-panel-state-chip">
+      <Icon name="deafen" size={12} />
+      <span>Sin audio</span>
+    </span>
+  );
+}
+
 function getParticipantPresenceLabel(user) {
   if (user?.inCall) {
     return user?.isCurrentUser ? "Tu voz esta conectada" : "En llamada contigo";
@@ -286,6 +317,7 @@ export function DirectCallPanel({
                     <Icon name="screenShare" size={12} />
                   </span>
                 ) : null}
+                {renderScreenShareAudioChip(user)}
                 {user.isCameraOn && !user.localCameraStream ? (
                   <span className="direct-call-panel-state-chip">
                     <Icon name="camera" size={12} />

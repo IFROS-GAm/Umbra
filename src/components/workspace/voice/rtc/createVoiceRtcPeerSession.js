@@ -146,8 +146,12 @@ export function createVoiceRtcPeerSession({
       deafened: Boolean(entry.deafened),
       hasAudio,
       micMuted: Boolean(entry.micMuted),
+      microphoneAudioPlaying: hasAudio,
+      microphoneHasAudio: hasAudio,
       peerId: entry.peerId,
       removed: false,
+      screenShareAudioPlaying: false,
+      screenShareHasAudio: false,
       screenShareEnabled: Boolean(entry.screenShareEnabled),
       screenShareStream:
         videoMode === "screen" && hasLiveRemoteTrack(entry.remoteVideoStream, "video")

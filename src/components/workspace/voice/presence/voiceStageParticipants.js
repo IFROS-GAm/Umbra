@@ -12,6 +12,13 @@ function buildStageIdentity(entry = {}) {
   return String(entry.userId || entry.peerId || "").trim();
 }
 
+function hasLiveTrack(stream, kind) {
+  const tracks = stream?.getTracks?.() || [];
+  return tracks.some(
+    (track) => track.kind === kind && track.readyState !== "ended" && track.enabled !== false
+  );
+}
+
 function buildFallbackPeerEntry({
   activeChannelId,
   currentUserId,
@@ -197,6 +204,7 @@ export function buildVoiceStageParticipants({
       remoteMedia?.screenShareStream && !userPrefs.videoHidden
         ? remoteMedia.screenShareStream
         : null;
+    const localScreenShareHasAudio = hasLiveTrack(screenShareStream, "audio");
     const remoteVideoMode = String(remoteMedia?.videoMode || peerEntry.videoMode || "").trim();
     const remoteCameraEnabled = resolveRemoteBoolean(
       remoteMedia,
@@ -248,6 +256,12 @@ export function buildVoiceStageParticipants({
       mediaMuted: isCurrentVoicePeer ? true : userPrefs.muted,
       mediaVolume: Math.max(0, Math.min(1, userPrefs.volume / 100)),
       screenShareQualityLabel: isCurrentVoicePeer ? screenShareQualityLabel : "720P 30 FPS",
+      screenShareAudioPlaying: isCurrentVoicePeer
+        ? localScreenShareHasAudio
+        : Boolean(remoteMedia?.screenShareAudioPlaying),
+      screenShareHasAudio: isCurrentVoicePeer
+        ? localScreenShareHasAudio
+        : Boolean(remoteMedia?.screenShareHasAudio),
       stageStyle: buildVoiceStageTone(user.avatar_hue || 220),
       voicePeerId: peerId || userId,
       volumeForMe: userPrefs.volume
