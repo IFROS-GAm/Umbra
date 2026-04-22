@@ -39,6 +39,33 @@ function buildMediaStreamFromTrack(track) {
   return new MediaStream([mediaTrack]);
 }
 
+function areRemoteMediaPayloadsEqual(previousPayload, nextPayload) {
+  if (!previousPayload || !nextPayload) {
+    return false;
+  }
+
+  return (
+    previousPayload.audioLevel === nextPayload.audioLevel &&
+    previousPayload.cameraEnabled === nextPayload.cameraEnabled &&
+    previousPayload.cameraStream === nextPayload.cameraStream &&
+    previousPayload.channelId === nextPayload.channelId &&
+    previousPayload.deafened === nextPayload.deafened &&
+    previousPayload.hasAudio === nextPayload.hasAudio &&
+    previousPayload.micMuted === nextPayload.micMuted &&
+    previousPayload.microphoneAudioPlaying === nextPayload.microphoneAudioPlaying &&
+    previousPayload.microphoneHasAudio === nextPayload.microphoneHasAudio &&
+    previousPayload.peerId === nextPayload.peerId &&
+    previousPayload.removed === nextPayload.removed &&
+    previousPayload.screenShareAudioPlaying === nextPayload.screenShareAudioPlaying &&
+    previousPayload.screenShareHasAudio === nextPayload.screenShareHasAudio &&
+    previousPayload.screenShareEnabled === nextPayload.screenShareEnabled &&
+    previousPayload.screenShareStream === nextPayload.screenShareStream &&
+    previousPayload.speaking === nextPayload.speaking &&
+    previousPayload.userId === nextPayload.userId &&
+    previousPayload.videoMode === nextPayload.videoMode
+  );
+}
+
 function createParticipantSnapshot({ channelId, participant }) {
   const metadata = safeParseMetadata(participant?.metadata);
   const peerId = String(participant?.identity || "").trim();
@@ -80,7 +107,7 @@ function createParticipantSnapshot({ channelId, participant }) {
   };
 }
 
-function buildRemoteMediaPayload({ channelId, participant }) {
+function buildRemoteMediaPayload({ channelId, participant, resolveTrackStream }) {
   const snapshot = createParticipantSnapshot({
     channelId,
     participant
@@ -99,7 +126,11 @@ function buildRemoteMediaPayload({ channelId, participant }) {
       Math.min(100, Math.round((Number(participant?.audioLevel) || 0) * 100))
     ),
     cameraEnabled: snapshot.cameraEnabled,
-    cameraStream: buildMediaStreamFromTrack(cameraTrack),
+    cameraStream: resolveTrackStream?.({
+      peerId: snapshot.peerId,
+      source: Track.Source.Camera,
+      track: cameraTrack
+    }) || null,
     channelId,
     deafened: snapshot.deafened,
     hasAudio: Boolean(audioTrack || screenAudioTrack),
@@ -111,7 +142,11 @@ function buildRemoteMediaPayload({ channelId, participant }) {
     screenShareAudioPlaying: Boolean(screenAudioTrack),
     screenShareHasAudio: Boolean(screenAudioTrack),
     screenShareEnabled: snapshot.screenShareEnabled,
-    screenShareStream: buildMediaStreamFromTrack(screenTrack),
+    screenShareStream: resolveTrackStream?.({
+      peerId: snapshot.peerId,
+      source: Track.Source.ScreenShare,
+      track: screenTrack
+    }) || null,
     speaking: Boolean(participant?.isSpeaking || snapshot.speaking),
     userId: snapshot.userId,
     videoMode: snapshot.videoMode
@@ -166,8 +201,11 @@ export function createLiveKitVoiceSession({
     dynacast: true,
     stopLocalTrackOnUnpublish: false
   });
+  const remoteMediaStreams = new Map();
   const remoteAudioEntries = new Map();
+  const lastPeerMediaPayloads = new Map();
   const pendingRemoteAudioEntries = new Set();
+  const queuedParticipantSyncs = new Map();
   const requestedRemoteSubscriptions = new Set();
   const localTracks = {
     audio: {
@@ -206,6 +244,10 @@ export function createLiveKitVoiceSession({
   let localScreenShareStream = null;
   let lastMetadataPayload = "";
   let localTrackSyncPromise = Promise.resolve();
+  let participantSyncPromise = Promise.resolve();
+  let queuedParticipantSyncFrameId = 0;
+  let queueSyncAllParticipantsFlag = false;
+  let queuePresenceSyncFlag = false;
   let removeAudioUnlockListeners = null;
   const CONNECT_RETRY_DELAY_MS = 250;
 
@@ -227,6 +269,137 @@ export function createLiveKitVoiceSession({
       onError(error);
     }
   };
+
+  function getRemoteMediaStreamKey(peerId, source) {
+    return `${String(peerId || "").trim()}:${String(source || "").trim()}`;
+  }
+
+  function clearRemoteMediaStream(peerId, source) {
+    remoteMediaStreams.delete(getRemoteMediaStreamKey(peerId, source));
+  }
+
+  function clearRemoteMediaStreamsForPeer(peerId) {
+    const keyPrefix = `${String(peerId || "").trim()}:`;
+    [...remoteMediaStreams.keys()].forEach((entryKey) => {
+      if (entryKey.startsWith(keyPrefix)) {
+        remoteMediaStreams.delete(entryKey);
+      }
+    });
+  }
+
+  function resolveRemoteTrackStream({ peerId, source, track }) {
+    const mediaTrack = track?.mediaStreamTrack || null;
+    if (!mediaTrack || !peerId || !source) {
+      if (peerId && source) {
+        clearRemoteMediaStream(peerId, source);
+      }
+      return null;
+    }
+
+    const entryKey = getRemoteMediaStreamKey(peerId, source);
+    const nextTrackId = String(mediaTrack.id || "").trim();
+    const existingEntry = remoteMediaStreams.get(entryKey);
+    if (existingEntry?.trackId === nextTrackId && existingEntry.stream) {
+      return existingEntry.stream;
+    }
+
+    const nextStream = buildMediaStreamFromTrack(track);
+    if (!nextStream) {
+      remoteMediaStreams.delete(entryKey);
+      return null;
+    }
+
+    remoteMediaStreams.set(entryKey, {
+      stream: nextStream,
+      trackId: nextTrackId
+    });
+
+    return nextStream;
+  }
+
+  function emitPeerMediaPayload(payload) {
+    if (typeof onPeerMediaChange !== "function" || !payload?.peerId) {
+      return;
+    }
+
+    const previousPayload = lastPeerMediaPayloads.get(payload.peerId);
+    if (areRemoteMediaPayloadsEqual(previousPayload, payload)) {
+      return;
+    }
+
+    lastPeerMediaPayloads.set(payload.peerId, payload);
+    onPeerMediaChange(payload);
+  }
+
+  function scheduleQueuedParticipantSync() {
+    if (queuedParticipantSyncFrameId || destroyed) {
+      return;
+    }
+
+    const flushQueuedSyncs = () => {
+      queuedParticipantSyncFrameId = 0;
+
+      const syncAll = queueSyncAllParticipantsFlag;
+      const emitPresence = queuePresenceSyncFlag;
+      const participants = syncAll
+        ? Array.from(room.remoteParticipants.values())
+        : [...queuedParticipantSyncs.values()];
+
+      queueSyncAllParticipantsFlag = false;
+      queuePresenceSyncFlag = false;
+      queuedParticipantSyncs.clear();
+
+      participantSyncPromise = participantSyncPromise
+        .catch(() => {})
+        .then(async () => {
+          if (destroyed) {
+            return;
+          }
+
+          if (emitPresence) {
+            emitPresenceSnapshot();
+          }
+
+          await Promise.all(participants.map((participant) => syncParticipant(participant)));
+        })
+        .catch((error) => {
+          handleSessionError(error);
+        });
+    };
+
+    if (typeof window?.requestAnimationFrame === "function") {
+      queuedParticipantSyncFrameId = window.requestAnimationFrame(flushQueuedSyncs);
+      return;
+    }
+
+    queuedParticipantSyncFrameId = -1;
+    queueMicrotask(flushQueuedSyncs);
+  }
+
+  function queueParticipantSync(participant, { emitPresence = false } = {}) {
+    const peerId = String(participant?.identity || "").trim();
+    if (!peerId || peerId === selfPeerId || destroyed) {
+      return;
+    }
+
+    queuedParticipantSyncs.set(peerId, participant);
+    if (emitPresence) {
+      queuePresenceSyncFlag = true;
+    }
+    scheduleQueuedParticipantSync();
+  }
+
+  function queueAllParticipantsSync({ emitPresence = false } = {}) {
+    if (destroyed) {
+      return;
+    }
+
+    queueSyncAllParticipantsFlag = true;
+    if (emitPresence) {
+      queuePresenceSyncFlag = true;
+    }
+    scheduleQueuedParticipantSync();
+  }
 
   function updateAudioUnlockListeners() {
     if (
@@ -578,6 +751,9 @@ export function createLiveKitVoiceSession({
         requestedRemoteSubscriptions.delete(entryKey);
       }
     });
+    clearRemoteMediaStreamsForPeer(peerId);
+    lastPeerMediaPayloads.delete(peerId);
+    queuedParticipantSyncs.delete(peerId);
 
     if (typeof onPeerMediaChange === "function") {
       onPeerMediaChange({
@@ -792,19 +968,19 @@ export function createLiveKitVoiceSession({
 
     await ensureRemoteAudioTrack(participant);
 
-    if (typeof onPeerMediaChange === "function") {
-      onPeerMediaChange(
-        buildRemoteMediaPayload({
-          channelId,
-          participant
-        })
-      );
-    }
+    emitPeerMediaPayload(
+      buildRemoteMediaPayload({
+        channelId,
+        participant,
+        resolveTrackStream: resolveRemoteTrackStream
+      })
+    );
   }
 
-  async function syncAllParticipants() {
-    emitPresenceSnapshot();
-
+  async function syncAllParticipants({ emitPresence = false } = {}) {
+    if (emitPresence) {
+      emitPresenceSnapshot();
+    }
     const participants = Array.from(room.remoteParticipants.values());
     await Promise.all(participants.map((participant) => syncParticipant(participant)));
   }
@@ -914,7 +1090,9 @@ export function createLiveKitVoiceSession({
       updateAudioUnlockListeners();
       await syncParticipantMetadata();
       await queueLocalTrackSync();
-      await syncAllParticipants();
+      queueAllParticipantsSync({
+        emitPresence: true
+      });
     })
     .on(RoomEvent.AudioPlaybackStatusChanged, () => {
       log("audio:playback:status", {
@@ -929,7 +1107,9 @@ export function createLiveKitVoiceSession({
       log("participant:connected", {
         targetPeerId: participant.identity
       });
-      await syncAllParticipants();
+      queueAllParticipantsSync({
+        emitPresence: true
+      });
     })
     .on(RoomEvent.ParticipantDisconnected, (participant) => {
       log("participant:disconnected", {
@@ -943,7 +1123,7 @@ export function createLiveKitVoiceSession({
         source: publication?.source || "",
         targetPeerId: participant.identity
       });
-      await syncParticipant(participant);
+      queueParticipantSync(participant);
     })
     .on(RoomEvent.TrackPublished, (publication, participant) => {
       log("track:published:remote", {
@@ -957,9 +1137,7 @@ export function createLiveKitVoiceSession({
       ) {
         requestRemoteAudioSubscription(participant, publication.source);
       }
-      syncParticipant(participant).catch((error) => {
-        handleSessionError(error);
-      });
+      queueParticipantSync(participant);
     })
     .on(RoomEvent.TrackSubscriptionStatusChanged, (publication, status, participant) => {
       log("track:subscription:status", {
@@ -984,28 +1162,20 @@ export function createLiveKitVoiceSession({
         source: publication?.source || "",
         targetPeerId: participant.identity
       });
-      syncParticipant(participant).catch((error) => {
-        handleSessionError(error);
-      });
+      queueParticipantSync(participant);
     })
     .on(RoomEvent.TrackMuted, (_publication, participant) => {
-      syncParticipant(participant).catch((error) => {
-        handleSessionError(error);
-      });
+      queueParticipantSync(participant);
     })
     .on(RoomEvent.TrackUnmuted, (_publication, participant) => {
-      syncParticipant(participant).catch((error) => {
-        handleSessionError(error);
-      });
+      queueParticipantSync(participant);
     })
     .on(RoomEvent.ActiveSpeakersChanged, () => {
-      syncAllParticipants().catch((error) => {
-        handleSessionError(error);
-      });
+      queueAllParticipantsSync();
     })
     .on(RoomEvent.ParticipantMetadataChanged, (_prevMetadata, participant) => {
-      syncParticipant(participant).catch((error) => {
-        handleSessionError(error);
+      queueParticipantSync(participant, {
+        emitPresence: true
       });
     })
     .on(RoomEvent.Disconnected, (reason) => {
@@ -1151,6 +1321,15 @@ export function createLiveKitVoiceSession({
     },
     async destroy() {
       destroyed = true;
+      if (queuedParticipantSyncFrameId > 0) {
+        window.cancelAnimationFrame(queuedParticipantSyncFrameId);
+      }
+      queuedParticipantSyncFrameId = 0;
+      queueSyncAllParticipantsFlag = false;
+      queuePresenceSyncFlag = false;
+      queuedParticipantSyncs.clear();
+      remoteMediaStreams.clear();
+      lastPeerMediaPayloads.clear();
       removeAudioUnlockListeners?.();
       removeAudioUnlockListeners = null;
 

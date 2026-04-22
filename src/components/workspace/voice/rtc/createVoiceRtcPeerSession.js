@@ -26,6 +26,8 @@ export function createVoiceRtcPeerSession({
   selfPeerId,
   socket
 }) {
+  const PEER_MEDIA_EMIT_INTERVAL_MS = 80;
+  const PEER_MEDIA_LEVEL_STEP = 4;
   const pendingAudioUnlockEntries = new Set();
   let removeAudioUnlockListeners = null;
   let remoteAudioResumePending = false;
@@ -90,6 +92,7 @@ export function createVoiceRtcPeerSession({
       for (const entry of [...pendingAudioUnlockEntries]) {
         entry?.audioElement?.play?.().then?.(() => {
           pendingAudioUnlockEntries.delete(entry);
+          entry.needsPlay = false;
           updateAudioUnlockListeners();
         }).catch(() => {});
       }
@@ -128,6 +131,8 @@ export function createVoiceRtcPeerSession({
     if (typeof onPeerMediaChange !== "function" || !entry) {
       return;
     }
+
+    entry.lastPeerMediaEmitAt = performance.now();
 
     const videoMode =
       entry.videoMode ||
@@ -227,10 +232,12 @@ export function createVoiceRtcPeerSession({
 
     if (entry.playbackMode !== "direct") {
       cleanupProcessedRemoteAudio(entry);
+      entry.needsPlay = true;
     }
 
     if (entry.audioElement.srcObject !== entry.remoteAudioStream) {
       entry.audioElement.srcObject = entry.remoteAudioStream;
+      entry.needsPlay = true;
     }
 
     entry.playbackMode = "direct";
@@ -289,6 +296,7 @@ export function createVoiceRtcPeerSession({
       };
       entry.audioElement.srcObject = destination.stream;
       entry.playbackMode = "processed";
+      entry.needsPlay = true;
     }
 
     if (!entry.processedAudio) {
@@ -329,14 +337,27 @@ export function createVoiceRtcPeerSession({
       entry.audioElement.volume = 1;
     }
 
-    applySinkId(entry.audioElement, playbackState.outputDeviceId);
+    if (entry.appliedOutputDeviceId !== playbackState.outputDeviceId) {
+      applySinkId(entry.audioElement, playbackState.outputDeviceId);
+      entry.appliedOutputDeviceId = playbackState.outputDeviceId;
+    }
     safePlayAudio(entry);
   }
 
   function safePlayAudio(entry) {
+    if (
+      !entry?.audioElement ||
+      (!entry.needsPlay &&
+        !pendingAudioUnlockEntries.has(entry) &&
+        entry.audioElement.paused === false)
+    ) {
+      return;
+    }
+
     const playResult = entry?.audioElement?.play?.();
     if (!playResult?.catch) {
       pendingAudioUnlockEntries.delete(entry);
+      entry.needsPlay = false;
       updateAudioUnlockListeners();
       return;
     }
@@ -344,6 +365,7 @@ export function createVoiceRtcPeerSession({
     playResult
       .then(() => {
         pendingAudioUnlockEntries.delete(entry);
+        entry.needsPlay = false;
         updateAudioUnlockListeners();
       })
       .catch((error) => {
@@ -512,23 +534,32 @@ export function createVoiceRtcPeerSession({
       }
 
       const roundedLevel = Math.round(displayLevel);
+      const quantizedLevel =
+        roundedLevel <= 0
+          ? 0
+          : Math.min(
+              100,
+              Math.round(roundedLevel / PEER_MEDIA_LEVEL_STEP) * PEER_MEDIA_LEVEL_STEP
+            );
       const didSpeakingChange = nextSpeaking !== entry.detectedSpeaking;
-      const didLevelChange = roundedLevel !== Math.round(entry.audioLevel || 0);
+      const didLevelChange = quantizedLevel !== Math.round(entry.audioLevel || 0);
+      const canEmitLevel =
+        now - Number(entry.lastPeerMediaEmitAt || 0) >= PEER_MEDIA_EMIT_INTERVAL_MS;
 
       speaking = nextSpeaking;
       entry.detectedSpeaking = nextSpeaking;
-      entry.audioLevel = roundedLevel;
+      entry.audioLevel = quantizedLevel;
 
-      if (didSpeakingChange || didLevelChange) {
+      if (didSpeakingChange || (didLevelChange && canEmitLevel)) {
         emitPeerMedia(entry);
       }
 
-      if (!loggedSignal && (roundedLevel > 0 || nextSpeaking || frameCount === 30)) {
+      if (!loggedSignal && (quantizedLevel > 0 || nextSpeaking || frameCount === 30)) {
         loggedSignal = true;
         log("audio:analysis:sample", {
           contextState: context.state,
           frameCount,
-          level: roundedLevel,
+          level: quantizedLevel,
           peak: Number(peak.toFixed(4)),
           peerId: entry.peerId,
           rms: Number(rms.toFixed(4)),
@@ -804,6 +835,7 @@ export function createVoiceRtcPeerSession({
     });
 
     const entry = {
+      appliedOutputDeviceId: "",
       audioElement,
       audioLevel: 0,
       audioSender: audioTransceiver.sender,
@@ -812,7 +844,9 @@ export function createVoiceRtcPeerSession({
       detectedSpeaking: false,
       destroyed: false,
       iceRestartAttempts: 0,
+      lastPeerMediaEmitAt: 0,
       micMuted: Boolean(peer.micMuted),
+      needsPlay: true,
       offerInFlight: false,
       offerQueued: false,
       peerConnection,
