@@ -40,6 +40,8 @@ export const SYSTEM_REACTIONS = Object.freeze({
   PIN: "__umbra_pin__"
 });
 
+export const MESSAGE_CONTENT_MAX_LENGTH = 1500;
+
 export const DEFAULT_REACTIONS = Object.freeze([
   "\uD83D\uDD25",
   "\uD83D\uDC4D",

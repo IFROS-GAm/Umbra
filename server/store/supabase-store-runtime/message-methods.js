@@ -4,6 +4,7 @@ import {
   GUILD_TEMPLATES,
   GUILD_MEMBER_MESSAGE_SELECT,
   GUILD_PERMISSION_SELECT,
+  MESSAGE_CONTENT_MAX_LENGTH,
   PERMISSIONS,
   PROFILE_MESSAGE_SELECT,
   REACTION_SELECT,
@@ -166,7 +167,14 @@ export const supabaseStoreRuntimeMessageMethods = {
       throw createError("No puedes enviar mensajes dentro de un canal de voz.", 400);
     }
 
-    const trimmed = content?.trim() || "";
+    const rawContent = String(content || "");
+    const trimmed = rawContent.trim();
+    if (rawContent.length > MESSAGE_CONTENT_MAX_LENGTH) {
+      throw createError(
+        `Los mensajes no pueden superar ${MESSAGE_CONTENT_MAX_LENGTH} caracteres.`,
+        400
+      );
+    }
     const stickerFeatureAvailable = stickerId
       ? await this.ensureGuildStickerFeatureAvailable()
       : this.guildStickersEnabled;
@@ -291,7 +299,14 @@ export const supabaseStoreRuntimeMessageMethods = {
       throw createError("Solo el autor puede editar este mensaje.", 403);
     }
 
-    const trimmed = content?.trim() || "";
+    const rawContent = String(content || "");
+    const trimmed = rawContent.trim();
+    if (rawContent.length > MESSAGE_CONTENT_MAX_LENGTH) {
+      throw createError(
+        `Los mensajes no pueden superar ${MESSAGE_CONTENT_MAX_LENGTH} caracteres.`,
+        400
+      );
+    }
     if (!trimmed && !(message.attachments || []).length) {
       throw createError("El mensaje editado no puede estar vacío.", 400);
     }

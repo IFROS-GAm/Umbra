@@ -1,4 +1,9 @@
-import { CHANNEL_TYPES, PERMISSIONS, SYSTEM_REACTIONS } from "../../constants.js";
+import {
+  CHANNEL_TYPES,
+  MESSAGE_CONTENT_MAX_LENGTH,
+  PERMISSIONS,
+  SYSTEM_REACTIONS
+} from "../../constants.js";
 import {
   computePermissionBits,
   createId,
@@ -67,7 +72,14 @@ export const demoStoreMessageMethods = {
       throw createError("No puedes enviar mensajes dentro de un canal de voz.", 400);
     }
 
-    const trimmed = content?.trim() || "";
+    const rawContent = String(content || "");
+    const trimmed = rawContent.trim();
+    if (rawContent.length > MESSAGE_CONTENT_MAX_LENGTH) {
+      throw createError(
+        `Los mensajes no pueden superar ${MESSAGE_CONTENT_MAX_LENGTH} caracteres.`,
+        400
+      );
+    }
     const sticker = stickerId
       ? this.db.guild_stickers.find((item) => item.id === stickerId) || null
       : null;
@@ -174,7 +186,14 @@ export const demoStoreMessageMethods = {
       throw createError("Solo el autor puede editar este mensaje.", 403);
     }
 
-    const trimmed = content?.trim() || "";
+    const rawContent = String(content || "");
+    const trimmed = rawContent.trim();
+    if (rawContent.length > MESSAGE_CONTENT_MAX_LENGTH) {
+      throw createError(
+        `Los mensajes no pueden superar ${MESSAGE_CONTENT_MAX_LENGTH} caracteres.`,
+        400
+      );
+    }
     if (!trimmed && !(message.attachments || []).length) {
       throw createError("El mensaje editado no puede estar vacío.", 400);
     }

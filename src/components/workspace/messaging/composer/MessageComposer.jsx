@@ -5,6 +5,11 @@ import { Icon } from "../../../Icon.jsx";
 import { AudioAttachmentCard } from "../media/AudioAttachmentCard.jsx";
 import { MessageImageViewer } from "../media/MessageImageViewer.jsx";
 import {
+  MESSAGE_CONTENT_COUNTER_THRESHOLD,
+  MESSAGE_CONTENT_MAX_LENGTH,
+  getRemainingComposerCharacters
+} from "./messageComposerLimits.js";
+import {
   COMPOSER_SHORTCUTS,
   PICKER_CONTENT,
   attachmentKey,
@@ -171,6 +176,9 @@ export const MessageComposer = memo(function MessageComposer({
         : null,
     [attachmentEditorState, composerAttachments]
   );
+  const remainingComposerCharacters = getRemainingComposerCharacters(composer);
+  const shouldShowComposerCounter =
+    remainingComposerCharacters <= MESSAGE_CONTENT_COUNTER_THRESHOLD;
 
   React.useEffect(() => {
     if (!attachmentEditorState) {
@@ -403,23 +411,35 @@ export const MessageComposer = memo(function MessageComposer({
         </div>
 
         <form className="composer" onSubmit={handleSubmitMessage}>
-          <textarea
-            onChange={(event) => handleComposerChange(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                handleSubmitMessage(event);
+          <div className="composer-input-stack">
+            <textarea
+              maxLength={MESSAGE_CONTENT_MAX_LENGTH}
+              onChange={(event) => handleComposerChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  handleSubmitMessage(event);
+                }
+              }}
+              placeholder={
+                activeSelectionKind === "guild"
+                  ? `Mensaje #${activeChannel?.name || "general"}`
+                  : `Mensaje ${activeChannel?.display_name || "directo"}`
               }
-            }}
-            placeholder={
-              activeSelectionKind === "guild"
-                ? `Mensaje #${activeChannel?.name || "general"}`
-                : `Mensaje ${activeChannel?.display_name || "directo"}`
-            }
-            ref={composerRef}
-            rows={1}
-            value={composer}
-          />
+              ref={composerRef}
+              rows={2}
+              value={composer}
+            />
+            {shouldShowComposerCounter ? (
+              <div
+                className={`composer-counter ${
+                  remainingComposerCharacters <= 0 ? "limit" : "warning"
+                }`.trim()}
+              >
+                {Math.max(remainingComposerCharacters, 0)}
+              </div>
+            ) : null}
+          </div>
 
           <div className="composer-actions">
             <button

@@ -1,5 +1,6 @@
 import { api, buildInviteUrl } from "../../../api.js";
 import { playUmbraSound } from "../../../audio/umbraSoundEffects.js";
+import { clampComposerContent } from "../messaging/composer/messageComposerLimits.js";
 
 import {
   applyServerFolderAction,
@@ -77,7 +78,7 @@ export function createWorkspaceNavigationActions({
     setReplyTarget(null);
     setReplyMentionEnabled(true);
     setComposerAttachments([]);
-    setComposer(message.content);
+    setComposer(clampComposerContent(message.content));
   }
 
   function openDialog(type, meta = {}) {

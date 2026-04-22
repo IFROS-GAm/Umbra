@@ -1,6 +1,10 @@
 import { api } from "../../../api.js";
 import { findChannelInSession } from "../../../utils.js";
 import {
+  MESSAGE_CONTENT_MAX_LENGTH,
+  clampComposerContent
+} from "../messaging/composer/messageComposerLimits.js";
+import {
   toggleReactionBucket,
   upsertChannelMessage
 } from "../workspaceHelpers.js";
@@ -62,7 +66,7 @@ export function createWorkspaceComposerActions(context, shared) {
   function appendToComposer(token) {
     setComposer((previous) => {
       const prefix = previous && !previous.endsWith(" ") ? `${previous} ` : previous;
-      return `${prefix}${token}`;
+      return clampComposerContent(`${prefix}${token}`);
     });
 
     requestAnimationFrame(() => {
@@ -71,7 +75,7 @@ export function createWorkspaceComposerActions(context, shared) {
   }
 
   function handleComposerChange(value) {
-    setComposer(value);
+    setComposer(clampComposerContent(value));
     const now = Date.now();
     if (
       activeSelection.channelId &&
@@ -268,6 +272,11 @@ export function createWorkspaceComposerActions(context, shared) {
 
   async function handleSubmitMessage(event) {
     event.preventDefault();
+    if (composer.length > MESSAGE_CONTENT_MAX_LENGTH) {
+      showUiNotice(`Los mensajes no pueden superar ${MESSAGE_CONTENT_MAX_LENGTH} caracteres.`);
+      return;
+    }
+
     if (
       submittingMessage ||
       (!composer.trim() && !composerAttachments.length) ||
