@@ -128,20 +128,11 @@ function renderScreenShareAudioChip(user) {
     return null;
   }
 
-  if (user?.screenShareAudioPlaying) {
+  if (user?.screenShareAudioPlaying || user?.screenShareHasAudio) {
     return (
       <span className="direct-call-panel-state-chip active">
         <Icon name="volume" size={12} />
         <span>Audio</span>
-      </span>
-    );
-  }
-
-  if (user?.screenShareHasAudio) {
-    return (
-      <span className="direct-call-panel-state-chip">
-        <Icon name="volume" size={12} />
-        <span>Audio listo</span>
       </span>
     );
   }
