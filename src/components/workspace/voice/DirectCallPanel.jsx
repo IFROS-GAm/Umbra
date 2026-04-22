@@ -131,6 +131,18 @@ function getParticipantPresenceLabel(user) {
   return user?.custom_status || user?.status || "Disponible";
 }
 
+function getParticipantTileStatus(user) {
+  if (user?.isStreaming) {
+    return "Compartiendo pantalla";
+  }
+
+  if (user?.isCameraOn) {
+    return "Camara activa";
+  }
+
+  return getParticipantPresenceLabel(user);
+}
+
 export function DirectCallPanel({
   activeChannel,
   currentUser,
@@ -192,7 +204,7 @@ export function DirectCallPanel({
       >
         {connectedParticipants.map((user) => (
           <button
-            className={`direct-call-panel-participant ${user.isSpeaking ? "speaking" : ""}`.trim()}
+            className={`direct-call-panel-participant ${user.isStreaming ? "streaming" : ""} ${user.isSpeaking ? "speaking" : ""}`.trim()}
             key={user.id}
             onContextMenu={(event) => onOpenParticipantMenu?.(event, user)}
             onClick={(event) => onOpenProfileCard?.(event, user, user.display_name)}
@@ -200,13 +212,7 @@ export function DirectCallPanel({
             type="button"
           >
             <div className="direct-call-panel-tile-top">
-              <span className="direct-call-panel-tile-status">
-                {user.isStreaming
-                  ? "Compartiendo pantalla"
-                  : user.isCameraOn
-                    ? "Camara activa"
-                    : getParticipantPresenceLabel(user)}
-              </span>
+              <span className="direct-call-panel-tile-status">{getParticipantTileStatus(user)}</span>
 
               <div className="direct-call-panel-flags">
                 {user.isStreaming ? (
@@ -224,7 +230,16 @@ export function DirectCallPanel({
             </div>
 
             <div className="direct-call-panel-participant-media">
-              {user.isCameraOn && user.localCameraStream ? (
+              {user.isStreaming && user.localScreenShareStream ? (
+                <div className="direct-call-panel-video-shell">
+                  <DirectCallVideo
+                    muted={user.mediaMuted}
+                    stream={user.localScreenShareStream}
+                    user={user}
+                    volume={user.mediaVolume}
+                  />
+                </div>
+              ) : user.isCameraOn && user.localCameraStream ? (
                 <div className="direct-call-panel-video-shell">
                   <DirectCallVideo
                     muted={user.mediaMuted}
@@ -232,6 +247,17 @@ export function DirectCallPanel({
                     user={user}
                     volume={user.mediaVolume}
                   />
+                </div>
+              ) : user.isVideoHiddenForMe && (user.isStreaming || user.isCameraOn) ? (
+                <div className="voice-stage-hidden-media">
+                  <Avatar
+                    hue={user.avatar_hue}
+                    label={user.display_name || user.username}
+                    size={84}
+                    src={user.avatar_url}
+                    status={user.status}
+                  />
+                  <span>{user.hiddenVideoLabel || "Video oculto"}</span>
                 </div>
               ) : (
                 <Avatar
