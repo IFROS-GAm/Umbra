@@ -13,6 +13,10 @@
     max-height: 320px;
   }
 
+  .direct-call-stage-avatar-row {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  }
+
   .voice-stage-featured-layout {
     grid-template-columns: 1fr;
   }
@@ -79,11 +83,20 @@
     justify-content: flex-start;
   }
 
-  .direct-call-stage-avatar-visual,
-  .direct-call-stage-avatar-video,
+  .direct-call-stage-avatar-row {
+    grid-template-columns: 1fr;
+  }
+
+  .direct-call-stage-avatar-card,
   .direct-call-stage-avatar-overflow {
-    height: 96px;
-    width: 96px;
+    min-height: 220px;
+  }
+
+  .direct-call-stage-nameplate {
+    bottom: 12px;
+    left: 12px;
+    max-width: calc(100% - 24px);
+    right: 12px;
   }
 
   .server-settings-shell {

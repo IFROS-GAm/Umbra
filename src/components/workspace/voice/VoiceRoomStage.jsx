@@ -72,20 +72,16 @@ export function VoiceRoomStage({
   }, [expandedStreamOpen, featuredStreamUser]);
 
   const currentUserId = workspace?.current_user?.id || null;
-  function renderParticipantMediaBadges(user, { compact = false } = {}) {
-    const badgeClass = compact
-      ? "direct-call-stage-mini-chip"
-      : "direct-call-stage-state-chip";
-
+  function renderParticipantMediaBadges(user) {
     return (
       <>
         {user?.isStreaming ? (
-          <span className={badgeClass}>
+          <span className="direct-call-stage-state-chip">
             <Icon name="screenShare" size={12} />
           </span>
         ) : null}
         {user?.isCameraOn && !user?.localCameraStream ? (
-          <span className={badgeClass}>
+          <span className="direct-call-stage-state-chip">
             <Icon name="camera" size={12} />
           </span>
         ) : null}
@@ -115,6 +111,34 @@ export function VoiceRoomStage({
     }
 
     return null;
+  }
+
+  function getDirectCallPresenceLabel(user) {
+    if (user?.inCall) {
+      return user?.isCurrentUser ? "Tu voz esta conectada" : "En llamada";
+    }
+
+    return user?.custom_status || user?.status || "Disponible";
+  }
+
+  function getDirectCallMemberLabel(user) {
+    if (user?.inCall) {
+      return user?.isCurrentUser ? "Tu voz esta activa" : "Conectado a la llamada";
+    }
+
+    return user?.custom_status || user?.status || "Sin conectar";
+  }
+
+  function getAudioStateLabel(user) {
+    if (user?.isDeafened) {
+      return "Ensordecido";
+    }
+
+    if (user?.isMuted) {
+      return "Silenciado";
+    }
+
+    return "";
   }
 
   const directCallMembers = useMemo(() => {
@@ -340,15 +364,46 @@ export function VoiceRoomStage({
                       style={user.stageStyle}
                       type="button"
                     >
-                      <div className="direct-call-stage-avatar-visual">
+                      <div className="voice-stage-tile-top direct-call-stage-tile-top">
+                        <span className="voice-stage-quality subtle">
+                          {user.isStreaming
+                            ? "Compartiendo pantalla"
+                            : user.isCameraOn
+                              ? "Camara activa"
+                              : getDirectCallPresenceLabel(user)}
+                        </span>
+
+                        <div className="direct-call-stage-member-flags direct-call-stage-card-flags">
+                          {renderParticipantMediaBadges(user)}
+                          {user.isMuted || user.isDeafened ? (
+                            <span className="direct-call-stage-state-chip danger prominent">
+                              <Icon name={user.isDeafened ? "deafen" : "micOff"} size={13} />
+                              <span>{getAudioStateLabel(user)}</span>
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="voice-stage-center direct-call-stage-tile-media">
                         {user.isCameraOn && user.localCameraStream ? (
-                          <div className="direct-call-stage-avatar-video">
+                          <div className="voice-stage-video-shell">
                             <VoiceStageVideo
                               muted={user.mediaMuted}
                               stream={user.localCameraStream}
                               user={user}
                               volume={user.mediaVolume}
                             />
+                          </div>
+                        ) : user.isVideoHiddenForMe && (user.isStreaming || user.isCameraOn) ? (
+                          <div className="voice-stage-hidden-media">
+                            <Avatar
+                              hue={user.avatar_hue}
+                              label={user.display_name || user.username}
+                              size={96}
+                              src={user.avatar_url}
+                              status={user.status}
+                            />
+                            <span>{user.hiddenVideoLabel || "Video oculto"}</span>
                           </div>
                         ) : (
                           <Avatar
@@ -359,26 +414,13 @@ export function VoiceRoomStage({
                             status={user.status}
                           />
                         )}
-
-                        <div className="direct-call-stage-avatar-icons">
-                          {renderParticipantMediaBadges(user, { compact: true })}
-                          {user.isMuted || user.isDeafened ? (
-                            <span className="direct-call-stage-mini-chip danger">
-                              <Icon name={user.isDeafened ? "deafen" : "micOff"} size={12} />
-                            </span>
-                          ) : null}
-                        </div>
                       </div>
 
-                      <div className="direct-call-stage-avatar-copy">
-                        <strong>{user.display_name || user.username}</strong>
-                        <span>
-                          {user.inCall
-                            ? user.isCurrentUser
-                              ? "Tu voz esta conectada"
-                              : "En llamada"
-                            : user.custom_status || user.status || "Disponible"}
-                        </span>
+                      <div className="direct-call-stage-nameplate">
+                        <div className="direct-call-stage-nameplate-copy">
+                          <strong>{user.display_name || user.username}</strong>
+                          <span>{getDirectCallPresenceLabel(user)}</span>
+                        </div>
                       </div>
                     </button>
                   ))}
@@ -441,13 +483,7 @@ export function VoiceRoomStage({
 
                   <div className="voice-user-copy">
                     <strong>{user.display_name || user.username}</strong>
-                    <span>
-                      {user.inCall
-                        ? user.isCurrentUser
-                          ? "Tu voz esta activa"
-                          : "Conectado a la llamada"
-                        : user.custom_status || user.status || "Sin conectar"}
-                    </span>
+                    <span>{getDirectCallMemberLabel(user)}</span>
                   </div>
 
                   <div className="direct-call-stage-member-flags">
@@ -455,6 +491,7 @@ export function VoiceRoomStage({
                     {user.isMuted || user.isDeafened ? (
                       <span className="direct-call-stage-state-chip danger">
                         <Icon name={user.isDeafened ? "deafen" : "micOff"} size={12} />
+                        <span>{getAudioStateLabel(user)}</span>
                       </span>
                     ) : null}
                     <span className={`direct-call-stage-state-chip ${user.inCall ? "active" : ""}`.trim()}>
