@@ -88,6 +88,8 @@ function buildRemoteMediaPayload({ channelId, participant }) {
   const cameraTrack = participant?.getTrackPublication?.(Track.Source.Camera)?.track || null;
   const screenTrack =
     participant?.getTrackPublication?.(Track.Source.ScreenShare)?.track || null;
+  const screenAudioTrack =
+    participant?.getTrackPublication?.(Track.Source.ScreenShareAudio)?.track || null;
   const audioTrack =
     participant?.getTrackPublication?.(Track.Source.Microphone)?.track || null;
 
@@ -100,7 +102,7 @@ function buildRemoteMediaPayload({ channelId, participant }) {
     cameraStream: buildMediaStreamFromTrack(cameraTrack),
     channelId,
     deafened: snapshot.deafened,
-    hasAudio: Boolean(audioTrack),
+    hasAudio: Boolean(audioTrack || screenAudioTrack),
     micMuted: snapshot.micMuted,
     peerId: snapshot.peerId,
     removed: false,
@@ -112,12 +114,17 @@ function buildRemoteMediaPayload({ channelId, participant }) {
   };
 }
 
-function createRemoteAudioEntry() {
+function buildRemoteAudioEntryKey(peerId, source) {
+  return `${String(peerId || "").trim()}:${String(source || Track.Source.Microphone).trim()}`;
+}
+
+function createRemoteAudioEntry(source = Track.Source.Microphone) {
   return {
     attachedTrackSid: "",
     element: createHiddenAudioElement(),
     playbackMode: "direct",
     processedAudio: null,
+    source,
     track: null,
     userId: ""
   };
@@ -162,6 +169,10 @@ export function createLiveKitVoiceSession({
       publication: null
     },
     screen: {
+      mediaTrack: null,
+      publication: null
+    },
+    screenAudio: {
       mediaTrack: null,
       publication: null
     }
@@ -460,23 +471,35 @@ export function createLiveKitVoiceSession({
     onPresencePeersChange(Object.fromEntries(peers.map((entry) => [entry.peerId, entry])));
   }
 
-  function removeRemoteParticipant(peerId) {
-    const remoteAudio = remoteAudioEntries.get(peerId);
-    if (remoteAudio) {
-      cleanupProcessedRemoteAudio(remoteAudio);
-      try {
-        remoteAudio.track?.detach?.(remoteAudio.element);
-      } catch {
-        // Ignore detach races.
-      }
-      try {
-        remoteAudio.element.srcObject = null;
-        remoteAudio.element.remove();
-      } catch {
-        // Ignore DOM cleanup races.
-      }
-      remoteAudioEntries.delete(peerId);
+  function disposeRemoteAudioEntry(entryKey) {
+    const remoteAudio = remoteAudioEntries.get(entryKey);
+    if (!remoteAudio) {
+      return;
     }
+
+    cleanupProcessedRemoteAudio(remoteAudio);
+    try {
+      remoteAudio.track?.detach?.(remoteAudio.element);
+    } catch {
+      // Ignore detach races.
+    }
+    try {
+      remoteAudio.element.srcObject = null;
+      remoteAudio.element.remove();
+    } catch {
+      // Ignore DOM cleanup races.
+    }
+
+    remoteAudioEntries.delete(entryKey);
+  }
+
+  function removeRemoteParticipant(peerId) {
+    const peerKeyPrefix = `${String(peerId || "").trim()}:`;
+    [...remoteAudioEntries.keys()].forEach((entryKey) => {
+      if (entryKey.startsWith(peerKeyPrefix)) {
+        disposeRemoteAudioEntry(entryKey);
+      }
+    });
 
     if (typeof onPeerMediaChange === "function") {
       onPeerMediaChange({
@@ -552,42 +575,29 @@ export function createLiveKitVoiceSession({
     }
   }
 
-  async function ensureRemoteAudioTrack(participant) {
-    const publication = participant?.getTrackPublication?.(Track.Source.Microphone);
+  function syncRemoteAudioPublication({
+    participant,
+    peerId,
+    source,
+    userId
+  }) {
+    const publication = participant?.getTrackPublication?.(source);
     const track = publication?.track || null;
-    const snapshot = createParticipantSnapshot({
-      channelId,
-      participant
-    });
-    const peerId = snapshot.peerId;
-
-    if (!peerId) {
-      return;
-    }
+    const entryKey = buildRemoteAudioEntryKey(peerId, source);
 
     if (!track) {
-      const existingEntry = remoteAudioEntries.get(peerId);
-      if (existingEntry) {
-        cleanupProcessedRemoteAudio(existingEntry);
-        try {
-          existingEntry.track?.detach?.(existingEntry.element);
-        } catch {
-          // Ignore detach races.
-        }
-        existingEntry.track = null;
-        existingEntry.attachedTrackSid = "";
-        existingEntry.userId = snapshot.userId;
-        existingEntry.element.srcObject = null;
-      }
+      disposeRemoteAudioEntry(entryKey);
       return;
     }
 
-    let remoteAudio = remoteAudioEntries.get(peerId);
+    let remoteAudio = remoteAudioEntries.get(entryKey);
     if (!remoteAudio) {
-      remoteAudio = createRemoteAudioEntry();
-      remoteAudioEntries.set(peerId, remoteAudio);
+      remoteAudio = createRemoteAudioEntry(source);
+      remoteAudioEntries.set(entryKey, remoteAudio);
     }
-    remoteAudio.userId = snapshot.userId;
+
+    remoteAudio.source = source;
+    remoteAudio.userId = userId;
 
     const trackSid = String(publication?.trackSid || track?.sid || "").trim();
     if (remoteAudio.attachedTrackSid !== trackSid) {
@@ -609,10 +619,36 @@ export function createLiveKitVoiceSession({
       remoteAudio.element.volume = clampUnitVolume(playbackState.outputVolume, 1);
 
       log("audio:attached", {
+        source,
         targetPeerId: peerId,
         trackSid
       });
     }
+  }
+
+  async function ensureRemoteAudioTrack(participant) {
+    const snapshot = createParticipantSnapshot({
+      channelId,
+      participant
+    });
+    const peerId = snapshot.peerId;
+
+    if (!peerId) {
+      return;
+    }
+
+    syncRemoteAudioPublication({
+      participant,
+      peerId,
+      source: Track.Source.Microphone,
+      userId: snapshot.userId
+    });
+    syncRemoteAudioPublication({
+      participant,
+      peerId,
+      source: Track.Source.ScreenShareAudio,
+      userId: snapshot.userId
+    });
 
     await applyPlaybackToRemoteAudio();
   }
@@ -710,11 +746,18 @@ export function createLiveKitVoiceSession({
 
     const audioTrack = localAudioStream?.getAudioTracks?.()?.[0] || null;
     const cameraTrack = localCameraStream?.getVideoTracks?.()?.[0] || null;
+    const screenAudioTrack = localScreenShareStream?.getAudioTracks?.()?.[0] || null;
     const screenTrack = localScreenShareStream?.getVideoTracks?.()?.[0] || null;
 
     await syncPublishedTrack("audio", audioTrack, Track.Source.Microphone, "umbra-microphone");
     await syncPublishedTrack("camera", cameraTrack, Track.Source.Camera, "umbra-camera");
     await syncPublishedTrack("screen", screenTrack, Track.Source.ScreenShare, "umbra-screen");
+    await syncPublishedTrack(
+      "screenAudio",
+      screenAudioTrack,
+      Track.Source.ScreenShareAudio,
+      "umbra-screen-audio"
+    );
 
     if (localTracks.audio.publication?.track) {
       if (participantState.micMuted) {
@@ -950,21 +993,9 @@ export function createLiveKitVoiceSession({
       removeAudioUnlockListeners?.();
       removeAudioUnlockListeners = null;
 
-      for (const remoteAudio of remoteAudioEntries.values()) {
-        cleanupProcessedRemoteAudio(remoteAudio);
-        try {
-          remoteAudio.track?.detach?.(remoteAudio.element);
-        } catch {
-          // Ignore detach races.
-        }
-        try {
-          remoteAudio.element.srcObject = null;
-          remoteAudio.element.remove();
-        } catch {
-          // Ignore DOM cleanup races.
-        }
-      }
-      remoteAudioEntries.clear();
+      [...remoteAudioEntries.keys()].forEach((entryKey) => {
+        disposeRemoteAudioEntry(entryKey);
+      });
 
       for (const slotKey of Object.keys(localTracks)) {
         await unpublishTrack(slotKey);
