@@ -577,6 +577,7 @@ function ServerSettingsRolesTab({
   const canEditRoleIdentity = !roleForm.isSystem;
   const canEditRolePermissions = !roleForm.isSystem;
   const canEditRoleColor = !roleForm.isDefaultRole;
+  const shouldShowRolePermissions = !roleForm.isOwnerRole;
   const canSaveRole =
     canManageRoles && (canEditRoleColor || canEditRoleIdentity || canEditRolePermissions);
   return (
@@ -783,28 +784,30 @@ function ServerSettingsRolesTab({
                 </label>
               </div>
 
-              <div className="server-settings-role-permissions">
-                <strong>{copy.rolePermissions}</strong>
-                <div className="server-settings-role-permission-grid">
-                  {permissionOptions.map((permission) => {
-                    const selected = roleForm.permissionKeys.includes(permission.key);
-                    return (
-                      <button
-                        className={`server-settings-role-permission ${
-                          selected ? "active" : ""
-                        }`.trim()}
-                        disabled={!canEditRolePermissions || !canManageRoles}
-                        key={permission.key}
-                        onClick={() => onRolePermissionToggle(permission.key)}
-                        type="button"
-                      >
-                        <span>{permission.label}</span>
-                        {selected ? <Icon name="check" size={16} /> : null}
-                      </button>
-                    );
-                  })}
+              {shouldShowRolePermissions ? (
+                <div className="server-settings-role-permissions">
+                  <strong>{copy.rolePermissions}</strong>
+                  <div className="server-settings-role-permission-grid">
+                    {permissionOptions.map((permission) => {
+                      const selected = roleForm.permissionKeys.includes(permission.key);
+                      return (
+                        <button
+                          className={`server-settings-role-permission ${
+                            selected ? "active" : ""
+                          }`.trim()}
+                          disabled={!canEditRolePermissions || !canManageRoles}
+                          key={permission.key}
+                          onClick={() => onRolePermissionToggle(permission.key)}
+                          type="button"
+                        >
+                          <span>{permission.label}</span>
+                          {selected ? <Icon name="check" size={16} /> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              ) : null}
 
               <div className="settings-form-actions">
                 <button
