@@ -47,6 +47,8 @@ function buildInitialRoleForm() {
     icon: "",
     iconUrl: "",
     id: null,
+    isDefaultRole: false,
+    isOwnerRole: false,
     isSystem: false,
     name: "",
     permissionKeys: ["readMessages", "sendMessages"]
@@ -63,6 +65,8 @@ function buildRoleForm(role, language) {
     icon: getRoleIcon(role),
     iconUrl: getRoleIconUrl(role),
     id: role.id,
+    isDefaultRole: Boolean(role.is_default_role),
+    isOwnerRole: Boolean(role.is_owner_role),
     isSystem: Boolean(role.is_default_role || role.is_owner_role),
     name: getRoleDisplayName(role),
     permissionKeys: extractRolePermissionKeys(role.permissions, language)

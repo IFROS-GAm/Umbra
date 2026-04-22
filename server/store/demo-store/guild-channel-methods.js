@@ -637,36 +637,46 @@ export const demoStoreGuildChannelMethods = {
       throw createError("Rol no encontrado.", 404);
     }
 
-    if (role.name === "@everyone" || role.name === "Owner") {
+    const isDefaultRole = role.name === "@everyone";
+    const isOwnerRole = role.name === "Owner";
+
+    if (isDefaultRole) {
       throw createError("Ese rol del sistema no se puede editar desde este panel.", 403);
     }
 
-    const storedName = buildStoredRoleName({
-      icon,
-      iconUrl,
-      name
-    });
-
-    if (!storedName) {
-      throw createError("El rol necesita un nombre.", 400);
+    if (isOwnerRole && guild.owner_id !== userId) {
+      throw createError("Solo el owner actual puede cambiar el color de este rol.", 403);
     }
 
-    const normalizedName = splitStoredRoleName(storedName).name.toLowerCase();
-    const duplicateRole = this.db.roles.find((item) => {
-      if (item.id === role.id || item.guild_id !== guildId) {
-        return false;
+    if (!isOwnerRole) {
+      const storedName = buildStoredRoleName({
+        icon,
+        iconUrl,
+        name
+      });
+
+      if (!storedName) {
+        throw createError("El rol necesita un nombre.", 400);
       }
 
-      return splitStoredRoleName(item.name).name.toLowerCase() === normalizedName;
-    });
+      const normalizedName = splitStoredRoleName(storedName).name.toLowerCase();
+      const duplicateRole = this.db.roles.find((item) => {
+        if (item.id === role.id || item.guild_id !== guildId) {
+          return false;
+        }
 
-    if (duplicateRole) {
-      throw createError("Ya existe un rol con ese nombre.", 400);
+        return splitStoredRoleName(item.name).name.toLowerCase() === normalizedName;
+      });
+
+      if (duplicateRole) {
+        throw createError("Ya existe un rol con ese nombre.", 400);
+      }
+
+      role.name = storedName;
+      role.permissions = Number(permissions || 0);
     }
 
-    role.name = storedName;
     role.color = normalizeProfileColor(color, role.color || "#9AA4B2");
-    role.permissions = Number(permissions || 0);
 
     await this.save();
     return decorateGuildRole(role, this.db.guild_members);

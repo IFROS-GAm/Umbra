@@ -792,9 +792,10 @@ export const supabaseStoreRuntimeGuildMethods = {
     userId
   }) {
     const guildRows = await expectData(
-      this.client.from("guilds").select("id").eq("id", guildId).limit(1)
+      this.client.from("guilds").select("id,owner_id").eq("id", guildId).limit(1)
     );
-    if (!guildRows[0]) {
+    const guild = guildRows[0] || null;
+    if (!guild) {
       throw createError("Servidor no encontrado.", 404);
     }
 
@@ -810,28 +811,42 @@ export const supabaseStoreRuntimeGuildMethods = {
     if (!role || role.guild_id !== guildId) {
       throw createError("Rol no encontrado.", 404);
     }
-    if (role.name === "@everyone" || role.name === "Owner") {
+    const isDefaultRole = role.name === "@everyone";
+    const isOwnerRole = role.name === "Owner";
+    if (isDefaultRole) {
       throw createError("Ese rol del sistema no se puede editar desde este panel.", 403);
     }
 
-    const storedName = buildStoredRoleName({ icon, iconUrl, name });
-    if (!storedName) {
-      throw createError("El rol necesita un nombre.", 400);
+    if (isOwnerRole && guild.owner_id !== userId) {
+      throw createError("Solo el owner actual puede cambiar el color de este rol.", 403);
     }
 
-    const normalizedName = splitStoredRoleName(storedName).name.toLowerCase();
-    const existingRoles = await expectData(
-      this.client.from("roles").select(ROLE_PERMISSION_SELECT).eq("guild_id", guildId)
-    );
-    const duplicateRole = existingRoles.find((item) => {
-      if (item.id === role.id) {
-        return false;
+    let nextName = role.name;
+    let nextPermissions = Number(role.permissions || 0);
+
+    if (!isOwnerRole) {
+      const storedName = buildStoredRoleName({ icon, iconUrl, name });
+      if (!storedName) {
+        throw createError("El rol necesita un nombre.", 400);
       }
 
-      return splitStoredRoleName(item.name).name.toLowerCase() === normalizedName;
-    });
-    if (duplicateRole) {
-      throw createError("Ya existe un rol con ese nombre.", 400);
+      const normalizedName = splitStoredRoleName(storedName).name.toLowerCase();
+      const existingRoles = await expectData(
+        this.client.from("roles").select(ROLE_PERMISSION_SELECT).eq("guild_id", guildId)
+      );
+      const duplicateRole = existingRoles.find((item) => {
+        if (item.id === role.id) {
+          return false;
+        }
+
+        return splitStoredRoleName(item.name).name.toLowerCase() === normalizedName;
+      });
+      if (duplicateRole) {
+        throw createError("Ya existe un rol con ese nombre.", 400);
+      }
+
+      nextName = storedName;
+      nextPermissions = Number(permissions || 0);
     }
 
     const rows = await expectData(
@@ -839,8 +854,8 @@ export const supabaseStoreRuntimeGuildMethods = {
         .from("roles")
         .update({
           color: normalizeProfileColor(color, role.color || "#9AA4B2"),
-          name: storedName,
-          permissions: Number(permissions || 0)
+          name: nextName,
+          permissions: nextPermissions
         })
         .eq("id", role.id)
         .select("*")

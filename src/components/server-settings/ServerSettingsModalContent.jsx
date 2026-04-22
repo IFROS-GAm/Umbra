@@ -574,6 +574,11 @@ function ServerSettingsRolesTab({
   rolesState
 }) {
   const resolvedRoleIconUrl = roleIconPreview || roleForm.iconUrl || getRoleIconUrl(roleForm);
+  const canEditRoleIdentity = !roleForm.isSystem;
+  const canEditRolePermissions = !roleForm.isSystem;
+  const canEditRoleColor = !roleForm.isDefaultRole;
+  const canSaveRole =
+    canManageRoles && (canEditRoleColor || canEditRoleIdentity || canEditRolePermissions);
   return (
     <div className="server-settings-body single-column">
       <div className="server-settings-tab-panel">
@@ -711,7 +716,7 @@ function ServerSettingsRolesTab({
                   <div className="server-settings-role-visual-field">
                     <button
                       className="server-settings-role-artwork"
-                      disabled={roleForm.isSystem}
+                      disabled={!canEditRoleIdentity}
                       onClick={() => roleIconInputRef.current?.click()}
                       type="button"
                     >
@@ -725,7 +730,7 @@ function ServerSettingsRolesTab({
                       <div className="server-settings-member-actions compact">
                         <button
                           className="ghost-button small"
-                          disabled={roleForm.isSystem}
+                          disabled={!canEditRoleIdentity}
                           onClick={() => roleIconInputRef.current?.click()}
                           type="button"
                         >
@@ -734,7 +739,7 @@ function ServerSettingsRolesTab({
                         </button>
                         <button
                           className="ghost-button small"
-                          disabled={roleForm.isSystem || (!resolvedRoleIconUrl && !roleForm.icon)}
+                          disabled={!canEditRoleIdentity || (!resolvedRoleIconUrl && !roleForm.icon)}
                           onClick={onClearRoleIcon}
                           type="button"
                         >
@@ -745,7 +750,7 @@ function ServerSettingsRolesTab({
                     </div>
                   </div>
                   <input
-                    disabled={roleForm.isSystem}
+                    disabled={!canEditRoleIdentity}
                     maxLength={4}
                     onChange={(event) => onRoleFieldChange("icon", event.target.value)}
                     placeholder="✨"
@@ -756,7 +761,7 @@ function ServerSettingsRolesTab({
                 <label className="settings-field">
                   <span>{copy.roleName}</span>
                   <input
-                    disabled={roleForm.isSystem}
+                    disabled={!canEditRoleIdentity}
                     maxLength={40}
                     onChange={(event) => onRoleFieldChange("name", event.target.value)}
                     placeholder="Moderador"
@@ -768,7 +773,7 @@ function ServerSettingsRolesTab({
                   <span>{copy.roleColor}</span>
                   <div className="server-settings-role-color-row">
                     <input
-                      disabled={roleForm.isSystem}
+                      disabled={!canEditRoleColor}
                       onChange={(event) => onRoleFieldChange("color", event.target.value)}
                       type="color"
                       value={normalizeColorInput(roleForm.color, "#9AA4B2")}
@@ -788,7 +793,7 @@ function ServerSettingsRolesTab({
                         className={`server-settings-role-permission ${
                           selected ? "active" : ""
                         }`.trim()}
-                        disabled={roleForm.isSystem || !canManageRoles}
+                        disabled={!canEditRolePermissions || !canManageRoles}
                         key={permission.key}
                         onClick={() => onRolePermissionToggle(permission.key)}
                         type="button"
@@ -804,7 +809,7 @@ function ServerSettingsRolesTab({
               <div className="settings-form-actions">
                 <button
                   className="primary-button"
-                  disabled={roleSaving || roleForm.isSystem || !canManageRoles}
+                  disabled={roleSaving || !canSaveRole}
                   onClick={onSaveRole}
                   type="button"
                 >
