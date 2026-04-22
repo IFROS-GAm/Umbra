@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef } from "react";
 
 import { Avatar } from "../../Avatar.jsx";
 import { Icon } from "../../Icon.jsx";
+import { normalizeConversationCopy } from "../shared/workspaceHelpers.js";
 
 function DirectCallVideo({ muted = true, stream, user, volume = 1 }) {
   const videoRef = useRef(null);
@@ -156,6 +157,7 @@ export function DirectCallPanel({
     connectedCount > 1
       ? "Ambos estan conectados en esta llamada."
       : "Llamada privada activa. Esperando a la otra persona o sigue chateando mientras hablas.";
+  const panelTopic = normalizeConversationCopy(activeChannel?.topic || callSummary);
 
   return (
     <section className={`direct-call-panel direct-call-panel-${displayMode}`.trim()}>
@@ -163,7 +165,7 @@ export function DirectCallPanel({
         <div>
           <p className="eyebrow">Llamada privada</p>
           <h2>{activeChannel?.display_name || activeChannel?.name || "Llamada"}</h2>
-          <p>{activeChannel?.topic || callSummary}</p>
+          <p>{panelTopic}</p>
         </div>
 
         <div className="direct-call-panel-badges">

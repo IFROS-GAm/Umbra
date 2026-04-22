@@ -40,13 +40,19 @@
 }
 
 @media (max-width: 960px) {
+  .chat-title-block {
+    flex-basis: 100%;
+  }
+
   .chat-header-tools {
+    justify-content: flex-start;
+    width: 100%;
     flex-wrap: wrap;
   }
 
   .chat-header-actions-shell {
     flex-wrap: wrap;
-    justify-content: flex-end;
+    justify-content: flex-start;
   }
 
   .chat-search {

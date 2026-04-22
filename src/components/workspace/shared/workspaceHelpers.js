@@ -57,6 +57,16 @@ export const HOME_LINKS = [
 export const CHANNEL_CACHE_TTL_MS = 60_000;
 export const MAX_COMPOSER_ATTACHMENTS = 10;
 
+export function normalizeConversationCopy(value = "") {
+  return String(value || "")
+    .replace(/Conversaci(?:ÃƒÂ³|Ã³|ó)?n directa/gi, "Conversación directa")
+    .replace(/Conversacion directa/gi, "Conversación directa")
+    .replace(/Conversaci(?:ÃƒÂ³|Ã³|ó)?n/gi, "Conversación")
+    .replace(/Â·/g, "·")
+    .replace(/â€¢/g, "•")
+    .trim();
+}
+
 export function isVisibleStatus(status) {
   return status && status !== "offline" && status !== "invisible";
 }
@@ -97,9 +107,11 @@ export function renderHeaderCopy(activeChannel, kind) {
   }
 
   return {
-    eyebrow: "Conversacion",
+    eyebrow: "Conversación",
     title: activeChannel?.display_name || "Mensajes directos",
-    description: activeChannel?.topic || "Abre conversaciones 1 a 1 o grupos pequenos."
+    description: normalizeConversationCopy(
+      activeChannel?.topic || "Abre conversaciones 1 a 1 o grupos pequenos."
+    )
   };
 }
 

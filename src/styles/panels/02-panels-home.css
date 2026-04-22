@@ -500,6 +500,8 @@
 .chat-header {
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
   justify-content: space-between;
   min-height: 58px;
   padding: 10px 16px;

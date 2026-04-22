@@ -436,7 +436,10 @@ export const MessageComposer = memo(function MessageComposer({
                   remainingComposerCharacters <= 0 ? "limit" : "warning"
                 }`.trim()}
               >
-                {Math.max(remainingComposerCharacters, 0)}
+                <span className="composer-counter-value">
+                  {Math.max(remainingComposerCharacters, 0)}
+                </span>
+                <span className="composer-counter-label">restantes</span>
               </div>
             ) : null}
           </div>

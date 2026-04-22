@@ -324,6 +324,7 @@ export const supabaseStoreRuntimeInviteDmMethods = {
         created_at: now,
         updated_at: now
       };
+      channel.topic = "Conversacion directa";
 
       await expectData(this.client.from("channels").insert(channel));
       await expectData(

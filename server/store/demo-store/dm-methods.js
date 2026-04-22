@@ -83,6 +83,7 @@ export const demoStoreDmMethods = {
         created_at: now,
         updated_at: now
       };
+      channel.topic = "Conversacion directa";
 
       this.db.channels.push(channel);
       this.db.channel_members.push(

@@ -4,6 +4,7 @@ import { initializeUmbraSoundEffects } from "../../../audio/umbraSoundEffects.js
 import { findChannelInSession } from "../../../utils.js";
 import {
   attachmentKey,
+  normalizeConversationCopy,
   renderHeaderCopy,
 } from "../workspaceHelpers.js";
 import { createWorkspaceCoreActions } from "../workspaceCoreActions.js";
@@ -286,7 +287,12 @@ export function useUmbraWorkspaceCore({
   const activeGuildTextChannels =
     activeGuild?.channels.filter((channel) => !channel.is_voice && !channel.is_category) || [];
   const activeGuildVoiceChannels = activeGuild?.channels.filter((channel) => channel.is_voice) || [];
-  const headerCopy = renderHeaderCopy(activeChannel, activeSelection.kind);
+  const rawHeaderCopy = renderHeaderCopy(activeChannel, activeSelection.kind);
+  const headerCopy = {
+    ...rawHeaderCopy,
+    description: normalizeConversationCopy(rawHeaderCopy?.description || ""),
+    eyebrow: normalizeConversationCopy(rawHeaderCopy?.eyebrow || "")
+  };
   const currentUserLabel =
     workspace?.current_user?.display_name || workspace?.current_user?.username || "Umbra user";
   const directUnreadCount =
