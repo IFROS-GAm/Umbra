@@ -2,6 +2,7 @@ import {
   applySinkId,
   buildParticipantAudioMix,
   buildRtcConfiguration,
+  createDualMonoOutput,
   createHiddenAudioElement,
   createRemoteStream,
   getSharedVoiceAudioContext,
@@ -199,7 +200,9 @@ export function createVoiceRtcPeerSession({
     const {
       compressor,
       intensityGain,
+      monoMixer,
       outputGain,
+      stereoMerger,
       source
     } = entry.processedAudio;
 
@@ -207,7 +210,9 @@ export function createVoiceRtcPeerSession({
       source?.disconnect?.();
       compressor?.disconnect?.();
       intensityGain?.disconnect?.();
+      monoMixer?.disconnect?.();
       outputGain?.disconnect?.();
+      stereoMerger?.disconnect?.();
     } catch {
       // Ignore audio node disconnect issues during teardown.
     }
@@ -269,17 +274,25 @@ export function createVoiceRtcPeerSession({
       const intensityGain = context.createGain();
       const outputGain = context.createGain();
       const destination = context.createMediaStreamDestination();
+      const dualMonoOutput = createDualMonoOutput(context, outputGain);
 
       lastNode.connect(intensityGain);
       intensityGain.connect(outputGain);
-      outputGain.connect(destination);
+
+      if (dualMonoOutput) {
+        dualMonoOutput.stereoMerger.connect(destination);
+      } else {
+        outputGain.connect(destination);
+      }
 
       entry.processedAudio = {
         compressor,
         destination,
         intensityGain,
+        monoMixer: dualMonoOutput?.monoMixer || null,
         outputGain,
         source,
+        stereoMerger: dualMonoOutput?.stereoMerger || null,
         streamKey,
         useCompressor: Boolean(mix.useCompressor)
       };
@@ -311,8 +324,8 @@ export function createVoiceRtcPeerSession({
     }
 
     const { mix, playbackState } = getParticipantAudioMix(entry);
-    const canProcess = mix.usesProcessing && hasLiveRemoteTrack(entry.remoteAudioStream, "audio");
-    const usingProcessedAudio = canProcess && ensureProcessedRemoteAudio(entry, mix);
+    const canRouteAudio = hasLiveRemoteTrack(entry.remoteAudioStream, "audio");
+    const usingProcessedAudio = canRouteAudio && ensureProcessedRemoteAudio(entry, mix);
 
     if (!usingProcessedAudio) {
       ensureDirectRemoteAudio(entry);

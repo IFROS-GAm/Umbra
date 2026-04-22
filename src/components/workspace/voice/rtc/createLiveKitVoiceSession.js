@@ -5,6 +5,7 @@ import {
   applySinkId,
   buildParticipantAudioMix,
   clampUnitVolume,
+  createDualMonoOutput,
   createHiddenAudioElement,
   getSharedVoiceAudioContext,
   hasTrack,
@@ -296,7 +297,9 @@ export function createLiveKitVoiceSession({
     const {
       compressor,
       intensityGain,
+      monoMixer,
       outputGain,
+      stereoMerger,
       source
     } = remoteAudio.processedAudio;
 
@@ -304,7 +307,9 @@ export function createLiveKitVoiceSession({
       source?.disconnect?.();
       compressor?.disconnect?.();
       intensityGain?.disconnect?.();
+      monoMixer?.disconnect?.();
       outputGain?.disconnect?.();
+      stereoMerger?.disconnect?.();
     } catch {
       // Ignore audio node disconnect issues during teardown.
     }
@@ -409,17 +414,25 @@ export function createLiveKitVoiceSession({
       const intensityGain = context.createGain();
       const outputGain = context.createGain();
       const destination = context.createMediaStreamDestination();
+      const dualMonoOutput = createDualMonoOutput(context, outputGain);
 
       lastNode.connect(intensityGain);
       intensityGain.connect(outputGain);
-      outputGain.connect(destination);
+
+      if (dualMonoOutput) {
+        dualMonoOutput.stereoMerger.connect(destination);
+      } else {
+        outputGain.connect(destination);
+      }
 
       remoteAudio.processedAudio = {
         compressor,
         destination,
         intensityGain,
+        monoMixer: dualMonoOutput?.monoMixer || null,
         outputGain,
         source,
+        stereoMerger: dualMonoOutput?.stereoMerger || null,
         trackId,
         useCompressor: Boolean(mix.useCompressor)
       };
@@ -489,8 +502,9 @@ export function createLiveKitVoiceSession({
   async function applyPlaybackToRemoteAudio() {
     for (const [peerId, remoteAudio] of remoteAudioEntries.entries()) {
       const mix = getParticipantAudioMix(remoteAudio);
+      const canRouteAudio = Boolean(remoteAudio?.track?.mediaStreamTrack);
       const usingProcessedAudio =
-        mix.usesProcessing &&
+        canRouteAudio &&
         (await ensureProcessedRemoteAudio(remoteAudio, mix, peerId));
 
       if (!usingProcessedAudio) {
