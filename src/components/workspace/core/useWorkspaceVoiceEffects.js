@@ -596,6 +596,7 @@ export function useWorkspaceVoiceEffects({
       setVoicePeerMedia({});
       session
         .updateLocalMediaStreams({
+          audioFallbackStream: voiceInputSessionRef.current?.rawStream || null,
           audioStream: voiceInputStream,
           cameraStream,
           screenShareStream
@@ -636,6 +637,7 @@ export function useWorkspaceVoiceEffects({
 
     session
       .updateLocalMediaStreams({
+        audioFallbackStream: voiceInputSessionRef.current?.rawStream || null,
         audioStream: voiceInputStream,
         cameraStream,
         screenShareStream

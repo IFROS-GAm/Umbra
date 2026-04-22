@@ -124,6 +124,7 @@ function buildRemoteAudioEntryKey(peerId, source) {
 
 function createRemoteAudioEntry(source = Track.Source.Microphone) {
   return {
+    attachedMediaTrackId: "",
     attachedTrackSid: "",
     cleanupPlaybackListeners: null,
     element: createHiddenAudioElement(),
@@ -131,6 +132,7 @@ function createRemoteAudioEntry(source = Track.Source.Microphone) {
     playbackMode: "direct",
     processedAudio: null,
     source,
+    stream: null,
     track: null,
     userId: ""
   };
@@ -199,6 +201,8 @@ export function createLiveKitVoiceSession({
     speaking: Boolean(speaking)
   };
   let localAudioStream = null;
+  let localAudioFallbackStream = null;
+  let localAudioUsesFallback = false;
   let localCameraStream = null;
   let localScreenShareStream = null;
   let lastMetadataPayload = "";
@@ -372,16 +376,17 @@ export function createLiveKitVoiceSession({
   }
 
   async function ensureDirectRemoteAudio(remoteAudio) {
-    if (!remoteAudio?.element || !remoteAudio?.track) {
+    if (!remoteAudio?.element || !remoteAudio?.stream) {
       return;
     }
 
     if (remoteAudio.playbackMode !== "direct") {
       cleanupProcessedRemoteAudio(remoteAudio);
-      remoteAudio.element.srcObject = null;
-      remoteAudio.track.attach(remoteAudio.element);
     }
 
+    if (remoteAudio.element.srcObject !== remoteAudio.stream) {
+      remoteAudio.element.srcObject = remoteAudio.stream;
+    }
     remoteAudio.playbackMode = "direct";
   }
 
@@ -422,12 +427,6 @@ export function createLiveKitVoiceSession({
       remoteAudio.processedAudio?.useCompressor !== Boolean(mix.useCompressor);
 
     if (needsNewGraph) {
-      try {
-        remoteAudio.track?.detach?.(remoteAudio.element);
-      } catch {
-        // Ignore detach races when switching playback mode.
-      }
-
       cleanupProcessedRemoteAudio(remoteAudio);
 
       const sourceStream = new MediaStream([mediaTrack]);
@@ -534,17 +533,13 @@ export function createLiveKitVoiceSession({
     remoteAudio.cleanupPlaybackListeners?.();
     remoteAudio.cleanupPlaybackListeners = null;
     try {
-      remoteAudio.track?.detach?.(remoteAudio.element);
-    } catch {
-      // Ignore detach races.
-    }
-    try {
       remoteAudio.element.srcObject = null;
       remoteAudio.element.remove();
     } catch {
       // Ignore DOM cleanup races.
     }
 
+    remoteAudio.stream = null;
     remoteAudioEntries.delete(entryKey);
   }
 
@@ -657,19 +652,19 @@ export function createLiveKitVoiceSession({
     remoteAudio.userId = userId;
 
     const trackSid = String(publication?.trackSid || track?.sid || "").trim();
-    if (remoteAudio.attachedTrackSid !== trackSid || remoteAudio.track !== track) {
-      try {
-        remoteAudio.track?.detach?.(remoteAudio.element);
-      } catch {
-        // Ignore stale detach errors.
-      }
-
+    const mediaTrackId = String(track?.mediaStreamTrack?.id || "").trim();
+    if (
+      remoteAudio.attachedTrackSid !== trackSid ||
+      remoteAudio.attachedMediaTrackId !== mediaTrackId ||
+      remoteAudio.track !== track
+    ) {
       remoteAudio.track = track;
+      remoteAudio.stream = buildMediaStreamFromTrack(track);
+      remoteAudio.attachedMediaTrackId = mediaTrackId;
       remoteAudio.attachedTrackSid = trackSid;
       cleanupProcessedRemoteAudio(remoteAudio);
       remoteAudio.playbackMode = "direct";
-      remoteAudio.element.srcObject = null;
-      track.attach(remoteAudio.element);
+      remoteAudio.element.srcObject = remoteAudio.stream;
       remoteAudio.element.autoplay = true;
       remoteAudio.element.defaultMuted = false;
       remoteAudio.element.muted = false;
@@ -709,6 +704,17 @@ export function createLiveKitVoiceSession({
     });
 
     await applyPlaybackToRemoteAudio();
+  }
+
+  function getPreferredLocalAudioTrack() {
+    const processedTrack = localAudioStream?.getAudioTracks?.()?.[0] || null;
+    const fallbackTrack = localAudioFallbackStream?.getAudioTracks?.()?.[0] || null;
+
+    if (localAudioUsesFallback && fallbackTrack) {
+      return fallbackTrack;
+    }
+
+    return processedTrack || fallbackTrack || null;
   }
 
   async function syncParticipant(participant) {
@@ -802,7 +808,7 @@ export function createLiveKitVoiceSession({
       return;
     }
 
-    const audioTrack = localAudioStream?.getAudioTracks?.()?.[0] || null;
+    const audioTrack = getPreferredLocalAudioTrack();
     const cameraTrack = localCameraStream?.getVideoTracks?.()?.[0] || null;
     const screenAudioTrack = localScreenShareStream?.getAudioTracks?.()?.[0] || null;
     const screenTrack = localScreenShareStream?.getVideoTracks?.()?.[0] || null;
@@ -853,6 +859,35 @@ export function createLiveKitVoiceSession({
       });
       updateAudioUnlockListeners();
       applyPlaybackToRemoteAudio().catch((error) => {
+        handleSessionError(error);
+      });
+    })
+    .on(RoomEvent.LocalAudioSilenceDetected, (publication) => {
+      if (publication?.source !== Track.Source.Microphone) {
+        return;
+      }
+
+      const processedTrack = localAudioStream?.getAudioTracks?.()?.[0] || null;
+      const fallbackTrack = localAudioFallbackStream?.getAudioTracks?.()?.[0] || null;
+      const canFallback =
+        Boolean(processedTrack && fallbackTrack) && processedTrack.id !== fallbackTrack.id;
+
+      log(
+        "audio:local:silence-detected",
+        {
+          canFallback,
+          fallbackTrackId: fallbackTrack?.id || null,
+          processedTrackId: processedTrack?.id || null
+        },
+        canFallback ? "warn" : "info"
+      );
+
+      if (!canFallback || localAudioUsesFallback) {
+        return;
+      }
+
+      localAudioUsesFallback = true;
+      queueLocalTrackSync().catch((error) => {
         handleSessionError(error);
       });
     })
@@ -954,10 +989,19 @@ export function createLiveKitVoiceSession({
 
   return {
     async updateLocalMediaStreams({
+      audioFallbackStream = null,
       audioStream = null,
       cameraStream = null,
       screenShareStream = null
     } = {}) {
+      const previousAudioTrackId = String(localAudioStream?.getAudioTracks?.()?.[0]?.id || "").trim();
+      const nextAudioTrackId = String(audioStream?.getAudioTracks?.()?.[0]?.id || "").trim();
+
+      if (previousAudioTrackId !== nextAudioTrackId) {
+        localAudioUsesFallback = false;
+      }
+
+      localAudioFallbackStream = audioFallbackStream;
       localAudioStream = audioStream;
       localCameraStream = cameraStream;
       localScreenShareStream = screenShareStream;

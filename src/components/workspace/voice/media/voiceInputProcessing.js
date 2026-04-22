@@ -209,11 +209,15 @@ export async function createVoiceInputProcessingSession({
 
   return {
     engine,
+    rawStream: stream,
     stream: outboundDestination.stream,
     setInputVolume(value) {
       inputGain.gain.value = Math.max(0, Math.min(1, Number(value || 0) / 100));
     },
     setTrackEnabled(nextEnabled) {
+      stream.getAudioTracks().forEach((track) => {
+        track.enabled = Boolean(nextEnabled);
+      });
       outboundDestination.stream.getAudioTracks().forEach((track) => {
         track.enabled = Boolean(nextEnabled);
       });
