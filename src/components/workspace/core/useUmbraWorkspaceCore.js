@@ -7,9 +7,36 @@ import {
   normalizeConversationCopy,
   renderHeaderCopy,
 } from "../workspaceHelpers.js";
+import { DIRECT_CALL_TYPES } from "../workspaceCoreActionHelpers.js";
 import { createWorkspaceCoreActions } from "../workspaceCoreActions.js";
 import { useWorkspaceCoreEffects } from "../useWorkspaceCoreEffects.js";
 import { createWorkspaceMessageStore } from "../workspaceCoreMessageStore.js";
+
+function collectVoiceParticipantIds({
+  channelId,
+  currentUserId,
+  voicePresencePeers,
+  voicePresenceUsers,
+  voiceSessions
+}) {
+  const targetChannelId = String(channelId || "").trim();
+  if (!targetChannelId) {
+    return new Set();
+  }
+
+  return new Set(
+    [
+      ...(Array.isArray(voiceSessions?.[targetChannelId]) ? voiceSessions[targetChannelId] : []),
+      ...Object.values(voicePresenceUsers || {})
+        .filter((entry) => String(entry?.channelId || "").trim() === targetChannelId)
+        .map((entry) => String(entry?.userId || "").trim()),
+      ...Object.values(voicePresencePeers || {})
+        .filter((entry) => String(entry?.channelId || "").trim() === targetChannelId)
+        .map((entry) => String(entry?.userId || "").trim()),
+      currentUserId
+    ].filter(Boolean)
+  );
+}
 
 export function useUmbraWorkspaceCore({
   accessToken,
@@ -114,6 +141,9 @@ export function useUmbraWorkspaceCore({
   const accessTokenRef = useRef(accessToken);
   const joinedVoiceChannelIdRef = useRef(joinedVoiceChannelId);
   const voiceJoinReadyChannelIdRef = useRef(voiceJoinReadyChannelId);
+  const voiceSessionsRef = useRef(voiceSessions);
+  const voicePresencePeersRef = useRef(voicePresencePeers);
+  const voicePresenceUsersRef = useRef(voicePresenceUsers);
   const voiceLocalPeerIdRef = useRef(
     globalThis.crypto?.randomUUID?.() ||
       `voice-peer-${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -143,8 +173,11 @@ export function useUmbraWorkspaceCore({
     timer: null
   });
   const attachmentUploadCounterRef = useRef(0);
+  const handleVoiceLeaveRef = useRef(null);
+  const loneDirectCallLeaveTimeoutRef = useRef(null);
   const previousComposerAttachmentsRef = useRef([]);
   const pendingSocialRealtimeActionsRef = useRef([]);
+  const showUiNoticeRef = useRef(null);
 
   useEffect(() => {
     initializeUmbraSoundEffects();
@@ -275,6 +308,9 @@ export function useUmbraWorkspaceCore({
   accessTokenRef.current = accessToken;
   joinedVoiceChannelIdRef.current = joinedVoiceChannelId;
   voiceJoinReadyChannelIdRef.current = voiceJoinReadyChannelId;
+  voiceSessionsRef.current = voiceSessions;
+  voicePresencePeersRef.current = voicePresencePeers;
+  voicePresenceUsersRef.current = voicePresenceUsers;
   workspaceRef.current = workspace;
 
   const activeLookup = findChannelInSession(workspace, activeSelection.channelId);
@@ -521,6 +557,94 @@ export function useUmbraWorkspaceCore({
     voiceDevices,
     workspace
   });
+  handleVoiceLeaveRef.current = handleVoiceLeave;
+  showUiNoticeRef.current = showUiNotice;
+
+  useEffect(() => {
+    if (loneDirectCallLeaveTimeoutRef.current) {
+      window.clearTimeout(loneDirectCallLeaveTimeoutRef.current);
+      loneDirectCallLeaveTimeoutRef.current = null;
+    }
+
+    const currentUserId = String(workspace?.current_user?.id || "").trim();
+    const activeVoiceChannelId = String(joinedVoiceChannelId || "").trim();
+
+    if (!currentUserId || !activeVoiceChannelId) {
+      return undefined;
+    }
+
+    const targetLookup = findChannelInSession(workspace, activeVoiceChannelId);
+    const targetChannel = targetLookup?.channel || null;
+    const isDirectCallChannel =
+      targetLookup?.kind === "dm" && DIRECT_CALL_TYPES.has(String(targetChannel?.type || "").trim());
+
+    if (!isDirectCallChannel) {
+      return undefined;
+    }
+
+    const activeParticipantIds = collectVoiceParticipantIds({
+      channelId: activeVoiceChannelId,
+      currentUserId,
+      voicePresencePeers,
+      voicePresenceUsers,
+      voiceSessions
+    });
+    const isCurrentUserAlone =
+      activeParticipantIds.size === 1 && activeParticipantIds.has(currentUserId);
+
+    if (!isCurrentUserAlone) {
+      return undefined;
+    }
+
+    loneDirectCallLeaveTimeoutRef.current = window.setTimeout(() => {
+      const latestChannelId = String(joinedVoiceChannelIdRef.current || "").trim();
+      const latestWorkspace = workspaceRef.current;
+      const latestCurrentUserId = String(latestWorkspace?.current_user?.id || "").trim();
+
+      if (!latestCurrentUserId || latestChannelId !== activeVoiceChannelId) {
+        return;
+      }
+
+      const latestLookup = findChannelInSession(latestWorkspace, latestChannelId);
+      const latestChannel = latestLookup?.channel || null;
+      const isLatestDirectCall =
+        latestLookup?.kind === "dm" && DIRECT_CALL_TYPES.has(String(latestChannel?.type || "").trim());
+
+      if (!isLatestDirectCall) {
+        return;
+      }
+
+      const latestParticipantIds = collectVoiceParticipantIds({
+        channelId: latestChannelId,
+        currentUserId: latestCurrentUserId,
+        voicePresencePeers: voicePresencePeersRef.current,
+        voicePresenceUsers: voicePresenceUsersRef.current,
+        voiceSessions: voiceSessionsRef.current
+      });
+
+      if (
+        latestParticipantIds.size === 1 &&
+        latestParticipantIds.has(latestCurrentUserId)
+      ) {
+        handleVoiceLeaveRef.current?.();
+        showUiNoticeRef.current?.("La oscuridad no es ancho de banda.");
+      }
+    }, 120000);
+
+    return () => {
+      if (loneDirectCallLeaveTimeoutRef.current) {
+        window.clearTimeout(loneDirectCallLeaveTimeoutRef.current);
+        loneDirectCallLeaveTimeoutRef.current = null;
+      }
+    };
+  }, [
+    joinedVoiceChannelId,
+    voicePresencePeers,
+    voicePresenceUsers,
+    voiceSessions,
+    workspace?.current_user?.id,
+    workspace?.dms
+  ]);
 
   return {
     accessTokenRef, activeChannel, activeGuild, activeGuildTextChannels, activeGuildVoiceChannels, activeLookup,

@@ -125,7 +125,9 @@ function buildRemoteAudioEntryKey(peerId, source) {
 function createRemoteAudioEntry(source = Track.Source.Microphone) {
   return {
     attachedTrackSid: "",
+    cleanupPlaybackListeners: null,
     element: createHiddenAudioElement(),
+    peerId: "",
     playbackMode: "direct",
     processedAudio: null,
     source,
@@ -163,6 +165,7 @@ export function createLiveKitVoiceSession({
     stopLocalTrackOnUnpublish: false
   });
   const remoteAudioEntries = new Map();
+  const pendingRemoteAudioEntries = new Set();
   const localTracks = {
     audio: {
       mediaTrack: null,
@@ -223,7 +226,10 @@ export function createLiveKitVoiceSession({
   };
 
   function updateAudioUnlockListeners() {
-    if (destroyed || room.canPlaybackAudio) {
+    if (
+      destroyed ||
+      (room.canPlaybackAudio && pendingRemoteAudioEntries.size === 0)
+    ) {
       removeAudioUnlockListeners?.();
       removeAudioUnlockListeners = null;
       return;
@@ -234,15 +240,21 @@ export function createLiveKitVoiceSession({
     }
 
     const unlockPlayback = () => {
-      room.startAudio?.()
-        .then(() => {
+      Promise.resolve(
+        room.canPlaybackAudio ? undefined : room.startAudio?.()
+      )
+        .then(async () => {
+          try {
+            await primeSharedVoiceAudioContext();
+          } catch {
+            // Direct playback can still work even if the shared AudioContext stays suspended.
+          }
+
           log("audio:playback:unlocked", {
-            canPlaybackAudio: Boolean(room.canPlaybackAudio)
+            canPlaybackAudio: Boolean(room.canPlaybackAudio),
+            pendingEntries: pendingRemoteAudioEntries.size
           });
-          updateAudioUnlockListeners();
-          applyPlaybackToRemoteAudio().catch((error) => {
-            handleSessionError(error);
-          });
+          await applyPlaybackToRemoteAudio();
         })
         .catch((error) => {
           log(
@@ -252,6 +264,9 @@ export function createLiveKitVoiceSession({
             },
             "warn"
           );
+        })
+        .finally(() => {
+          updateAudioUnlockListeners();
         });
     };
 
@@ -329,15 +344,25 @@ export function createLiveKitVoiceSession({
   }
 
   function safePlayRemoteAudio(remoteAudio, peerId) {
-    remoteAudio?.element?.play?.()
+    const playResult = remoteAudio?.element?.play?.();
+    if (!playResult?.catch) {
+      pendingRemoteAudioEntries.delete(remoteAudio);
+      updateAudioUnlockListeners();
+      return;
+    }
+
+    playResult
       .then(() => {
+        pendingRemoteAudioEntries.delete(remoteAudio);
         updateAudioUnlockListeners();
       })
       .catch((error) => {
+        pendingRemoteAudioEntries.add(remoteAudio);
         log(
           "audio:play-blocked",
           {
             message: error?.message || String(error),
+            source: remoteAudio?.source || Track.Source.Microphone,
             targetPeerId: peerId
           },
           "warn"
@@ -475,13 +500,39 @@ export function createLiveKitVoiceSession({
     onPresencePeersChange(Object.fromEntries(peers.map((entry) => [entry.peerId, entry])));
   }
 
+  function installRemoteAudioPlaybackListeners(entryKey, remoteAudio) {
+    if (!remoteAudio?.element || remoteAudio.cleanupPlaybackListeners) {
+      return;
+    }
+
+    const replayWhenReady = () => {
+      if (destroyed || !remoteAudioEntries.has(entryKey) || !remoteAudio.element.srcObject) {
+        return;
+      }
+
+      applyPlaybackToRemoteAudio().catch((error) => {
+        handleSessionError(error);
+      });
+    };
+
+    remoteAudio.element.addEventListener("loadedmetadata", replayWhenReady);
+    remoteAudio.element.addEventListener("canplay", replayWhenReady);
+    remoteAudio.cleanupPlaybackListeners = () => {
+      remoteAudio.element.removeEventListener("loadedmetadata", replayWhenReady);
+      remoteAudio.element.removeEventListener("canplay", replayWhenReady);
+    };
+  }
+
   function disposeRemoteAudioEntry(entryKey) {
     const remoteAudio = remoteAudioEntries.get(entryKey);
     if (!remoteAudio) {
       return;
     }
 
+    pendingRemoteAudioEntries.delete(remoteAudio);
     cleanupProcessedRemoteAudio(remoteAudio);
+    remoteAudio.cleanupPlaybackListeners?.();
+    remoteAudio.cleanupPlaybackListeners = null;
     try {
       remoteAudio.track?.detach?.(remoteAudio.element);
     } catch {
@@ -598,13 +649,15 @@ export function createLiveKitVoiceSession({
     if (!remoteAudio) {
       remoteAudio = createRemoteAudioEntry(source);
       remoteAudioEntries.set(entryKey, remoteAudio);
+      installRemoteAudioPlaybackListeners(entryKey, remoteAudio);
     }
 
+    remoteAudio.peerId = peerId;
     remoteAudio.source = source;
     remoteAudio.userId = userId;
 
     const trackSid = String(publication?.trackSid || track?.sid || "").trim();
-    if (remoteAudio.attachedTrackSid !== trackSid) {
+    if (remoteAudio.attachedTrackSid !== trackSid || remoteAudio.track !== track) {
       try {
         remoteAudio.track?.detach?.(remoteAudio.element);
       } catch {
@@ -615,6 +668,7 @@ export function createLiveKitVoiceSession({
       remoteAudio.attachedTrackSid = trackSid;
       cleanupProcessedRemoteAudio(remoteAudio);
       remoteAudio.playbackMode = "direct";
+      remoteAudio.element.srcObject = null;
       track.attach(remoteAudio.element);
       remoteAudio.element.autoplay = true;
       remoteAudio.element.defaultMuted = false;
