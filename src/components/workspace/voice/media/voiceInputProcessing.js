@@ -50,6 +50,28 @@ function resolveNoiseGateProfile(amount) {
   };
 }
 
+function createDualMonoVoiceOutput(context, inputNode) {
+  if (!context || !inputNode) {
+    return null;
+  }
+
+  const monoMixer = context.createGain();
+  monoMixer.channelCount = 1;
+  monoMixer.channelCountMode = "explicit";
+  monoMixer.channelInterpretation = "speakers";
+
+  const stereoMerger = context.createChannelMerger(2);
+
+  inputNode.connect(monoMixer);
+  monoMixer.connect(stereoMerger, 0, 0);
+  monoMixer.connect(stereoMerger, 0, 1);
+
+  return {
+    monoMixer,
+    stereoMerger
+  };
+}
+
 export async function createVoiceInputProcessingSession({
   deviceId,
   inputVolume = 100,
@@ -91,6 +113,7 @@ export async function createVoiceInputProcessingSession({
   analyser.fftSize = 1024;
   analyser.smoothingTimeConstant = 0.55;
   const outboundDestination = context.createMediaStreamDestination();
+  let outboundDualMono = null;
 
   const monitorGain = context.createGain();
   monitorGain.gain.value = monitorEnabled ? 0.92 : 0;
@@ -135,7 +158,14 @@ export async function createVoiceInputProcessingSession({
   }
 
   processedOutput.connect(analyser);
-  processedOutput.connect(outboundDestination);
+  outboundDualMono = createDualMonoVoiceOutput(context, processedOutput);
+
+  if (outboundDualMono?.stereoMerger) {
+    outboundDualMono.stereoMerger.connect(outboundDestination);
+  } else {
+    processedOutput.connect(outboundDestination);
+  }
+
   processedOutput.connect(monitorGain);
   monitorGain.connect(context.destination);
 
@@ -245,6 +275,8 @@ export async function createVoiceInputProcessingSession({
       }
 
       try {
+        outboundDualMono?.monoMixer?.disconnect?.();
+        outboundDualMono?.stereoMerger?.disconnect?.();
         monitorGain.disconnect();
         outboundDestination.disconnect();
         analyser.disconnect();
