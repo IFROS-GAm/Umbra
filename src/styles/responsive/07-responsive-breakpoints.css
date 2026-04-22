@@ -193,4 +193,15 @@
   .direct-call-panel-split {
     min-height: 260px;
   }
+
+  .direct-call-panel-participant {
+    min-height: 220px;
+  }
+
+  .direct-call-panel-nameplate {
+    bottom: 12px;
+    left: 12px;
+    max-width: calc(100% - 24px);
+    right: 12px;
+  }
 }

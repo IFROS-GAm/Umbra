@@ -387,60 +387,131 @@
 }
 
 .direct-call-panel-participant {
-  align-items: center;
+  --direct-call-panel-padding: 16px;
   background: rgba(255, 255, 255, 0.035);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 18px;
   color: var(--text-0);
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  justify-content: center;
-  min-height: 0;
-  padding: 18px;
+  justify-content: space-between;
+  min-height: clamp(240px, 34vh, 380px);
+  overflow: hidden;
+  padding: var(--direct-call-panel-padding);
   position: relative;
-  text-align: center;
+  text-align: left;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+
+.direct-call-panel-participant:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+  transform: translateY(-1px);
 }
 
 .direct-call-panel-participant.speaking {
+  border-color: rgba(91, 132, 255, 0.88);
   box-shadow:
     inset 0 0 0 1px rgba(91, 132, 255, 0.9),
     0 0 0 1px rgba(91, 132, 255, 0.14);
 }
 
+.direct-call-panel-tile-top {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  position: relative;
+  z-index: 1;
+}
+
+.direct-call-panel-tile-status {
+  background: rgba(18, 20, 25, 0.72);
+  border-radius: 999px;
+  color: #e2e6ef;
+  font-size: 0.72rem;
+  font-weight: 800;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 5px 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.direct-call-panel-flags {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .direct-call-panel-participant-media {
   align-items: center;
   display: flex;
+  flex: 1;
   justify-content: center;
   min-height: 0;
   position: relative;
 }
 
 .direct-call-panel-video-shell {
-  border-radius: 999px;
-  height: 132px;
+  background: #000;
+  inset: calc(var(--direct-call-panel-padding) * -1);
   overflow: hidden;
-  width: 132px;
-}
-
-.direct-call-panel-split .direct-call-panel-video-shell {
-  height: 116px;
-  width: 116px;
+  position: absolute;
+  z-index: 0;
 }
 
 .direct-call-panel-video {
+  background: #000;
+  display: block;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   width: 100%;
 }
 
-.direct-call-panel-icons {
-  align-items: center;
-  bottom: -4px;
-  display: inline-flex;
-  gap: 6px;
+.direct-call-panel-nameplate {
+  align-items: flex-end;
+  background: rgba(18, 20, 25, 0.82);
+  backdrop-filter: blur(10px);
+  border-radius: 14px;
+  bottom: 16px;
+  color: white;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  left: 16px;
+  max-width: calc(100% - 32px);
+  padding: 10px 12px;
   position: absolute;
-  right: -4px;
+  right: 16px;
+  z-index: 1;
+}
+
+.direct-call-panel-state-chip {
+  align-items: center;
+  background: rgba(18, 20, 25, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  color: var(--text-1);
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 800;
+  gap: 5px;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.direct-call-panel-state-chip.danger {
+  background: rgba(217, 75, 86, 0.18);
+  border-color: rgba(255, 172, 180, 0.24);
+  color: #ffd6db;
 }
 
 .direct-call-panel-copy {
@@ -460,6 +531,15 @@
 .direct-call-panel-copy span {
   color: var(--text-2);
   font-size: 0.84rem;
+}
+
+.direct-call-panel-nameplate .direct-call-panel-copy span {
+  color: rgba(226, 230, 239, 0.78);
+}
+
+.direct-call-panel-participant .avatar-shell {
+  position: relative;
+  z-index: 1;
 }
 
 .direct-call-panel-controls {

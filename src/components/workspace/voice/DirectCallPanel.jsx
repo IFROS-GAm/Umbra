@@ -106,6 +106,7 @@ function renderAudioStateChip(user) {
     return (
       <span className="direct-call-panel-state-chip danger">
         <Icon name="deafen" size={12} />
+        <span>Ensordecido</span>
       </span>
     );
   }
@@ -114,11 +115,20 @@ function renderAudioStateChip(user) {
     return (
       <span className="direct-call-panel-state-chip danger">
         <Icon name="micOff" size={12} />
+        <span>Silenciado</span>
       </span>
     );
   }
 
   return null;
+}
+
+function getParticipantPresenceLabel(user) {
+  if (user?.inCall) {
+    return user?.isCurrentUser ? "Tu voz esta conectada" : "En llamada contigo";
+  }
+
+  return user?.custom_status || user?.status || "Disponible";
 }
 
 export function DirectCallPanel({
@@ -189,6 +199,30 @@ export function DirectCallPanel({
             style={user.stageStyle}
             type="button"
           >
+            <div className="direct-call-panel-tile-top">
+              <span className="direct-call-panel-tile-status">
+                {user.isStreaming
+                  ? "Compartiendo pantalla"
+                  : user.isCameraOn
+                    ? "Camara activa"
+                    : getParticipantPresenceLabel(user)}
+              </span>
+
+              <div className="direct-call-panel-flags">
+                {user.isStreaming ? (
+                  <span className="direct-call-panel-state-chip">
+                    <Icon name="screenShare" size={12} />
+                  </span>
+                ) : null}
+                {user.isCameraOn && !user.localCameraStream ? (
+                  <span className="direct-call-panel-state-chip">
+                    <Icon name="camera" size={12} />
+                  </span>
+                ) : null}
+                {renderAudioStateChip(user)}
+              </div>
+            </div>
+
             <div className="direct-call-panel-participant-media">
               {user.isCameraOn && user.localCameraStream ? (
                 <div className="direct-call-panel-video-shell">
@@ -208,31 +242,13 @@ export function DirectCallPanel({
                   status={user.status}
                 />
               )}
-
-              <div className="direct-call-panel-icons">
-                {user.isStreaming ? (
-                  <span className="direct-call-panel-state-chip">
-                    <Icon name="screenShare" size={12} />
-                  </span>
-                ) : null}
-                {user.isCameraOn && !user.localCameraStream ? (
-                  <span className="direct-call-panel-state-chip">
-                    <Icon name="camera" size={12} />
-                  </span>
-                ) : null}
-                {renderAudioStateChip(user)}
-              </div>
             </div>
 
-            <div className="direct-call-panel-copy">
-              <strong>{user.display_name || user.username}</strong>
-              <span>
-                {user.inCall
-                  ? user.isCurrentUser
-                    ? "Tu voz esta conectada"
-                    : "En llamada contigo"
-                  : user.custom_status || user.status || "Disponible"}
-              </span>
+            <div className="direct-call-panel-nameplate">
+              <div className="direct-call-panel-copy">
+                <strong>{user.display_name || user.username}</strong>
+                <span>{getParticipantPresenceLabel(user)}</span>
+              </div>
             </div>
           </button>
         ))}
