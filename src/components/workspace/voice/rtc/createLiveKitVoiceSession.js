@@ -209,7 +209,11 @@ export function createLiveKitVoiceSession({
   };
 
   function updateAudioUnlockListeners() {
-    if (destroyed || room.canPlaybackAudio) {
+    const voiceAudioContext =
+      remoteAudioEntries.size > 0 ? getSharedVoiceAudioContext() : null;
+    const needsVoiceAudioUnlock = voiceAudioContext?.state === "suspended";
+
+    if (destroyed || (room.canPlaybackAudio && !needsVoiceAudioUnlock)) {
       removeAudioUnlockListeners?.();
       removeAudioUnlockListeners = null;
       return;
@@ -220,25 +224,55 @@ export function createLiveKitVoiceSession({
     }
 
     const unlockPlayback = () => {
-      room.startAudio?.()
-        .then(() => {
-          log("audio:playback:unlocked", {
-            canPlaybackAudio: Boolean(room.canPlaybackAudio)
-          });
-          updateAudioUnlockListeners();
-          applyPlaybackToRemoteAudio().catch((error) => {
-            handleSessionError(error);
-          });
-        })
-        .catch((error) => {
-          log(
-            "audio:playback:unlock-blocked",
-            {
-              message: error?.message || String(error)
-            },
-            "warn"
-          );
+      const unlockTasks = [];
+
+      if (!room.canPlaybackAudio && typeof room.startAudio === "function") {
+        unlockTasks.push(
+          room.startAudio().catch((error) => {
+            log(
+              "audio:playback:unlock-blocked",
+              {
+                message: error?.message || String(error)
+              },
+              "warn"
+            );
+          })
+        );
+      }
+
+      const sharedAudioContext =
+        remoteAudioEntries.size > 0 ? getSharedVoiceAudioContext() : null;
+      if (sharedAudioContext?.state === "suspended") {
+        unlockTasks.push(
+          primeSharedVoiceAudioContext().then((context) => {
+            log("audio:context:resumed", {
+              state: context?.state || "unknown",
+              via: "user-gesture"
+            });
+          }).catch((error) => {
+            log(
+              "audio:context:resume-blocked",
+              {
+                message: error?.message || String(error),
+                state: sharedAudioContext.state
+              },
+              "warn"
+            );
+          })
+        );
+      }
+
+      Promise.allSettled(unlockTasks).finally(() => {
+        log("audio:playback:unlocked", {
+          canPlaybackAudio: Boolean(room.canPlaybackAudio),
+          voiceAudioContextState:
+            (remoteAudioEntries.size > 0 ? getSharedVoiceAudioContext() : null)?.state || "idle"
         });
+        updateAudioUnlockListeners();
+        applyPlaybackToRemoteAudio().catch((error) => {
+          handleSessionError(error);
+        });
+      });
     };
 
     const listenerOptions = {
@@ -376,7 +410,7 @@ export function createLiveKitVoiceSession({
       }
     }
 
-    if (!context) {
+    if (!context || context.state !== "running") {
       return false;
     }
 

@@ -45,10 +45,18 @@ export function createVoiceRtcPeerSession({
           state: context.state
         });
         updateAudioUnlockListeners();
+        for (const entry of peers.values()) {
+          applyPlaybackToPeer(entry);
+        }
       }).catch(() => {
         updateAudioUnlockListeners();
       });
       updateAudioUnlockListeners();
+      return null;
+    }
+
+    if (context.state !== "running") {
+      return null;
     }
 
     return context;
@@ -80,6 +88,9 @@ export function createVoiceRtcPeerSession({
             via: "user-gesture"
           });
           updateAudioUnlockListeners();
+          for (const entry of peers.values()) {
+            applyPlaybackToPeer(entry);
+          }
         }).catch((error) => {
           log("audio:context:resume-blocked", {
             message: error?.message || "No se pudo reanudar el AudioContext.",
